@@ -1,7 +1,11 @@
--- Minimizer: función core única para probar viabilidad.
--- 0   = comportamiento default de Blizzard (sin tocar nada).
--- 100 = simplificado + escala al 50% (el "doble" de reducción).
--- Interpola linealmente entre ambos extremos.
+-- Minimizer
+-- 1) /simp 0-100: 0 = default de Blizzard, 100 = simplificado + escala 50%.
+-- 2) Cualquier mob que empiece a castear se desimplifica y queda así mientras
+--    siga vivo/en pantalla. En cuanto su nameplate desaparece de forma
+--    natural (muere o sale de rango) se limpia su entrada -> sin memory leak.
+-- 3) Flechas ">>" "<<" apuntando hacia dentro para target (blanco) y focus
+--    (amarillo). La barra de vida del focus es amarilla SOLO si no tiene
+--    aggro; si lo tiene, se ve el color default de Blizzard (threat).
 
 local ADDON_NAME = ...
 
@@ -19,22 +23,96 @@ local function GetScaleForPercent(percent)
 	return MAX_SCALE_MULT - (MAX_SCALE_MULT - MIN_SCALE_MULT) * t
 end
 
--- Aplica simplificación + escala a una unidad concreta de nameplate
+-- true si "player" tiene actualmente el aggro de esta unidad
+local function HasAggro(unit)
+	local isTanking = UnitDetailedThreatSituation("player", unit)
+	return isTanking == true
+end
+
+-- Crea (una sola vez por frame de nameplate reciclado) las 4 flechas.
+local function EnsureMarkers(nameplate)
+	if nameplate.MinimizerMarkers then return nameplate.MinimizerMarkers end
+
+	local uf = nameplate.UnitFrame
+	if not uf or not uf.healthBar then return nil end
+
+	local function MakeArrow(text, point, relPoint, xOff, yOff, color)
+		local fs = uf:CreateFontString(nil, "OVERLAY")
+		fs:SetFont(STANDARD_TEXT_FONT, 14, "OUTLINE")
+		fs:SetPoint(point, uf.healthBar, relPoint, xOff, yOff)
+		fs:SetText(text)
+		if color then
+			fs:SetTextColor(color[1], color[2], color[3])
+		end
+		fs:Hide()
+		return fs
+	end
+
+	local markers = {
+		-- Target: fila superior, color blanco (default)
+		targetLeft  = MakeArrow(">>", "RIGHT", "LEFT",  -2,  6),
+		targetRight = MakeArrow("<<", "LEFT",  "RIGHT",  2,  6),
+		-- Focus: fila inferior, amarillo
+		focusLeft   = MakeArrow(">>", "RIGHT", "LEFT",  -2, -6, {1, 1, 0}),
+		focusRight  = MakeArrow("<<", "LEFT",  "RIGHT",  2, -6, {1, 1, 0}),
+		colorOverridden = false, -- si la última pasada forzamos amarillo
+	}
+
+	nameplate.MinimizerMarkers = markers
+	return markers
+end
+
+-- Actualiza flechas de target/focus y el color del focus según aggro
+local function UpdateTargetFocusMarkers(unit, nameplate)
+	local markers = EnsureMarkers(nameplate)
+	if not markers then return end
+
+	local isTarget = UnitIsUnit(unit, "target")
+	local isFocus = UnitIsUnit(unit, "focus")
+
+	markers.targetLeft:SetShown(isTarget)
+	markers.targetRight:SetShown(isTarget)
+	markers.focusLeft:SetShown(isFocus)
+	markers.focusRight:SetShown(isFocus)
+
+	local uf = nameplate.UnitFrame
+	if uf and uf.healthBar then
+		-- Amarillo solo si es focus Y NO tiene aggro. Si tiene aggro, se
+		-- respeta el color default de Blizzard (que ya refleja el threat).
+		local shouldBeYellow = isFocus and not HasAggro(unit)
+
+		if shouldBeYellow then
+			uf.healthBar:SetStatusBarColor(1, 1, 0)
+			markers.colorOverridden = true
+		elseif markers.colorOverridden then
+			-- Veníamos de estar en amarillo: restaurar color normal
+			if CompactUnitFrame_UpdateHealthColor then
+				CompactUnitFrame_UpdateHealthColor(uf)
+			end
+			markers.colorOverridden = false
+		end
+	end
+end
+
+-- Aplica simplificación + escala + marcadores a una unidad concreta
 local function ApplyToUnit(unit)
 	if not unit or not UnitExists(unit) then return end
 
 	-- Solo tocamos nameplates de enemigos (mobs), no jugadores ni aliados.
 	if not UnitCanAttack("player", unit) then return end
 
-	local percent = MinimizerDB.simplifyPercent
+	local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
+	local forceUnsimplified = nameplate and nameplate.MinimizerNeverSimplify
+
+	local percent = forceUnsimplified and 0 or MinimizerDB.simplifyPercent
 
 	if C_NamePlateManager and C_NamePlateManager.SetNamePlateSimplified then
 		C_NamePlateManager.SetNamePlateSimplified(unit, percent > 0)
 	end
 
-	local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
 	if nameplate then
 		nameplate:SetScale(GetScaleForPercent(percent))
+		UpdateTargetFocusMarkers(unit, nameplate)
 	end
 end
 
@@ -47,19 +125,66 @@ local function ApplyToAllNameplates()
 	end
 end
 
+-- Marca la nameplate como "no simplificar" en cuanto empieza a castear.
+-- El flag vive en el propio frame de la nameplate, no en una tabla externa
+-- por GUID (UnitGUID devuelve un "secret value" que no se puede usar como
+-- clave de tabla en el cliente actual).
+local function MarkNeverSimplify(unit)
+	if not unit or not UnitExists(unit) then return end
+	if not UnitCanAttack("player", unit) then return end
+
+	local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
+	if not nameplate then return end
+
+	if not nameplate.MinimizerNeverSimplify then
+		nameplate.MinimizerNeverSimplify = true
+		ApplyToUnit(unit) -- refresco inmediato, no hace falta esperar al ticker
+	end
+end
+
+-- Limpia el flag cuando la nameplate desaparece de forma natural (muerte,
+-- salir de rango, cambio de zona...). Como el flag vive en el propio frame,
+-- esto no requiere ninguna tabla que pueda acumular entradas.
+local function ClearNeverSimplify(unit)
+	if not unit then return end
+	local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
+	if nameplate then
+		nameplate.MinimizerNeverSimplify = nil
+	end
+end
+
 Minimizer:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+Minimizer:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 Minimizer:RegisterEvent("PLAYER_ENTERING_WORLD")
+Minimizer:RegisterEvent("PLAYER_TARGET_CHANGED")
+Minimizer:RegisterEvent("PLAYER_FOCUS_CHANGED")
+Minimizer:RegisterEvent("UNIT_SPELLCAST_START")
+Minimizer:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
+Minimizer:RegisterEvent("UNIT_SPELLCAST_EMPOWER_START")
+Minimizer:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
 
 Minimizer:SetScript("OnEvent", function(self, event, unit)
 	if event == "NAME_PLATE_UNIT_ADDED" then
 		ApplyToUnit(unit)
-	elseif event == "PLAYER_ENTERING_WORLD" then
+	elseif event == "NAME_PLATE_UNIT_REMOVED" then
+		ClearNeverSimplify(unit)
+	elseif event == "PLAYER_ENTERING_WORLD"
+		or event == "PLAYER_TARGET_CHANGED"
+		or event == "PLAYER_FOCUS_CHANGED" then
 		ApplyToAllNameplates()
+	elseif event == "UNIT_SPELLCAST_START"
+		or event == "UNIT_SPELLCAST_CHANNEL_START"
+		or event == "UNIT_SPELLCAST_EMPOWER_START" then
+		MarkNeverSimplify(unit)
+	elseif event == "UNIT_THREAT_LIST_UPDATE" then
+		-- Reevalúa solo esta unidad (puede ser el focus ganando/perdiendo aggro)
+		ApplyToUnit(unit)
 	end
 end)
 
--- Salvaguarda: Blizzard puede resetear escala/estado del frame en ciertos
--- momentos (cambio de zona, reload de CVars, etc). Reaplicamos cada segundo.
+-- Salvaguarda: Blizzard puede resetear escala/estado/color en ciertos
+-- momentos. Reaplicamos cada segundo por si algo se nos "escapa" entre
+-- eventos (no acumula nada, solo relee el estado actual).
 C_Timer.NewTicker(1, ApplyToAllNameplates)
 
 -- Comando /simp <0-100>
