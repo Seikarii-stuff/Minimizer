@@ -1,4 +1,4 @@
-## Interface: 120100
+## Interface: 120100, 120007
 ## Title: Minimizer
 ## Notes: Simplifica nameplates enemigas usando APIs nativas de Blizzard. /simp 0-100
 ## Author: Tu
