@@ -23,10 +23,37 @@ local function GetScaleForPercent(percent)
 	return MAX_SCALE_MULT - (MAX_SCALE_MULT - MIN_SCALE_MULT) * t
 end
 
--- true si "player" tiene actualmente el aggro de esta unidad
-local function HasAggro(unit)
-	local isTanking = UnitDetailedThreatSituation("player", unit)
-	return isTanking == true
+-- Aplica el color amarillo "si no tiene aggro" usando el patrón verificado
+-- de Platynator (Colors.lua L214-218): el boolean secreto de threat se pasa
+-- directo a C_CurveUtil.EvaluateColorValueFromBoolean, que lo evalúa C-side
+-- y devuelve el número final (r/g/b/a) sin que nuestro Lua lo compare nunca.
+-- state=true (tiene aggro) -> se queda con el color que Blizzard ya calculó.
+-- state=false (no tiene aggro) -> amarillo.
+local function ApplyFocusColor(unit, uf)
+	if CompactUnitFrame_UpdateHealthColor then
+		CompactUnitFrame_UpdateHealthColor(uf)
+	end
+
+	local r, g, b, a = uf.healthBar:GetStatusBarColor()
+	a = a or 1
+
+	local applied = false
+
+	if C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
+		applied = pcall(function()
+			local isTanking = UnitDetailedThreatSituation("player", unit)
+			local fr = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, r, 1)
+			local fg = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, g, 1)
+			local fb = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, b, 0)
+			local fa = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, a, 1)
+			uf.healthBar:SetStatusBarColor(fr, fg, fb, fa)
+		end)
+	end
+
+	if not applied then
+		-- Fallback si algo de esto no está disponible: amarillo fijo.
+		uf.healthBar:SetStatusBarColor(1, 1, 0)
+	end
 end
 
 -- Crea (una sola vez por frame de nameplate reciclado) las 4 flechas.
@@ -77,15 +104,11 @@ local function UpdateTargetFocusMarkers(unit, nameplate)
 
 	local uf = nameplate.UnitFrame
 	if uf and uf.healthBar then
-		-- Amarillo solo si es focus Y NO tiene aggro. Si tiene aggro, se
-		-- respeta el color default de Blizzard (que ya refleja el threat).
-		local shouldBeYellow = isFocus and not HasAggro(unit)
-
-		if shouldBeYellow then
-			uf.healthBar:SetStatusBarColor(1, 1, 0)
+		if isFocus then
+			ApplyFocusColor(unit, uf)
 			markers.colorOverridden = true
 		elseif markers.colorOverridden then
-			-- Veníamos de estar en amarillo: restaurar color normal
+			-- Ya no es focus: restaurar color normal
 			if CompactUnitFrame_UpdateHealthColor then
 				CompactUnitFrame_UpdateHealthColor(uf)
 			end
