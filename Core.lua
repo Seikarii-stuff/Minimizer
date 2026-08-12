@@ -25,17 +25,17 @@ local CONSTANTS = {
 -------------------------------------------------------------------------------
 Minimizer.Utils = {}
 
--- Comprueba si la API nativa de simplificación está disponible en el cliente
+-- Comprueba si la API nativa de simplificación está disponible en el cliente[cite: 3]
 function Minimizer.Utils.IsSimplifiedAvailable()
     return C_NamePlateManager and type(C_NamePlateManager.SetNamePlateSimplified) == "function"
 end
 
--- Verifica la presencia del sistema de restricciones por secretos en 12.1
+-- Verifica la presencia del sistema de restricciones por secretos en 12.1[cite: 3]
 function Minimizer.Utils.IsSecretsActive()
     return C_Secrets and type(C_Secrets.HasSecretRestrictions) == "function" and C_Secrets.HasSecretRestrictions()
 end
 
--- Comprueba de forma segura si un valor es secreto sin lanzar excepciones Lua
+-- Comprueba de forma segura si un valor es secreto sin lanzar excepciones Lua[cite: 3]
 function Minimizer.Utils.SafeIsSecret(value)
     if value == nil then return false end
     if type(issecretvalue) == "function" then
@@ -51,7 +51,7 @@ function Minimizer.Utils.GetScaleForPercent(percent)
     return CONSTANTS.MAX_SCALE - (CONSTANTS.MAX_SCALE - CONSTANTS.MIN_SCALE) * factor
 end
 
--- Obtiene la nameplate de manera segura mediante la API C nativa
+-- Obtiene la nameplate de manera segura mediante la API C nativa[cite: 3]
 function Minimizer.Utils.GetNamePlateForUnit(unit)
     if not unit then return nil end
     if C_NamePlate and C_NamePlate.GetNamePlateForUnit then
@@ -65,7 +65,7 @@ end
 -------------------------------------------------------------------------------
 Minimizer.Cache = {}
 
--- Determina si la unidad está casteando, canalizando o en spell potenciado
+-- Determina si la unidad está casteando, canalizando o en spell potenciado[cite: 3]
 function Minimizer.Cache.IsUnitCasting(unit)
     if not unit or not UnitExists(unit) then return false end
 
@@ -98,7 +98,7 @@ function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
         return false
     end
 
-    return MinimizerDB.simplifyPercent > 0
+    return (MinimizerDB.simplifyPercent or 0) > 0
 end
 
 -------------------------------------------------------------------------------
@@ -138,8 +138,12 @@ function Minimizer.Markers.Update(unit, nameplate)
     local markers = Minimizer.Markers.Ensure(nameplate)
     if not markers then return end
 
-    local isTarget = MinimizerDB.enableTargetMarkers and UnitIsUnit(unit, "target")
-    local isFocus  = MinimizerDB.enableFocusMarkers and UnitIsUnit(unit, "focus")
+    -- Forzamos retorno booleano explícito (true/false) para evitar pasar 'nil' a APIs de Blizzard
+    local enableTarget = MinimizerDB.enableTargetMarkers ~= false
+    local enableFocus  = MinimizerDB.enableFocusMarkers ~= false
+
+    local isTarget = enableTarget and (UnitIsUnit(unit, "target") == true)
+    local isFocus  = enableFocus and (UnitIsUnit(unit, "focus") == true)
 
     -- Aplicación segura evaluando posibilidad de datos secretos[cite: 3]
     if markers.targetLeft.SetAlphaFromBoolean then
@@ -237,7 +241,7 @@ local function OnEvent(self, event, unit, ...)
         or event == "UNIT_SPELLCAST_EMPOWER_START" then
         Minimizer.Core.MarkNeverSimplify(unit)
     elseif event == "ADDON_LOADED" and unit == ADDON_NAME then
-        MinimizerDB = MinimizerDB or { simplifyPercent = 0 }
+        MinimizerDB = MinimizerDB or { simplifyPercent = 0, enableTargetMarkers = true, enableFocusMarkers = true }
     end
 end
 
