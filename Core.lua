@@ -44,28 +44,29 @@ local function GetNamePlateForUnit(unit)
 	return nil
 end
 
--- Patrón seguro de Platynator: no comparamos valores secretos de threat en Lua.
--- Se pasa el estado bool directamente a C_CurveUtil.EvaluateColorValueFromBoolean,
--- que resuelve el color en C-side y deja que Blizzard mantenga su color por defecto
--- cuando hay aggro. Si no hay aggro, se fuerza amarillo sin comparar el valor secreto.
+-- Patrón seguro de Platynator: no se compara ningún valor secreto de amenaza
+-- en Lua. Se pasa el valor secreto directamente a la API C, que decide el color
+-- sin que nuestro Lua haga ramas ni comparaciones sobre datos protegidos.
 local function ApplyFocusColor(unit, uf)
 	if not uf or not uf.healthBar then return false end
 
 	local r, g, b, a = uf.healthBar:GetStatusBarColor()
 	a = a or 1
 
-	local isTanking = nil
-	if UnitDetailedThreatSituation then
-		isTanking = UnitDetailedThreatSituation("player", unit)
-	end
+	local isTanking = UnitDetailedThreatSituation and UnitDetailedThreatSituation("player", unit)
 
-	if C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean and isTanking ~= nil then
-		local fr = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, r, 1)
-		local fg = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, g, 1)
-		local fb = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, b, 0)
-		local fa = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, a, 1)
-		uf.healthBar:SetStatusBarColor(fr, fg, fb, fa)
-		return not isTanking
+	if C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
+		local ok, fr, fg, fb, fa = pcall(function()
+			return C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, r, 1),
+				C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, g, 1),
+				C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, b, 0),
+				C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, a, 1)
+		end)
+
+		if ok then
+			uf.healthBar:SetStatusBarColor(fr, fg, fb, fa)
+			return true
+		end
 	end
 
 	if CompactUnitFrame_UpdateHealthColor then
@@ -152,13 +153,12 @@ local function ApplyToUnit(unit)
 	local forceUnsimplified = nameplate and nameplate.MinimizerNeverSimplify
 	local inCombat = UnitAffectingCombat("player")
 	local isCasting = UnitCastingInfo(unit) ~= nil or UnitChannelInfo(unit) ~= nil
-	local hasThreat = false
-	if UnitDetailedThreatSituation then
-		hasThreat = UnitDetailedThreatSituation("player", unit)
-	end
 
+	-- No se prueba el secreto de amenaza en Lua. El comportamiento de aggro se deja
+	-- a Blizzard y el focus solo usa la API segura para decidir color. La simplificación
+	-- se mantiene en la lógica segura de cast/combat, sin ramificar sobre valores secretos.
 	local shouldSimplify = false
-	if inCombat and not forceUnsimplified and not isCasting and not hasThreat then
+	if inCombat and not forceUnsimplified and not isCasting then
 		shouldSimplify = MinimizerDB.simplifyPercent > 0
 	end
 
