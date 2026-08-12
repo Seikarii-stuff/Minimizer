@@ -23,37 +23,27 @@ local function GetScaleForPercent(percent)
 	return MAX_SCALE_MULT - (MAX_SCALE_MULT - MIN_SCALE_MULT) * t
 end
 
--- Aplica el color amarillo "si no tiene aggro" usando el patrón verificado
--- de Platynator (Colors.lua L214-218): el boolean secreto de threat se pasa
--- directo a C_CurveUtil.EvaluateColorValueFromBoolean, que lo evalúa C-side
--- y devuelve el número final (r/g/b/a) sin que nuestro Lua lo compare nunca.
--- state=true (tiene aggro) -> se queda con el color que Blizzard ya calculó.
--- state=false (no tiene aggro) -> amarillo.
+-- Si el focus no tiene aggro, forzamos amarillo para distinguirlo. Cuando sí
+-- tiene aggro, dejamos que Blizzard recalcule el color por defecto del health
+-- bar (rojo) y no hacemos nada extra.
 local function ApplyFocusColor(unit, uf)
-	if CompactUnitFrame_UpdateHealthColor then
-		CompactUnitFrame_UpdateHealthColor(uf)
+	if not uf or not uf.healthBar then return false end
+
+	local hasThreat = false
+	local threat = UnitThreatSituation("player", unit)
+	if threat ~= nil and threat > 0 then
+		hasThreat = true
 	end
 
-	local r, g, b, a = uf.healthBar:GetStatusBarColor()
-	a = a or 1
-
-	local applied = false
-
-	if C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
-		applied = pcall(function()
-			local isTanking = UnitDetailedThreatSituation("player", unit)
-			local fr = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, r, 1)
-			local fg = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, g, 1)
-			local fb = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, b, 0)
-			local fa = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, a, 1)
-			uf.healthBar:SetStatusBarColor(fr, fg, fb, fa)
-		end)
+	if hasThreat then
+		if CompactUnitFrame_UpdateHealthColor then
+			CompactUnitFrame_UpdateHealthColor(uf)
+		end
+		return false
 	end
 
-	if not applied then
-		-- Fallback si algo de esto no está disponible: amarillo fijo.
-		uf.healthBar:SetStatusBarColor(1, 1, 0)
-	end
+	uf.healthBar:SetStatusBarColor(1, 1, 0, 1)
+	return true
 end
 
 -- Crea (una sola vez por frame de nameplate reciclado) las 4 flechas.
@@ -89,7 +79,9 @@ local function EnsureMarkers(nameplate)
 	return markers
 end
 
--- Actualiza flechas de target/focus y el color del focus según aggro
+-- Actualiza flechas de target/focus y el color del focus según aggro.
+-- Cuando hay aggro, dejamos que Blizzard pinte la barra con su color por
+-- defecto; solo forzamos amarillo cuando no hay aggro y el mob es focus.
 local function UpdateTargetFocusMarkers(unit, nameplate)
 	local markers = EnsureMarkers(nameplate)
 	if not markers then return end
@@ -105,10 +97,8 @@ local function UpdateTargetFocusMarkers(unit, nameplate)
 	local uf = nameplate.UnitFrame
 	if uf and uf.healthBar then
 		if isFocus then
-			ApplyFocusColor(unit, uf)
-			markers.colorOverridden = true
+			markers.colorOverridden = ApplyFocusColor(unit, uf)
 		elseif markers.colorOverridden then
-			-- Ya no es focus: restaurar color normal
 			if CompactUnitFrame_UpdateHealthColor then
 				CompactUnitFrame_UpdateHealthColor(uf)
 			end
@@ -117,7 +107,13 @@ local function UpdateTargetFocusMarkers(unit, nameplate)
 	end
 end
 
--- Aplica simplificación + escala + marcadores a una unidad concreta
+-- Aplica simplificación + escala + marcadores a una unidad concreta.
+-- Reglas:
+-- 1) si el bicho está casteando: desimplificar permanentemente
+-- 2) si el bicho tiene amenaza: desimplificar temporalmente hasta que Blizzard
+--    recupere el aggro
+-- 3) fuera de combate: dessimplificar para permitir targetear bien
+-- 4) en combate y sin cast ni amenaza: aplicar el porcentaje de simplificación
 local function ApplyToUnit(unit)
 	if not unit or not UnitExists(unit) then return end
 
@@ -126,15 +122,22 @@ local function ApplyToUnit(unit)
 
 	local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
 	local forceUnsimplified = nameplate and nameplate.MinimizerNeverSimplify
+	local inCombat = UnitAffectingCombat("player")
+	local isCasting = UnitCastingInfo(unit) ~= nil or UnitChannelInfo(unit) ~= nil
+	local hasThreat = UnitThreatSituation("player", unit) ~= nil and UnitThreatSituation("player", unit) > 0
 
-	local percent = forceUnsimplified and 0 or MinimizerDB.simplifyPercent
-
-	if C_NamePlateManager and C_NamePlateManager.SetNamePlateSimplified then
-		C_NamePlateManager.SetNamePlateSimplified(unit, percent > 0)
+	local shouldSimplify = false
+	if inCombat and not forceUnsimplified and not isCasting and not hasThreat then
+		shouldSimplify = MinimizerDB.simplifyPercent > 0
 	end
 
+	if C_NamePlateManager and C_NamePlateManager.SetNamePlateSimplified then
+		C_NamePlateManager.SetNamePlateSimplified(unit, shouldSimplify)
+	end
+
+	local scalePercent = shouldSimplify and MinimizerDB.simplifyPercent or 0
 	if nameplate then
-		nameplate:SetScale(GetScaleForPercent(percent))
+		nameplate:SetScale(GetScaleForPercent(scalePercent))
 		UpdateTargetFocusMarkers(unit, nameplate)
 	end
 end
