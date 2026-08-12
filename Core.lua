@@ -23,27 +23,55 @@ local function GetScaleForPercent(percent)
 	return MAX_SCALE_MULT - (MAX_SCALE_MULT - MIN_SCALE_MULT) * t
 end
 
--- Si el focus no tiene aggro, forzamos amarillo para distinguirlo. Cuando sí
--- tiene aggro, dejamos que Blizzard recalcule el color por defecto del health
--- bar (rojo) y no hacemos nada extra.
+-- C_NamePlate.GetNamePlateForUnit() solo acepta tokens de nameplate reales,
+-- no unit tokens tipo boss1. Si llega un bossX o un token no válido, buscamos
+-- la nameplate visible que lo representa en lugar de romper con taint/error.
+local function GetNamePlateForUnit(unit)
+	if not unit then return nil end
+	if C_NamePlate and C_NamePlate.GetNamePlateForUnit and unit:match("^nameplate%d+$") then
+		return C_NamePlate.GetNamePlateForUnit(unit)
+	end
+
+	if C_NamePlate and C_NamePlate.GetNamePlates then
+		for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
+			local token = nameplate and nameplate.namePlateUnitToken
+			if token and UnitIsUnit(token, unit) then
+				return nameplate
+			end
+		end
+	end
+
+	return nil
+end
+
+-- Patrón seguro de Platynator: no comparamos valores secretos de threat en Lua.
+-- Se pasa el estado bool directamente a C_CurveUtil.EvaluateColorValueFromBoolean,
+-- que resuelve el color en C-side y deja que Blizzard mantenga su color por defecto
+-- cuando hay aggro. Si no hay aggro, se fuerza amarillo sin comparar el valor secreto.
 local function ApplyFocusColor(unit, uf)
 	if not uf or not uf.healthBar then return false end
 
-	local hasThreat = false
-	local threat = UnitThreatSituation("player", unit)
-	if threat ~= nil and threat > 0 then
-		hasThreat = true
+	local r, g, b, a = uf.healthBar:GetStatusBarColor()
+	a = a or 1
+
+	local isTanking = nil
+	if UnitDetailedThreatSituation then
+		isTanking = UnitDetailedThreatSituation("player", unit)
 	end
 
-	if hasThreat then
-		if CompactUnitFrame_UpdateHealthColor then
-			CompactUnitFrame_UpdateHealthColor(uf)
-		end
-		return false
+	if C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean and isTanking ~= nil then
+		local fr = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, r, 1)
+		local fg = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, g, 1)
+		local fb = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, b, 0)
+		local fa = C_CurveUtil.EvaluateColorValueFromBoolean(isTanking, a, 1)
+		uf.healthBar:SetStatusBarColor(fr, fg, fb, fa)
+		return not isTanking
 	end
 
-	uf.healthBar:SetStatusBarColor(1, 1, 0, 1)
-	return true
+	if CompactUnitFrame_UpdateHealthColor then
+		CompactUnitFrame_UpdateHealthColor(uf)
+	end
+	return false
 end
 
 -- Crea (una sola vez por frame de nameplate reciclado) las 4 flechas.
@@ -120,11 +148,14 @@ local function ApplyToUnit(unit)
 	-- Solo tocamos nameplates de enemigos (mobs), no jugadores ni aliados.
 	if not UnitCanAttack("player", unit) then return end
 
-	local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
+	local nameplate = GetNamePlateForUnit(unit)
 	local forceUnsimplified = nameplate and nameplate.MinimizerNeverSimplify
 	local inCombat = UnitAffectingCombat("player")
 	local isCasting = UnitCastingInfo(unit) ~= nil or UnitChannelInfo(unit) ~= nil
-	local hasThreat = UnitThreatSituation("player", unit) ~= nil and UnitThreatSituation("player", unit) > 0
+	local hasThreat = false
+	if UnitDetailedThreatSituation then
+		hasThreat = UnitDetailedThreatSituation("player", unit)
+	end
 
 	local shouldSimplify = false
 	if inCombat and not forceUnsimplified and not isCasting and not hasThreat then
@@ -159,7 +190,7 @@ local function MarkNeverSimplify(unit)
 	if not unit or not UnitExists(unit) then return end
 	if not UnitCanAttack("player", unit) then return end
 
-	local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
+	local nameplate = GetNamePlateForUnit(unit)
 	if not nameplate then return end
 
 	if not nameplate.MinimizerNeverSimplify then
@@ -173,7 +204,7 @@ end
 -- esto no requiere ninguna tabla que pueda acumular entradas.
 local function ClearNeverSimplify(unit)
 	if not unit then return end
-	local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
+	local nameplate = GetNamePlateForUnit(unit)
 	if nameplate then
 		nameplate.MinimizerNeverSimplify = nil
 	end
