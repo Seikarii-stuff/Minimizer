@@ -12,46 +12,29 @@ MinimizerDB = MinimizerDB or {
     simplifyPercent = 0,
     enableTargetMarkers = true,
     enableFocusMarkers = true,
+    enableFocusColor = true,
 }
 
 local CONSTANTS = {
-    MAX_SCALE = 1.0,  -- Escala al 0% de simplificación
-    MIN_SCALE = 0.5,  -- Escala al 100% de simplificación
-    TICKER_INTERVAL = 1.0,
+    MAX_SCALE = 1.0,
+    MIN_SCALE = 0.5,
 }
 
 -------------------------------------------------------------------------------
--- 2. HELPER UTILITIES (Taint, Secret & API Safety)
+-- 2. HELPER UTILITIES (Anti-Taint & API Safety)
 -------------------------------------------------------------------------------
 Minimizer.Utils = {}
 
--- Comprueba si la API nativa de simplificación está disponible en el cliente[cite: 3]
 function Minimizer.Utils.IsSimplifiedAvailable()
     return C_NamePlateManager and type(C_NamePlateManager.SetNamePlateSimplified) == "function"
 end
 
--- Verifica la presencia del sistema de restricciones por secretos en 12.1[cite: 3]
-function Minimizer.Utils.IsSecretsActive()
-    return C_Secrets and type(C_Secrets.HasSecretRestrictions) == "function" and C_Secrets.HasSecretRestrictions()
-end
-
--- Comprueba de forma segura si un valor es secreto sin lanzar excepciones Lua[cite: 3]
-function Minimizer.Utils.SafeIsSecret(value)
-    if value == nil then return false end
-    if type(issecretvalue) == "function" then
-        return issecretvalue(value)
-    end
-    return false
-end
-
--- Convierte el porcentaje (0-100) en el factor multiplicador de escala
 function Minimizer.Utils.GetScaleForPercent(percent)
     percent = math.max(0, math.min(100, percent or 0))
     local factor = percent / 100
     return CONSTANTS.MAX_SCALE - (CONSTANTS.MAX_SCALE - CONSTANTS.MIN_SCALE) * factor
 end
 
--- Obtiene la nameplate de manera segura filtrando tokens tipo boss1, target, focus, etc.[cite: 1, 3]
 function Minimizer.Utils.GetNamePlateForUnit(unit)
     if not unit or not UnitExists(unit) then return nil end
 
@@ -72,36 +55,25 @@ function Minimizer.Utils.GetNamePlateForUnit(unit)
 end
 
 -------------------------------------------------------------------------------
--- 3. CACHE & STATE DETECTOR (Cast, Combat & Threat Safety)
+-- 3. CACHE & STATE DETECTOR
 -------------------------------------------------------------------------------
 Minimizer.Cache = {}
 
--- Determina si la unidad está casteando, canalizando o en spell potenciado[cite: 3]
 function Minimizer.Cache.IsUnitCasting(unit)
     if not unit or not UnitExists(unit) then return false end
-
-    local name = UnitCastingInfo(unit)
-    if name then return true end
-
-    name = UnitChannelInfo(unit)
-    if name then return true end
-
-    return false
+    return UnitCastingInfo(unit) ~= nil or UnitChannelInfo(unit) ~= nil
 end
 
--- Evaluador principal de simplificación basado en reglas seguras de contexto[cite: 3]
 function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
     if not unit or not UnitExists(unit) then return false end
 
     local pct = MinimizerDB.simplifyPercent or 0
     if pct <= 0 then return false end
 
-    -- Regla 1: Mobs marcados como no simplificables (ej. iniciaron cast) no se simplifican[cite: 3]
     if nameplate and nameplate.MinimizerNeverSimplify then
         return false
     end
 
-    -- Regla 2: Mobs que están casteando actualmente no se simplifican[cite: 3]
     if Minimizer.Cache.IsUnitCasting(unit) then
         return false
     end
@@ -110,11 +82,10 @@ function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
 end
 
 -------------------------------------------------------------------------------
--- 4. INDICADORES VISUALES (Target & Focus Markers - Sin Taint)
+-- 4. INDICADORES VISUALES Y COLOR DE FOCUS
 -------------------------------------------------------------------------------
 Minimizer.Markers = {}
 
--- Crea componentes visuales independientes anclados a la barra de vida[cite: 3]
 function Minimizer.Markers.Ensure(nameplate)
     if not nameplate then return nil end
     if nameplate.MinimizerMarkers then return nameplate.MinimizerMarkers end
@@ -143,7 +114,6 @@ function Minimizer.Markers.Ensure(nameplate)
     return markers
 end
 
--- Actualiza visibilidad de marcadores evaluando relaciones de target/focus de forma segura[cite: 3]
 function Minimizer.Markers.Update(unit, nameplate)
     local markers = Minimizer.Markers.Ensure(nameplate)
     if not markers then return end
@@ -160,6 +130,23 @@ function Minimizer.Markers.Update(unit, nameplate)
     markers.targetRight:SetShown(isTarget == true)
     markers.focusLeft:SetShown(isFocus == true)
     markers.focusRight:SetShown(isFocus == true)
+
+    -- Aplicar color amarillo a la barra de vida del Focus
+    local uf = nameplate.UnitFrame
+    if uf and uf.healthBar and MinimizerDB.enableFocusColor ~= false then
+        if isFocus then
+            if not markers.colorOverridden then
+                uf.healthBar:SetStatusBarColor(1, 1, 0, 1) -- Color amarillo para Focus
+                markers.colorOverridden = true
+            end
+        elseif markers.colorOverridden then
+            -- Restaurar el color original de la barra de vida según Blizzard (Amenaza/Reacción)
+            if CompactUnitFrame_UpdateHealthColor then
+                CompactUnitFrame_UpdateHealthColor(uf)
+            end
+            markers.colorOverridden = false
+        end
+    end
 end
 
 -------------------------------------------------------------------------------
@@ -175,23 +162,29 @@ function Minimizer.Core.ApplyToUnit(unit)
 
     local npToken = nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit) or unit
 
-    -- Solo simplificamos si la unidad es un objetivo atacable / enemigo
+    -- 1. Simplificación (solo enemigos/mobs atacables)
     if UnitCanAttack("player", npToken) or UnitCanAttack("player", unit) then
         local shouldSimplify = Minimizer.Cache.ShouldSimplifyUnit(npToken, nameplate)
 
         if Minimizer.Utils.IsSimplifiedAvailable() then
-            C_NamePlateManager.SetNamePlateSimplified(npToken, shouldSimplify)
+            -- Solo invocar si el estado de simplificación cambia respecto a la última reevaluación
+            if nameplate.MinimizerCurrentSimplify ~= shouldSimplify then
+                C_NamePlateManager.SetNamePlateSimplified(npToken, shouldSimplify)
+                nameplate.MinimizerCurrentSimplify = shouldSimplify
+            end
         end
 
-        local scalePercent = shouldSimplify and (MinimizerDB.simplifyPercent or 0) or 0
-        local targetScale = Minimizer.Utils.GetScaleForPercent(scalePercent)
-
-        if not InCombatLockdown() or not Minimizer.Utils.SafeIsSecret(targetScale) then
-            nameplate:SetScale(targetScale)
+        -- 2. Escala (solo se modifica fuera de combate para evitar Taint en marcos protegidos)
+        if not InCombatLockdown() then
+            local scalePercent = shouldSimplify and (MinimizerDB.simplifyPercent or 0) or 0
+            local targetScale = Minimizer.Utils.GetScaleForPercent(scalePercent)
+            if nameplate:GetScale() ~= targetScale then
+                nameplate:SetScale(targetScale)
+            end
         end
     end
 
-    -- Los marcadores de Target/Focus se aplican a cualquier unidad válida en pantalla
+    -- 3. Actualizar Marcadores y Color de Focus
     Minimizer.Markers.Update(npToken, nameplate)
 end
 
@@ -219,11 +212,15 @@ function Minimizer.Core.ClearNeverSimplify(unit)
     local nameplate = Minimizer.Utils.GetNamePlateForUnit(unit)
     if nameplate then
         nameplate.MinimizerNeverSimplify = nil
+        nameplate.MinimizerCurrentSimplify = nil
+        if nameplate.MinimizerMarkers then
+            nameplate.MinimizerMarkers.colorOverridden = nil
+        end
     end
 end
 
 -------------------------------------------------------------------------------
--- 6. EVENTOS & SECURE HOOKS
+-- 6. EVENTOS & SECURE HOOKS (Sincronización por Eventos)
 -------------------------------------------------------------------------------
 local EventFrame = CreateFrame("Frame", "MinimizerEventFrame")
 
@@ -243,7 +240,12 @@ local function OnEvent(self, event, unit, ...)
         or event == "UNIT_SPELLCAST_EMPOWER_START" then
         Minimizer.Core.MarkNeverSimplify(unit)
     elseif event == "ADDON_LOADED" and unit == ADDON_NAME then
-        MinimizerDB = MinimizerDB or { simplifyPercent = 0, enableTargetMarkers = true, enableFocusMarkers = true }
+        MinimizerDB = MinimizerDB or {
+            simplifyPercent = 0,
+            enableTargetMarkers = true,
+            enableFocusMarkers = true,
+            enableFocusColor = true,
+        }
     end
 end
 
@@ -260,7 +262,7 @@ EventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_START")
 EventFrame:SetScript("OnEvent", OnEvent)
 
--- Integración segura canónica con NamePlateDriverFrame mediante hooksecurefunc[cite: 3]
+-- Integración segura con NamePlateDriverFrame mediante hooksecurefunc
 if NamePlateDriverFrame then
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit)
         if unit then Minimizer.Core.ApplyToUnit(unit) end
@@ -269,9 +271,6 @@ if NamePlateDriverFrame then
         if unit then Minimizer.Core.ClearNeverSimplify(unit) end
     end)
 end
-
--- Ticker de respaldo para mantener la sincronización visual[cite: 3]
-C_Timer.NewTicker(CONSTANTS.TICKER_INTERVAL, Minimizer.Core.ApplyToAll)
 
 -------------------------------------------------------------------------------
 -- 7. COMANDOS BARRA SLASH (/simp)
