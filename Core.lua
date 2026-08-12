@@ -51,12 +51,23 @@ function Minimizer.Utils.GetScaleForPercent(percent)
     return CONSTANTS.MAX_SCALE - (CONSTANTS.MAX_SCALE - CONSTANTS.MIN_SCALE) * factor
 end
 
--- Obtiene la nameplate de manera segura mediante la API C nativa[cite: 3]
+-- Obtiene la nameplate de manera segura filtrando tokens tipo boss1, target, focus, etc.[cite: 1, 3]
 function Minimizer.Utils.GetNamePlateForUnit(unit)
-    if not unit then return nil end
-    if C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+    if not unit or not UnitExists(unit) then return nil end
+
+    if C_NamePlate and C_NamePlate.GetNamePlateForUnit and type(unit) == "string" and unit:match("^nameplate%d+$") then
         return C_NamePlate.GetNamePlateForUnit(unit)
     end
+
+    if C_NamePlate and C_NamePlate.GetNamePlates then
+        for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
+            local token = nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit) or nameplate.unit
+            if token and UnitIsUnit(token, unit) then
+                return nameplate
+            end
+        end
+    end
+
     return nil
 end
 
@@ -69,23 +80,21 @@ Minimizer.Cache = {}
 function Minimizer.Cache.IsUnitCasting(unit)
     if not unit or not UnitExists(unit) then return false end
 
-    local name, _, _, _, _, _, _, _, spellID = UnitCastingInfo(unit)
-    if name then return true, spellID end
+    local name = UnitCastingInfo(unit)
+    if name then return true end
 
-    name, _, _, _, _, _, _, spellID = UnitChannelInfo(unit)
-    if name then return true, spellID end
+    name = UnitChannelInfo(unit)
+    if name then return true end
 
-    return false, nil
+    return false
 end
 
 -- Evaluador principal de simplificación basado en reglas seguras de contexto[cite: 3]
 function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
     if not unit or not UnitExists(unit) then return false end
-    if not UnitCanAttack("player", unit) then return false end -- Solo enemigos
 
-    -- Si el cliente restringe cambios en combate o los secretos impiden la reevaluación[cite: 3]
-    local inCombat = UnitAffectingCombat("player")
-    if not inCombat then return false end
+    local pct = MinimizerDB.simplifyPercent or 0
+    if pct <= 0 then return false end
 
     -- Regla 1: Mobs marcados como no simplificables (ej. iniciaron cast) no se simplifican[cite: 3]
     if nameplate and nameplate.MinimizerNeverSimplify then
@@ -93,12 +102,11 @@ function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
     end
 
     -- Regla 2: Mobs que están casteando actualmente no se simplifican[cite: 3]
-    local isCasting = Minimizer.Cache.IsUnitCasting(unit)
-    if isCasting then
+    if Minimizer.Cache.IsUnitCasting(unit) then
         return false
     end
 
-    return (MinimizerDB.simplifyPercent or 0) > 0
+    return true
 end
 
 -------------------------------------------------------------------------------
@@ -106,16 +114,18 @@ end
 -------------------------------------------------------------------------------
 Minimizer.Markers = {}
 
--- Crea componentes visuales independientes sin mutar o pintar barras protegidas de Blizzard[cite: 3]
+-- Crea componentes visuales independientes anclados a la barra de vida[cite: 3]
 function Minimizer.Markers.Ensure(nameplate)
     if not nameplate then return nil end
     if nameplate.MinimizerMarkers then return nameplate.MinimizerMarkers end
 
-    local parent = nameplate.UnitFrame or nameplate
+    local uf = nameplate.UnitFrame or nameplate
+    local anchorFrame = uf.healthBar or uf.HealthBar or uf
+
     local function CreateArrow(text, point, relPoint, xOff, yOff, r, g, b)
-        local fs = parent:CreateFontString(nil, "OVERLAY")
+        local fs = uf:CreateFontString(nil, "OVERLAY")
         fs:SetFont(STANDARD_TEXT_FONT, 14, "OUTLINE")
-        fs:SetPoint(point, parent, relPoint, xOff, yOff)
+        fs:SetPoint(point, anchorFrame, relPoint, xOff, yOff)
         fs:SetText(text)
         fs:SetTextColor(r or 1, g or 1, b or 1)
         fs:Hide()
@@ -123,10 +133,10 @@ function Minimizer.Markers.Ensure(nameplate)
     end
 
     local markers = {
-        targetLeft  = CreateArrow(">>", "RIGHT", "LEFT",  -2,  6, 1, 1, 1),
-        targetRight = CreateArrow("<<", "LEFT",  "RIGHT",  2,  6, 1, 1, 1),
-        focusLeft   = CreateArrow(">>", "RIGHT", "LEFT",  -2, -6, 1, 1, 0),
-        focusRight  = CreateArrow("<<", "LEFT",  "RIGHT",  2, -6, 1, 1, 0),
+        targetLeft  = CreateArrow(">>", "RIGHT", "LEFT",  -2,  4, 1, 1, 1),
+        targetRight = CreateArrow("<<", "LEFT",  "RIGHT",  2,  4, 1, 1, 1),
+        focusLeft   = CreateArrow(">>", "RIGHT", "LEFT",  -2, -4, 1, 1, 0),
+        focusRight  = CreateArrow("<<", "LEFT",  "RIGHT",  2, -4, 1, 1, 0),
     }
 
     nameplate.MinimizerMarkers = markers
@@ -138,29 +148,18 @@ function Minimizer.Markers.Update(unit, nameplate)
     local markers = Minimizer.Markers.Ensure(nameplate)
     if not markers then return end
 
-    -- Forzamos retorno booleano explícito (true/false) para evitar pasar 'nil' a APIs de Blizzard
+    local npToken = nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit) or unit
+
     local enableTarget = MinimizerDB.enableTargetMarkers ~= false
     local enableFocus  = MinimizerDB.enableFocusMarkers ~= false
 
-    local isTarget = enableTarget and (UnitIsUnit(unit, "target") == true)
-    local isFocus  = enableFocus and (UnitIsUnit(unit, "focus") == true)
+    local isTarget = enableTarget and UnitIsUnit(npToken, "target")
+    local isFocus  = enableFocus and UnitIsUnit(npToken, "focus")
 
-    -- Aplicación segura evaluando posibilidad de datos secretos[cite: 3]
-    if markers.targetLeft.SetAlphaFromBoolean then
-        markers.targetLeft:SetAlphaFromBoolean(isTarget)
-        markers.targetRight:SetAlphaFromBoolean(isTarget)
-        markers.focusLeft:SetAlphaFromBoolean(isFocus)
-        markers.focusRight:SetAlphaFromBoolean(isFocus)
-        markers.targetLeft:Show()
-        markers.targetRight:Show()
-        markers.focusLeft:Show()
-        markers.focusRight:Show()
-    else
-        markers.targetLeft:SetShown(isTarget)
-        markers.targetRight:SetShown(isTarget)
-        markers.focusLeft:SetShown(isFocus)
-        markers.focusRight:SetShown(isFocus)
-    end
+    markers.targetLeft:SetShown(isTarget == true)
+    markers.targetRight:SetShown(isTarget == true)
+    markers.focusLeft:SetShown(isFocus == true)
+    markers.focusRight:SetShown(isFocus == true)
 end
 
 -------------------------------------------------------------------------------
@@ -170,32 +169,36 @@ Minimizer.Core = {}
 
 function Minimizer.Core.ApplyToUnit(unit)
     if not unit or not UnitExists(unit) then return end
-    if not UnitCanAttack("player", unit) then return end
 
     local nameplate = Minimizer.Utils.GetNamePlateForUnit(unit)
-    local shouldSimplify = Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
+    if not nameplate then return end
 
-    -- API nativa C de Blizzard para simplificación segura[cite: 3]
-    if Minimizer.Utils.IsSimplifiedAvailable() then
-        C_NamePlateManager.SetNamePlateSimplified(unit, shouldSimplify)
-    end
+    local npToken = nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit) or unit
 
-    if nameplate then
-        local scalePercent = shouldSimplify and MinimizerDB.simplifyPercent or 0
+    -- Solo simplificamos si la unidad es un objetivo atacable / enemigo
+    if UnitCanAttack("player", npToken) or UnitCanAttack("player", unit) then
+        local shouldSimplify = Minimizer.Cache.ShouldSimplifyUnit(npToken, nameplate)
+
+        if Minimizer.Utils.IsSimplifiedAvailable() then
+            C_NamePlateManager.SetNamePlateSimplified(npToken, shouldSimplify)
+        end
+
+        local scalePercent = shouldSimplify and (MinimizerDB.simplifyPercent or 0) or 0
         local targetScale = Minimizer.Utils.GetScaleForPercent(scalePercent)
 
         if not InCombatLockdown() or not Minimizer.Utils.SafeIsSecret(targetScale) then
             nameplate:SetScale(targetScale)
         end
-
-        Minimizer.Markers.Update(unit, nameplate)
     end
+
+    -- Los marcadores de Target/Focus se aplican a cualquier unidad válida en pantalla
+    Minimizer.Markers.Update(npToken, nameplate)
 end
 
 function Minimizer.Core.ApplyToAll()
     if not C_NamePlate or not C_NamePlate.GetNamePlates then return end
     for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
-        local token = nameplate.namePlateUnitToken or nameplate.unit
+        local token = nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit) or nameplate.unit
         if token then
             Minimizer.Core.ApplyToUnit(token)
         end
@@ -204,7 +207,6 @@ end
 
 function Minimizer.Core.MarkNeverSimplify(unit)
     if not unit or not UnitExists(unit) then return end
-    if not UnitCanAttack("player", unit) then return end
 
     local nameplate = Minimizer.Utils.GetNamePlateForUnit(unit)
     if nameplate and not nameplate.MinimizerNeverSimplify then
@@ -268,7 +270,7 @@ if NamePlateDriverFrame then
     end)
 end
 
--- Ticker de respaldo para sincronizar estado de visualización[cite: 3]
+-- Ticker de respaldo para mantener la sincronización visual[cite: 3]
 C_Timer.NewTicker(CONSTANTS.TICKER_INTERVAL, Minimizer.Core.ApplyToAll)
 
 -------------------------------------------------------------------------------
