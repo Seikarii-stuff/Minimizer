@@ -312,3 +312,11 @@ local r = C_CurveUtil.EvaluateColorValueFromBoolean(notInterruptible, grisR, ver
 local g = C_CurveUtil.EvaluateColorValueFromBoolean(notInterruptible, grisG, verdeG)
 local b = C_CurveUtil.EvaluateColorValueFromBoolean(notInterruptible, grisB, verdeB)
 castBar:SetStatusBarColor(r, g, b)
+
+## APIs para geometría de nameplates (pendiente)
+
+- Tamaño base de las placas: `C_NamePlate.SetNamePlateSize(width, height)`.
+- Área clicable global: `C_NamePlateManager.SetNamePlateHitTestInsets(Enum.NamePlateType.Enemy, left, right, top, bottom)`.
+- Área clicable por placa: `nameplate:CanChangeHitTestPoints()` y `nameplate:SetAllHitTestPoints(clickRegion)`.
+- Área usada para apilado: `nameplate:SetStackingBoundsFrame(frame)`.
+- Estas APIs controlan regiones distintas: cambiar el tamaño visual no garantiza que el hit-test o el apilado coincidan automáticamente. Deben validarse por separado antes de usarlas.
