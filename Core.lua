@@ -68,9 +68,52 @@ end
 Minimizer.Cache = {}
 Minimizer.Modules = Minimizer.Modules or {}
 
+-- Estado de casteo compartido por Core, HealthBarColor y el futuro
+-- CastingBar. La forma de leerlo sigue los índices documentados en project.md.
+Minimizer.Cast = Minimizer.Cast or {}
+
+local function IsSecretValue(value)
+    return issecretvalue and issecretvalue(value)
+end
+
+function Minimizer.Cast.GetState(unit)
+    if not unit or not UnitExists(unit) then return false, false end
+
+    local castInfo = { UnitCastingInfo(unit) }
+    local channelInfo = { UnitChannelInfo(unit) }
+    local isCasting = castInfo[1] ~= nil or channelInfo[1] ~= nil
+    if not isCasting then return false, false end
+
+    -- En casts normales el indicador está en [8], en canales en [7].
+    -- No usar `and/or` aquí: el valor puede ser un booleano secreto y una
+    -- prueba Lua sobre él provoca taint en Midnight.
+    local uninterruptible
+    if castInfo[1] ~= nil then
+        uninterruptible = castInfo[8]
+    elseif channelInfo[1] ~= nil then
+        uninterruptible = channelInfo[7]
+    end
+
+    -- Los secretos no se pueden inspeccionar desde Lua. En ese caso dejamos
+    -- la clasificación indeterminada y nunca la convertimos en booleano.
+    if IsSecretValue(uninterruptible) then
+        return true, nil
+    end
+    return true, uninterruptible == true
+end
+
+function Minimizer.Cast.IsUnitCasting(unit)
+    local isCasting = Minimizer.Cast.GetState(unit)
+    return isCasting == true
+end
+
+function Minimizer.Cast.IsUnitCastUninterruptible(unit)
+    local isCasting, isUninterruptible = Minimizer.Cast.GetState(unit)
+    return isCasting == true and isUninterruptible == true
+end
+
 function Minimizer.Cache.IsUnitCasting(unit)
-    if not unit or not UnitExists(unit) then return false end
-    return UnitCastingInfo(unit) ~= nil or UnitChannelInfo(unit) ~= nil
+    return Minimizer.Cast.IsUnitCasting(unit)
 end
 
 function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
@@ -248,9 +291,24 @@ local function OnEvent(self, event, unit, ...)
         -- La clase de enemigo puede cambiar durante una transformaciÃ³n.
         Minimizer.Core.ApplyToUnit(unit)
     elseif event == "UNIT_SPELLCAST_START"
+        or event == "UNIT_SPELLCAST_STOP"
+        or event == "UNIT_SPELLCAST_FAILED"
+        or event == "UNIT_SPELLCAST_INTERRUPTED"
+        or event == "UNIT_SPELLCAST_INTERRUPTIBLE"
+        or event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE"
         or event == "UNIT_SPELLCAST_CHANNEL_START"
-        or event == "UNIT_SPELLCAST_EMPOWER_START" then
-        Minimizer.Core.MarkNeverSimplify(unit)
+        or event == "UNIT_SPELLCAST_CHANNEL_STOP"
+        or event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
+        or event == "UNIT_SPELLCAST_EMPOWER_START"
+        or event == "UNIT_SPELLCAST_EMPOWER_STOP"
+        or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
+        if event == "UNIT_SPELLCAST_START"
+            or event == "UNIT_SPELLCAST_CHANNEL_START"
+            or event == "UNIT_SPELLCAST_EMPOWER_START" then
+            Minimizer.Core.MarkNeverSimplify(unit)
+        else
+            Minimizer.Core.ApplyToUnit(unit)
+        end
     elseif event == "ADDON_LOADED" and unit == ADDON_NAME then
         MinimizerDB = MinimizerDB or {
             simplifyPercent = 0,
@@ -270,8 +328,17 @@ EventFrame:RegisterEvent("UNIT_DISPLAYPOWER")
 EventFrame:RegisterEvent("UNIT_CLASSIFICATION_CHANGED")
 EventFrame:RegisterEvent("UNIT_LEVEL")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_START")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_STOP")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_FAILED")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTIBLE")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_UPDATE")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_START")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_STOP")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_UPDATE")
 EventFrame:SetScript("OnEvent", OnEvent)
 
 -- Secure Hooks canónicos según especificación de Platynator[cite: 3]

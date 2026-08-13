@@ -18,6 +18,9 @@ local COLORS = {
     boss = { 0.65, 0.25, 1.00 }, -- Boss: morado
     miniboss = { 0.65, 0.25, 1.00 }, -- Miniboss: morado
     focus = { 1.00, 0.90, 0.00 }, -- Focus: amarillo
+    castInterruptible = { 0.10, 1.00, 0.10 }, -- Cast interrumpible persistente
+    castUninterruptible = { 0.45, 0.45, 0.45 }, -- Cast ininterrumpible persistente
+    dangerCast = { 0.28, 0.05, 0.38 }, -- Caster/superior en cast peligroso
 }
 
 local function IsSecretValue(value)
@@ -101,10 +104,45 @@ end
 function HealthBarColor:UpdateNamePlate(unit, nameplate)
     if not unit or not UnitExists(unit) then return end
 
+    -- Las nameplates se reutilizan; nunca arrastrar el color de otra unidad.
+    if nameplate.MinimizerHealthBarColorUnit ~= unit then
+        nameplate.MinimizerHealthBarColorUnit = unit
+        nameplate.MinimizerPersistentCastColorKind = nil
+    end
+
     local healthBar = self:GetHealthBar(nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
 
-    local kind = self:GetKind(unit)
+    local baseKind = self:GetKind(unit)
+    local kind = baseKind
+    local isCasting, isUninterruptible = Minimizer.Cast.GetState(unit)
+
+    if baseKind ~= "focus" and isCasting then
+        local isCasterOrSuperior = baseKind == "caster"
+            or baseKind == "boss"
+            or baseKind == "miniboss"
+        if isUninterruptible then
+            if isCasterOrSuperior then
+                -- Solo mientras el hechizo ininterrumpible sigue activo.
+                kind = "dangerCast"
+            else
+                kind = "castUninterruptible"
+                nameplate.MinimizerPersistentCastColorKind = kind
+            end
+        else
+            kind = "castInterruptible"
+            if not isCasterOrSuperior then
+                nameplate.MinimizerPersistentCastColorKind = kind
+            end
+        end
+    elseif baseKind ~= "focus" and baseKind ~= "caster"
+        and baseKind ~= "boss" and baseKind ~= "miniboss"
+        and nameplate.MinimizerPersistentCastColorKind then
+        kind = nameplate.MinimizerPersistentCastColorKind
+    elseif baseKind == "caster" or baseKind == "boss" or baseKind == "miniboss" then
+        nameplate.MinimizerPersistentCastColorKind = nil
+    end
+
     local color = COLORS[kind]
     healthBar:SetStatusBarColor(color[1], color[2], color[3])
     nameplate.MinimizerHealthBarColorKind = kind
@@ -114,6 +152,8 @@ function HealthBarColor:OnNamePlateRemoved(_, nameplate)
     -- El frame se reutiliza; no conservar estado de la unidad anterior.
     if nameplate then
         nameplate.MinimizerHealthBarColorKind = nil
+        nameplate.MinimizerHealthBarColorUnit = nil
+        nameplate.MinimizerPersistentCastColorKind = nil
     end
 end
 
