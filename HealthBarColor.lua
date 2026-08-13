@@ -76,10 +76,13 @@ function HealthBarColor:GetHealthBar(nameplate)
     return unitFrame and (unitFrame.healthBar or unitFrame.HealthBar)
 end
 
+local HookHealthBar
+
 function HealthBarColor:UpdateNamePlate(unit, nameplate)
     if not unit or not UnitExists(unit) then return end
     local healthBar = self:GetHealthBar(nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
+    HookHealthBar(healthBar)
     local baseKind = self:GetKind(unit, nameplate)
     nameplate.MinimizerHasAbsorb = baseKind == "absorb"
     local color = COLORS[baseKind] or COLORS.melee
@@ -106,7 +109,7 @@ end
 
 -- Blizzard puede volver a aplicar su color rojo al actualizar la unidad.
 -- Reentrancia protegida: el hook solo reevalúa el color final del módulo.
-local function HookHealthBar(healthBar)
+HookHealthBar = function(healthBar)
     if not healthBar or healthBar.MinimizerHealthColorHooked then return end
     healthBar.MinimizerHealthColorHooked = true
     if hooksecurefunc then
