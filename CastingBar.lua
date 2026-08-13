@@ -20,10 +20,10 @@ end
 local function IsSpellTargetingPlayer(unit)
     if UnitIsSpellTarget then
         local targeted = UnitIsSpellTarget(unit, "player")
-        if not IsSecretValue(targeted) and targeted == true then return true end
+        return targeted
     end
     local target = unit and (unit .. "target")
-    return target and UnitIsUnit(target, "player") == true
+    return target and UnitIsUnit(target, "player")
 end
 
 local function IsImportantSpell(spellID)
@@ -58,11 +58,12 @@ function Minimizer.Interrupt.IsReady()
         return MinimizerDB.interruptReady
     end
     local spellID = Minimizer.Interrupt.GetSpellID()
-    if spellID and C_Spell and C_Spell.GetSpellCooldown then
-        local cooldown = C_Spell.GetSpellCooldown(spellID)
-        if cooldown and cooldown.startTime and cooldown.duration then
-            return cooldown.startTime == 0 or cooldown.duration == 0
-                or (GetTime() >= cooldown.startTime + cooldown.duration)
+    if spellID and C_Spell and C_Spell.GetSpellCooldownDuration then
+        local duration = C_Spell.GetSpellCooldownDuration(spellID)
+        if duration then
+            -- IsZero() devuelve el booleano secreto directamente; no se
+            -- compara ni se usa en una condición Lua.
+            return duration:IsZero()
         end
     end
     -- Sin un spellID configurado no se puede inferir el corte sin adivinar la
@@ -70,10 +71,38 @@ function Minimizer.Interrupt.IsReady()
     return true
 end
 
+-- Duck-typing: en este cliente los widgets de nameplate son anónimos
+-- (GetName() vacío) y no cuelgan de campos nombrados como .castBar/.CastBar.
+-- Se localiza recorriendo los nietos de UnitFrame y descartando la healthbar
+-- (confirmado por diagnóstico: la barra de cast es la única, aparte de la
+-- healthbar, con SetStatusBarColor+GetValue, y su IsShown() solo es true
+-- mientras la unidad está casteando).
 function CastingBar:GetCastBar(nameplate)
     local unitFrame = nameplate and (nameplate.UnitFrame or nameplate)
-    return (unitFrame and (unitFrame.castBar or unitFrame.CastBar or unitFrame.castbar))
-        or (nameplate and (nameplate.castBar or nameplate.CastBar or nameplate.castbar))
+    if not unitFrame or type(unitFrame.GetChildren) ~= "function" then return nil end
+
+    local healthBar = unitFrame.healthBar
+    local childResults = { pcall(unitFrame.GetChildren, unitFrame) }
+    if not childResults[1] then return nil end
+
+    for i = 2, #childResults do
+        local child = childResults[i]
+        if type(child) == "table" and type(child.GetChildren) == "function" then
+            local grandchildResults = { pcall(child.GetChildren, child) }
+            if grandchildResults[1] then
+                for j = 2, #grandchildResults do
+                    local grandchild = grandchildResults[j]
+                    if type(grandchild) == "table"
+                        and grandchild ~= healthBar
+                        and type(grandchild.SetStatusBarColor) == "function"
+                        and type(grandchild.GetValue) == "function" then
+                        return grandchild
+                    end
+                end
+            end
+        end
+    end
+    return nil
 end
 
 function CastingBar:EnsureVisuals(castBar)
@@ -92,49 +121,17 @@ function CastingBar:EnsureVisuals(castBar)
     marker:Hide()
 
     castBar.MinimizerCastVisuals = { targetBorder = border, interruptMarker = marker }
-
-    -- El cliente repinta la StatusBar después de los eventos de casteo. El
-    -- hook se ejecuta después de ese repintado y vuelve a evaluar únicamente
-    -- el estado verde, sin secuestrar los colores nativos restantes.
-    if hooksecurefunc and not castBar.MinimizerColorHooked then
-        castBar.MinimizerColorHooked = true
-        hooksecurefunc(castBar, "SetStatusBarColor", function(bar, r, g, b, a)
-            if CastingBar._applyingColor then return end
-            local unit = bar.MinimizerCastUnit
-            if unit then CastingBar:ApplyGreenColor(bar, unit, r, g, b, a) end
-        end)
-    end
     return castBar.MinimizerCastVisuals
 end
 
-function CastingBar:ApplyGreenColor(castBar, unit, originalR, originalG, originalB, originalA)
-    if not castBar or type(castBar.SetStatusBarColor) ~= "function" then return end
-    local canColorGreen = Minimizer.Cast.IsUnitCasting(unit)
-    local r, g, b, a = originalR, originalG, originalB, originalA
-    if r == nil and type(castBar.GetStatusBarColor) == "function" then
-        r, g, b, a = castBar:GetStatusBarColor()
-    end
-    r, g, b, a = r or 1, g or 1, b or 1, a or 1
-
-    self._applyingColor = true
-    if C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
-        -- La condición puede ser secreta; la API C selecciona entre el color
-        -- original y el verde sin evaluarla en Lua.
-        r = C_CurveUtil.EvaluateColorValueFromBoolean(canColorGreen, r, COLORS.ready[1])
-        g = C_CurveUtil.EvaluateColorValueFromBoolean(canColorGreen, g, COLORS.ready[2])
-        b = C_CurveUtil.EvaluateColorValueFromBoolean(canColorGreen, b, COLORS.ready[3])
-        a = C_CurveUtil.EvaluateColorValueFromBoolean(canColorGreen, a or 1, 1)
-    elseif canColorGreen then
-        r, g, b = COLORS.ready[1], COLORS.ready[2], COLORS.ready[3]
-    end
-    castBar:SetStatusBarColor(r, g, b, a)
-    self._applyingColor = false
-end
-
 function CastingBar:UpdateInterruptMarker(castBar, visuals, isCasting, ready)
-    if not isCasting or not ready or not castBar.GetValue then
+    if not isCasting or not castBar.GetValue then
         visuals.interruptMarker:Hide()
         return
+    end
+
+    if visuals.interruptMarker.SetAlphaFromBoolean then
+        visuals.interruptMarker:SetAlphaFromBoolean(ready)
     end
 
     local value = castBar:GetValue()
@@ -166,19 +163,32 @@ function CastingBar:UpdateNamePlate(unit, nameplate)
     local visuals = self:EnsureVisuals(castBar)
     local isCasting = Minimizer.Cast.IsUnitCasting(unit)
     local ready = Minimizer.Interrupt.IsReady()
-    castBar.MinimizerCastUnit = unit
 
     -- Diagnóstico temporal: se ignoran interruptibilidad y cooldown para
     -- comprobar de forma aislada que localizamos y pintamos el castbar.
     -- Diagnóstico solicitado: cualquier casteo activo se pinta verde,
     -- independientemente del cooldown o de la interruptibilidad.
-    self:ApplyGreenColor(castBar, unit)
+    local canColorGreen = isCasting
+    if canColorGreen and type(castBar.GetStatusBarColor) == "function" then
+        if not castBar.MinimizerDefaultColor then
+            local r, g, b, a = castBar:GetStatusBarColor()
+            castBar.MinimizerDefaultColor = { r, g, b, a }
+        end
+        castBar:SetStatusBarColor(COLORS.ready[1], COLORS.ready[2], COLORS.ready[3])
+    elseif castBar.MinimizerDefaultColor then
+        local color = castBar.MinimizerDefaultColor
+        castBar:SetStatusBarColor(color[1], color[2], color[3], color[4])
+        castBar.MinimizerDefaultColor = nil
+    end
 
     local targeted = IsSpellTargetingPlayer(unit)
     local spellID = select(9, UnitCastingInfo(unit)) or select(8, UnitChannelInfo(unit))
     local important = IsImportantSpell(spellID)
-    if targeted and isCasting then
+    if isCasting then
         visuals.targetBorder:Show()
+        if visuals.targetBorder.SetAlphaFromBoolean then
+            visuals.targetBorder:SetAlphaFromBoolean(targeted)
+        end
     else
         visuals.targetBorder:Hide()
     end
