@@ -14,6 +14,8 @@ local COLORS = {
     boss = { 0.65, 0.25, 1.00 },
     miniboss = { 0.65, 0.25, 1.00 },
     focus = { 1.00, 0.90, 0.00 },
+    absorb = { 1.00, 0.45, 0.75 }, -- Mob con absorb
+    aggro = { 1.00, 0.00, 0.00 }, -- Aggro total: color nativo rojo
     castInterruptible = { 0.10, 1.00, 0.10 },
     dangerCast = { 0.28, 0.05, 0.38 },
 }
@@ -59,6 +61,11 @@ end
 
 function HealthBarColor:GetKind(unit)
     if UnitIsUnit(unit, "focus") then return "focus" end
+    -- El aggro total conserva prioridad sobre el rosa del absorb.
+    local threat = Minimizer.Threat and Minimizer.Threat.GetSituation
+        and Minimizer.Threat.GetSituation(unit, "player")
+    if threat == 3 then return "aggro" end
+    if Minimizer.Absorb and Minimizer.Absorb.HasAbsorb(unit) then return "absorb" end
     return self:GetEliteType(unit)
 end
 
@@ -71,8 +78,10 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate)
     if not unit or not UnitExists(unit) then return end
     local healthBar = self:GetHealthBar(nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
+    HookHealthBar(healthBar)
 
     local baseKind = self:GetKind(unit)
+    nameplate.MinimizerHasAbsorb = baseKind == "absorb"
     local color = COLORS[baseKind] or COLORS.melee
     local r, g, b = color[1], color[2], color[3]
     local isCasting, _, uninterruptible = Minimizer.Cast.GetState(unit)
@@ -81,7 +90,7 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate)
 
     -- Direct StatusBar coloring only. Secret interruptibility is resolved
     -- channel-by-channel in C-side, as documented by project.md.
-    if isCasting and baseKind ~= "focus"
+    if isCasting and baseKind ~= "focus" and baseKind ~= "absorb" and baseKind ~= "aggro"
         and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
         local castColor = isSuperior and COLORS.dangerCast or COLORS.castInterruptible
         r = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, color[1], castColor[1])
@@ -89,8 +98,29 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate)
         b = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, color[3], castColor[3])
     end
 
+    healthBar.MinimizerHealthColorApplying = true
     healthBar:SetStatusBarColor(r, g, b)
+    healthBar.MinimizerHealthColorApplying = nil
     nameplate.MinimizerHealthBarColorKind = baseKind
+end
+
+-- Blizzard puede volver a aplicar su color rojo al actualizar la unidad.
+-- Reentrancia protegida: el hook solo reevalúa el color final del módulo.
+local function HookHealthBar(healthBar)
+    if not healthBar or healthBar.MinimizerHealthColorHooked then return end
+    healthBar.MinimizerHealthColorHooked = true
+    if hooksecurefunc then
+        hooksecurefunc(healthBar, "SetStatusBarColor", function()
+            if healthBar.MinimizerHealthColorApplying then return end
+            local parent = healthBar:GetParent()
+            local nameplate = parent and (parent.UnitFrame and parent or parent:GetParent())
+            local unit = nameplate and (nameplate.namePlateUnitToken
+                or (nameplate.UnitFrame and nameplate.UnitFrame.unit))
+            if unit then
+                HealthBarColor:UpdateNamePlate(unit, nameplate)
+            end
+        end)
+    end
 end
 
 function HealthBarColor:OnNamePlateRemoved(_, nameplate)
@@ -98,6 +128,7 @@ function HealthBarColor:OnNamePlateRemoved(_, nameplate)
         nameplate.MinimizerHealthBarColorKind = nil
         nameplate.MinimizerHealthBarColorUnit = nil
         nameplate.MinimizerPersistentCastColorKind = nil
+        nameplate.MinimizerHasAbsorb = nil
     end
 end
 

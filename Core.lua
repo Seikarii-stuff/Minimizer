@@ -71,6 +71,16 @@ Minimizer.Modules = Minimizer.Modules or {}
 -- Estado de amenaza. Mantiene la decisión separada de la presentación para
 -- que futuros módulos (incluido CastingBar) puedan reutilizarla.
 Minimizer.Threat = Minimizer.Threat or {}
+Minimizer.Absorb = Minimizer.Absorb or {}
+
+function Minimizer.Absorb.HasAbsorb(unit)
+    if not unit or not UnitExists(unit) or not UnitGetTotalAbsorbs then return false end
+    local absorbs = UnitGetTotalAbsorbs(unit)
+    if issecretvalue and issecretvalue(absorbs) then
+        return false
+    end
+    return type(absorbs) == "number" and absorbs > 0
+end
 
 function Minimizer.Threat.IsPlayerTank()
     return UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK"
@@ -173,6 +183,10 @@ function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
     if pct <= 0 then return false end
 
     if Minimizer.Threat.ShouldUnsimplify(unit) then
+        return false
+    end
+
+    if Minimizer.Absorb.HasAbsorb(unit) then
         return false
     end
 
@@ -342,6 +356,7 @@ local function OnEvent(self, event, unit, ...)
         -- La clase de enemigo puede cambiar durante una transformaciÃ³n.
         Minimizer.Core.ApplyToUnit(unit)
     elseif event == "UNIT_THREAT_SITUATION_UPDATE"
+        or event == "UNIT_ABSORB_AMOUNT_CHANGED"
         or event == "PLAYER_ROLES_ASSIGNED"
         or event == "GROUP_ROSTER_UPDATE"
         or event == "PLAYER_TALENT_UPDATE"
@@ -385,6 +400,7 @@ EventFrame:RegisterEvent("UNIT_DISPLAYPOWER")
 EventFrame:RegisterEvent("UNIT_CLASSIFICATION_CHANGED")
 EventFrame:RegisterEvent("UNIT_LEVEL")
 EventFrame:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
+EventFrame:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED")
 EventFrame:RegisterEvent("PLAYER_ROLES_ASSIGNED")
 EventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 EventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
