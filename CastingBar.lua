@@ -72,7 +72,8 @@ end
 
 function CastingBar:GetCastBar(nameplate)
     local unitFrame = nameplate and (nameplate.UnitFrame or nameplate)
-    return unitFrame and (unitFrame.castBar or unitFrame.CastBar or unitFrame.castbar)
+    return (unitFrame and (unitFrame.castBar or unitFrame.CastBar or unitFrame.castbar))
+        or (nameplate and (nameplate.castBar or nameplate.CastBar or nameplate.castbar))
 end
 
 function CastingBar:EnsureVisuals(castBar)
