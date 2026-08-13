@@ -11,6 +11,7 @@ Minimizer.CastingBar = CastingBar
 
 local COLORS = {
     ready = { 0.10, 1.00, 0.10 },
+    channel = { 1.00, 0.55, 0.75 }, -- Canalización: rosa claro
 }
 
 local function IsSecretValue(value)
@@ -139,11 +140,30 @@ function CastingBar:EnsureVisuals(castBar)
     marker:SetColorTexture(1, 1, 1, 1)
     marker:Hide()
 
+    local positioner = CreateFrame("StatusBar", nil, castBar)
+    positioner:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+    positioner:SetAlpha(0)
+    positioner:SetAllPoints(castBar)
+
+    local interruptBar = CreateFrame("StatusBar", nil, castBar)
+    interruptBar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+    interruptBar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 0)
+    interruptBar:SetAllPoints(castBar)
+    interruptBar:SetPoint("LEFT", positioner:GetStatusBarTexture(), "RIGHT")
+    local interruptPoint = interruptBar:CreateTexture(nil, "OVERLAY")
+    interruptPoint:SetColorTexture(1, 1, 1, 1)
+    interruptPoint:SetWidth(3)
+    interruptPoint:SetHeight(castBar:GetHeight() or 8)
+    interruptPoint:SetPoint("LEFT", interruptBar:GetStatusBarTexture(), "RIGHT")
+
     castBar.MinimizerCastVisuals = {
         targetContainer = targetContainer,
         targetBorder = border,
         targetPulse = pulse,
         interruptMarker = marker,
+        interruptPositioner = positioner,
+        interruptBar = interruptBar,
+        interruptPoint = interruptPoint,
     }
 
     -- Blizzard repinta la barra después de los eventos. Reaplicar aquí
@@ -156,51 +176,57 @@ function CastingBar:EnsureVisuals(castBar)
             local unit = bar.MinimizerCastUnit
             if unit and UnitExists(unit) then
                 local isCasting, _, uninterruptible = Minimizer.Cast.GetState(unit)
-                CastingBar:ApplyGreenColor(bar, unit, isCasting, Minimizer.Interrupt.IsReady(), uninterruptible)
+                local isChanneling = UnitChannelInfo(unit) ~= nil
+                CastingBar:ApplyGreenColor(bar, unit, isCasting, isChanneling, Minimizer.Interrupt.IsReady(), uninterruptible)
             end
         end)
     end
     return castBar.MinimizerCastVisuals
 end
 
-function CastingBar:UpdateInterruptMarker(castBar, visuals, isCasting, ready)
-    if not isCasting or not castBar.GetValue then
-        visuals.interruptMarker:Hide()
+function CastingBar:UpdateInterruptMarker(castBar, visuals, unit, isCasting, ready)
+    if not isCasting then
+        visuals.interruptPositioner:Hide()
+        visuals.interruptBar:Hide()
+        visuals.interruptPoint:Hide()
         return
     end
 
-    if visuals.interruptMarker.SetAlphaFromBoolean then
-        visuals.interruptMarker:SetAlphaFromBoolean(ready)
-    end
-
-    local value = castBar:GetValue()
-    local minValue, maxValue = castBar:GetMinMaxValues()
-    if IsSecretValue(value) or IsSecretValue(minValue) or IsSecretValue(maxValue)
-        or type(value) ~= "number" or type(minValue) ~= "number"
-        or type(maxValue) ~= "number" or maxValue <= minValue then
-        visuals.interruptMarker:Hide()
+    local spellID = Minimizer.Interrupt.GetSpellID()
+    local castDuration = UnitChannelDuration(unit) or UnitCastingDuration(unit)
+    local interruptDuration = spellID and C_Spell and C_Spell.GetSpellCooldownDuration
+        and C_Spell.GetSpellCooldownDuration(spellID)
+    if not castDuration or not interruptDuration then
+        visuals.interruptPositioner:Hide()
+        visuals.interruptBar:Hide()
+        visuals.interruptPoint:Hide()
         return
     end
 
-    local progress = (value - minValue) / (maxValue - minValue)
-    local width = castBar:GetWidth()
-    if type(width) ~= "number" or width <= 0 then
-        visuals.interruptMarker:Hide()
-        return
+    -- Duraciones secretas se entregan directamente a StatusBar; no se
+    -- convierten a números ni se calcula una posición en Lua.
+    local total = castDuration:GetTotalDuration()
+    visuals.interruptPositioner:SetMinMaxValues(0, total)
+    visuals.interruptBar:SetMinMaxValues(0, total)
+    visuals.interruptPositioner:SetValue(castDuration:GetElapsedDuration())
+    visuals.interruptBar:SetValue(interruptDuration:GetRemainingDuration())
+    visuals.interruptPositioner:Show()
+    visuals.interruptBar:Show()
+    visuals.interruptPoint:Show()
+    if visuals.interruptPoint.SetAlphaFromBoolean then
+        visuals.interruptPoint:SetAlphaFromBoolean(ready)
     end
-    visuals.interruptMarker:ClearAllPoints()
-    visuals.interruptMarker:SetPoint("TOP", castBar, "TOPLEFT", width * progress, 0)
-    visuals.interruptMarker:SetPoint("BOTTOM", castBar, "BOTTOMLEFT", width * progress, 0)
-    visuals.interruptMarker:Show()
 end
 
-function CastingBar:ApplyGreenColor(castBar, unit, isCasting, ready, uninterruptible)
+function CastingBar:ApplyGreenColor(castBar, unit, isCasting, isChanneling, ready, uninterruptible)
     if not castBar or type(castBar.SetStatusBarColor) ~= "function" then return end
     local r, g, b, a = 1, 1, 1, 1
     if castBar.GetStatusBarColor then
         r, g, b, a = castBar:GetStatusBarColor()
     end
-    if isCasting and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
+    if isChanneling then
+        r, g, b = COLORS.channel[1], COLORS.channel[2], COLORS.channel[3]
+    elseif isCasting and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
         -- La firma selecciona el primer valor cuando state=true (patrón de
         -- Platynator: EvaluateColorValueFromBoolean(notInterruptible, 0, 1)).
         local greenR = C_CurveUtil.EvaluateColorValueFromBoolean(ready, COLORS.ready[1], r)
@@ -223,13 +249,14 @@ function CastingBar:UpdateNamePlate(unit, nameplate)
     local visuals = self:EnsureVisuals(castBar)
     castBar.MinimizerCastUnit = unit
     local isCasting, _, uninterruptible = Minimizer.Cast.GetState(unit)
+    local isChanneling = UnitChannelInfo(unit) ~= nil
     local ready = Minimizer.Interrupt.IsReady()
 
     -- Diagnóstico temporal: se ignoran interruptibilidad y cooldown para
     -- comprobar de forma aislada que localizamos y pintamos el castbar.
     -- Diagnóstico solicitado: cualquier casteo activo se pinta verde,
     -- independientemente del cooldown o de la interruptibilidad.
-    self:ApplyGreenColor(castBar, unit, isCasting, ready, uninterruptible)
+    self:ApplyGreenColor(castBar, unit, isCasting, isChanneling, ready, uninterruptible)
 
     local targeted = IsSpellTargetingPlayer(unit)
     local spellID = select(9, UnitCastingInfo(unit)) or select(8, UnitChannelInfo(unit))
@@ -247,7 +274,7 @@ function CastingBar:UpdateNamePlate(unit, nameplate)
     -- El cliente ya resalta los casts importantes; sólo conservamos el dato
     -- para futuras animaciones sin duplicar su indicador nativo.
     nameplate.MinimizerImportantCast = important
-    self:UpdateInterruptMarker(castBar, visuals, isCasting, ready)
+    self:UpdateInterruptMarker(castBar, visuals, unit, isCasting and not isChanneling, ready)
 end
 
 function CastingBar:OnCastEvent(unit, event)
