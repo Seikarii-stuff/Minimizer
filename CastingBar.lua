@@ -249,6 +249,10 @@ EventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 EventFrame:SetScript("OnEvent", function(_, event, unit)
     if event == "SPELL_UPDATE_COOLDOWN" then
         Minimizer.Core.ApplyToAll()
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, Minimizer.Core.ApplyToAll)
+            C_Timer.After(0.05, Minimizer.Core.ApplyToAll)
+        end
     elseif unit and CAST_EVENTS[event] then
         CastingBar:OnCastEvent(unit, event)
     end
