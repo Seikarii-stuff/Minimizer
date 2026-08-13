@@ -92,7 +92,43 @@ function CastingBar:EnsureVisuals(castBar)
     marker:Hide()
 
     castBar.MinimizerCastVisuals = { targetBorder = border, interruptMarker = marker }
+
+    -- El cliente repinta la StatusBar después de los eventos de casteo. El
+    -- hook se ejecuta después de ese repintado y vuelve a evaluar únicamente
+    -- el estado verde, sin secuestrar los colores nativos restantes.
+    if hooksecurefunc and not castBar.MinimizerColorHooked then
+        castBar.MinimizerColorHooked = true
+        hooksecurefunc(castBar, "SetStatusBarColor", function(bar, r, g, b, a)
+            if CastingBar._applyingColor then return end
+            local unit = bar.MinimizerCastUnit
+            if unit then CastingBar:ApplyGreenColor(bar, unit, r, g, b, a) end
+        end)
+    end
     return castBar.MinimizerCastVisuals
+end
+
+function CastingBar:ApplyGreenColor(castBar, unit, originalR, originalG, originalB, originalA)
+    if not castBar or type(castBar.SetStatusBarColor) ~= "function" then return end
+    local canColorGreen = Minimizer.Cast.IsUnitCasting(unit)
+    local r, g, b, a = originalR, originalG, originalB, originalA
+    if r == nil and type(castBar.GetStatusBarColor) == "function" then
+        r, g, b, a = castBar:GetStatusBarColor()
+    end
+    r, g, b, a = r or 1, g or 1, b or 1, a or 1
+
+    self._applyingColor = true
+    if C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
+        -- La condición puede ser secreta; la API C selecciona entre el color
+        -- original y el verde sin evaluarla en Lua.
+        r = C_CurveUtil.EvaluateColorValueFromBoolean(canColorGreen, r, COLORS.ready[1])
+        g = C_CurveUtil.EvaluateColorValueFromBoolean(canColorGreen, g, COLORS.ready[2])
+        b = C_CurveUtil.EvaluateColorValueFromBoolean(canColorGreen, b, COLORS.ready[3])
+        a = C_CurveUtil.EvaluateColorValueFromBoolean(canColorGreen, a or 1, 1)
+    elseif canColorGreen then
+        r, g, b = COLORS.ready[1], COLORS.ready[2], COLORS.ready[3]
+    end
+    castBar:SetStatusBarColor(r, g, b, a)
+    self._applyingColor = false
 end
 
 function CastingBar:UpdateInterruptMarker(castBar, visuals, isCasting, ready)
@@ -128,26 +164,15 @@ function CastingBar:UpdateNamePlate(unit, nameplate)
     if not castBar or type(castBar.SetStatusBarColor) ~= "function" then return end
 
     local visuals = self:EnsureVisuals(castBar)
-    local isCasting, isUninterruptible, uninterruptibleValue = Minimizer.Cast.GetState(unit)
+    local isCasting = Minimizer.Cast.IsUnitCasting(unit)
     local ready = Minimizer.Interrupt.IsReady()
+    castBar.MinimizerCastUnit = unit
 
-    -- Gris/ininterruptible y azul/corte en cooldown son colores nativos de
-    -- Blizzard: no los sobrescribimos. Sólo aplicamos verde cuando el valor
-    -- de interruptibilidad es seguro y el cast es inequívocamente cortable.
-    local canColorGreen = isCasting and ready
-        and not IsSecretValue(uninterruptibleValue)
-        and isUninterruptible == false
-    if canColorGreen and type(castBar.GetStatusBarColor) == "function" then
-        if not castBar.MinimizerDefaultColor then
-            local r, g, b, a = castBar:GetStatusBarColor()
-            castBar.MinimizerDefaultColor = { r, g, b, a }
-        end
-        castBar:SetStatusBarColor(COLORS.ready[1], COLORS.ready[2], COLORS.ready[3])
-    elseif castBar.MinimizerDefaultColor then
-        local color = castBar.MinimizerDefaultColor
-        castBar:SetStatusBarColor(color[1], color[2], color[3], color[4])
-        castBar.MinimizerDefaultColor = nil
-    end
+    -- Diagnóstico temporal: se ignoran interruptibilidad y cooldown para
+    -- comprobar de forma aislada que localizamos y pintamos el castbar.
+    -- Diagnóstico solicitado: cualquier casteo activo se pinta verde,
+    -- independientemente del cooldown o de la interruptibilidad.
+    self:ApplyGreenColor(castBar, unit)
 
     local targeted = IsSpellTargetingPlayer(unit)
     local spellID = select(9, UnitCastingInfo(unit)) or select(8, UnitChannelInfo(unit))
