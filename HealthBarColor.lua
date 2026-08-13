@@ -59,13 +59,15 @@ function HealthBarColor:GetEliteType(unit)
     return "melee"
 end
 
-function HealthBarColor:GetKind(unit)
+function HealthBarColor:GetKind(unit, nameplate)
     if UnitIsUnit(unit, "focus") then return "focus" end
     -- El aggro total conserva prioridad sobre el rosa del absorb.
+    -- La excepción de aggro se basa en la situación del jugador; la rama de
+    -- tanque se decide en Threat.IsPlayerTank(), no por el color de Blizzard.
     local threat = Minimizer.Threat and Minimizer.Threat.GetSituation
         and Minimizer.Threat.GetSituation(unit, "player")
     if threat == 3 then return "aggro" end
-    if Minimizer.Absorb and Minimizer.Absorb.HasAbsorb(unit) then return "absorb" end
+    if Minimizer.Absorb and Minimizer.Absorb.HasAbsorb(unit, nameplate) then return "absorb" end
     return self:GetEliteType(unit)
 end
 
@@ -78,9 +80,7 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate)
     if not unit or not UnitExists(unit) then return end
     local healthBar = self:GetHealthBar(nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
-    HookHealthBar(healthBar)
-
-    local baseKind = self:GetKind(unit)
+    local baseKind = self:GetKind(unit, nameplate)
     nameplate.MinimizerHasAbsorb = baseKind == "absorb"
     local color = COLORS[baseKind] or COLORS.melee
     local r, g, b = color[1], color[2], color[3]

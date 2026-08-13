@@ -73,17 +73,29 @@ Minimizer.Modules = Minimizer.Modules or {}
 Minimizer.Threat = Minimizer.Threat or {}
 Minimizer.Absorb = Minimizer.Absorb or {}
 
-function Minimizer.Absorb.HasAbsorb(unit)
-    if not unit or not UnitExists(unit) or not UnitGetTotalAbsorbs then return false end
-    local absorbs = UnitGetTotalAbsorbs(unit)
-    if issecretvalue and issecretvalue(absorbs) then
-        return false
+function Minimizer.Absorb.HasAbsorb(unit, nameplate)
+    if not unit or not UnitExists(unit) then return false end
+    local absorbs = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit)
+    if not absorbs or (issecretvalue and issecretvalue(absorbs)) then
+        -- El valor numérico es secreto; el widget nativo de Blizzard sí
+        -- expone de forma segura si está mostrando el absorb.
+        local unitFrame = nameplate and nameplate.UnitFrame
+        local healthBar = unitFrame and (unitFrame.healthBar or unitFrame.HealthBar)
+        local indicator = healthBar and (healthBar.totalAbsorbOverlay or healthBar.totalAbsorb)
+        return indicator and indicator.IsShown and indicator:IsShown() == true or false
     end
     return type(absorbs) == "number" and absorbs > 0
 end
 
 function Minimizer.Threat.IsPlayerTank()
-    return UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK"
+    if UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK" then
+        return true
+    end
+    if GetSpecialization and GetSpecializationRole then
+        local specialization = GetSpecialization()
+        return specialization ~= nil and GetSpecializationRole(specialization) == "TANK"
+    end
+    return false
 end
 
 function Minimizer.Threat.GetSituation(unit, source)
@@ -186,7 +198,7 @@ function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
         return false
     end
 
-    if Minimizer.Absorb.HasAbsorb(unit) then
+    if Minimizer.Absorb.HasAbsorb(unit, nameplate) then
         return false
     end
 
