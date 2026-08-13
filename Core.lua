@@ -91,8 +91,14 @@ function Minimizer.Threat.IsPlayerTank()
     if UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK" then
         return true
     end
+    local specialization = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
+        and C_SpecializationInfo.GetSpecialization()
+    if specialization and C_SpecializationInfo.GetSpecializationInfo then
+        local _, _, _, _, role = C_SpecializationInfo.GetSpecializationInfo(specialization)
+        return role == "TANK"
+    end
     if GetSpecialization and GetSpecializationRole then
-        local specialization = GetSpecialization()
+        specialization = GetSpecialization()
         return specialization ~= nil and GetSpecializationRole(specialization) == "TANK"
     end
     return false
@@ -368,6 +374,7 @@ local function OnEvent(self, event, unit, ...)
         -- La clase de enemigo puede cambiar durante una transformaciÃ³n.
         Minimizer.Core.ApplyToUnit(unit)
     elseif event == "UNIT_THREAT_SITUATION_UPDATE"
+        or event == "UNIT_THREAT_LIST_UPDATE"
         or event == "UNIT_ABSORB_AMOUNT_CHANGED"
         or event == "PLAYER_ROLES_ASSIGNED"
         or event == "GROUP_ROSTER_UPDATE"
@@ -412,6 +419,7 @@ EventFrame:RegisterEvent("UNIT_DISPLAYPOWER")
 EventFrame:RegisterEvent("UNIT_CLASSIFICATION_CHANGED")
 EventFrame:RegisterEvent("UNIT_LEVEL")
 EventFrame:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
+EventFrame:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
 EventFrame:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED")
 EventFrame:RegisterEvent("PLAYER_ROLES_ASSIGNED")
 EventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")

@@ -18,6 +18,7 @@ local COLORS = {
     aggro = { 1.00, 0.00, 0.00 }, -- Aggro total: color nativo rojo
     castInterruptible = { 0.10, 1.00, 0.10 },
     dangerCast = { 0.28, 0.05, 0.38 },
+    superiorUninterruptible = { 0.00, 0.00, 0.00 },
 }
 
 local function IsSecretValue(value)
@@ -89,16 +90,16 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate)
     local r, g, b = color[1], color[2], color[3]
     local isCasting, _, uninterruptible = Minimizer.Cast.GetState(unit)
     if uninterruptible == nil then uninterruptible = false end
-    local isSuperior = baseKind == "caster" or baseKind == "boss" or baseKind == "miniboss"
+    local isSuperior = baseKind == "boss" or baseKind == "miniboss"
 
     -- Direct StatusBar coloring only. Secret interruptibility is resolved
     -- channel-by-channel in C-side, as documented by project.md.
     if isCasting and baseKind ~= "focus" and baseKind ~= "absorb" and baseKind ~= "aggro"
         and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
-        local castColor = isSuperior and COLORS.dangerCast or COLORS.castInterruptible
-        r = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, color[1], castColor[1])
-        g = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, color[2], castColor[2])
-        b = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, color[3], castColor[3])
+        local castColor = COLORS.superiorUninterruptible
+        r = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, castColor[1], color[1])
+        g = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, castColor[2], color[2])
+        b = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, castColor[3], color[3])
     end
 
     healthBar.MinimizerHealthColorApplying = true
