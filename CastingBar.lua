@@ -46,8 +46,11 @@ function Minimizer.Interrupt.GetSpellID()
     if MinimizerDB.interruptSpellID then return MinimizerDB.interruptSpellID end
     local _, classToken = UnitClass("player")
     local spellID = classToken and INTERRUPT_SPELLS[classToken]
-    if spellID and ((IsPlayerSpell and IsPlayerSpell(spellID))
-        or (C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(spellID))) then
+    if spellID and ((C_SpellBook and C_SpellBook.IsSpellKnownOrInSpellBook
+        and C_SpellBook.IsSpellKnownOrInSpellBook(spellID))
+        or (IsPlayerSpell and IsPlayerSpell(spellID))
+        or (C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(spellID))
+        or (IsSpellKnown and IsSpellKnown(spellID))) then
         return spellID
     end
     return nil
@@ -198,12 +201,14 @@ function CastingBar:ApplyGreenColor(castBar, unit, isCasting, ready, uninterrupt
         r, g, b, a = castBar:GetStatusBarColor()
     end
     if isCasting and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
-        local greenR = C_CurveUtil.EvaluateColorValueFromBoolean(ready, r, COLORS.ready[1])
-        local greenG = C_CurveUtil.EvaluateColorValueFromBoolean(ready, g, COLORS.ready[2])
-        local greenB = C_CurveUtil.EvaluateColorValueFromBoolean(ready, b, COLORS.ready[3])
-        r = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, greenR, r)
-        g = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, greenG, g)
-        b = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, greenB, b)
+        -- La firma selecciona el primer valor cuando state=true (patrón de
+        -- Platynator: EvaluateColorValueFromBoolean(notInterruptible, 0, 1)).
+        local greenR = C_CurveUtil.EvaluateColorValueFromBoolean(ready, COLORS.ready[1], r)
+        local greenG = C_CurveUtil.EvaluateColorValueFromBoolean(ready, COLORS.ready[2], g)
+        local greenB = C_CurveUtil.EvaluateColorValueFromBoolean(ready, COLORS.ready[3], b)
+        r = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, r, greenR)
+        g = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, g, greenG)
+        b = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, b, greenB)
     end
     castBar.MinimizerApplyingColor = true
     castBar:SetStatusBarColor(r, g, b, a or 1)
@@ -224,19 +229,6 @@ function CastingBar:UpdateNamePlate(unit, nameplate)
     -- comprobar de forma aislada que localizamos y pintamos el castbar.
     -- Diagnóstico solicitado: cualquier casteo activo se pinta verde,
     -- independientemente del cooldown o de la interruptibilidad.
-    local canColorGreen = false
-    if canColorGreen and type(castBar.GetStatusBarColor) == "function" then
-        if not castBar.MinimizerDefaultColor then
-            local r, g, b, a = castBar:GetStatusBarColor()
-            castBar.MinimizerDefaultColor = { r, g, b, a }
-        end
-        castBar:SetStatusBarColor(COLORS.ready[1], COLORS.ready[2], COLORS.ready[3])
-    elseif castBar.MinimizerDefaultColor then
-        local color = castBar.MinimizerDefaultColor
-        castBar:SetStatusBarColor(color[1], color[2], color[3], color[4])
-        castBar.MinimizerDefaultColor = nil
-    end
-
     self:ApplyGreenColor(castBar, unit, isCasting, ready, uninterruptible)
 
     local targeted = IsSpellTargetingPlayer(unit)
@@ -275,8 +267,13 @@ local CAST_EVENTS = {
     UNIT_SPELLCAST_EMPOWER_UPDATE = true,
 }
 for event in pairs(CAST_EVENTS) do EventFrame:RegisterEvent(event) end
+EventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 EventFrame:SetScript("OnEvent", function(_, event, unit)
-    if unit and CAST_EVENTS[event] then CastingBar:OnCastEvent(unit, event) end
+    if event == "SPELL_UPDATE_COOLDOWN" then
+        Minimizer.Core.ApplyToAll()
+    elseif unit and CAST_EVENTS[event] then
+        CastingBar:OnCastEvent(unit, event)
+    end
 end)
 
 Minimizer.Core.RegisterModule("CastingBar", CastingBar)
