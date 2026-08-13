@@ -68,6 +68,51 @@ end
 Minimizer.Cache = {}
 Minimizer.Modules = Minimizer.Modules or {}
 
+-- Estado de amenaza. Mantiene la decisión separada de la presentación para
+-- que futuros módulos (incluido CastingBar) puedan reutilizarla.
+Minimizer.Threat = Minimizer.Threat or {}
+
+function Minimizer.Threat.IsPlayerTank()
+    return UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK"
+end
+
+function Minimizer.Threat.GetSituation(unit, source)
+    if not unit or not UnitExists(unit) then return nil end
+    local situation = UnitThreatSituation(source or "player", unit)
+    if issecretvalue and issecretvalue(situation) then return nil end
+    return situation
+end
+
+function Minimizer.Threat.GetTankSituation(unit)
+    local best = Minimizer.Threat.GetSituation(unit, "player")
+    for prefix, count in pairs({ party = 4, raid = 40 }) do
+        for index = 1, count do
+            local token = prefix .. index
+            if UnitExists(token) and UnitGroupRolesAssigned(token) == "TANK" then
+                local situation = Minimizer.Threat.GetSituation(unit, token)
+                if situation == 3 then
+                    return situation
+                end
+                if best == nil or (situation and situation > best) then
+                    best = situation
+                end
+            end
+        end
+    end
+    return best
+end
+
+function Minimizer.Threat.ShouldUnsimplify(unit)
+    if Minimizer.Threat.IsPlayerTank() then
+        -- En grupo, cualquier tanque puede estar gestionando la amenaza.
+        local situation = Minimizer.Threat.GetTankSituation(unit)
+        return situation == nil or situation == 0
+    end
+
+    -- Como no-tanque, conservarla si el jugador tiene aggro total.
+    return Minimizer.Threat.GetSituation(unit, "player") == 3
+end
+
 -- Estado de casteo compartido por Core, HealthBarColor y el futuro
 -- CastingBar. La forma de leerlo sigue los índices documentados en project.md.
 Minimizer.Cast = Minimizer.Cast or {}
@@ -126,6 +171,10 @@ function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
 
     local pct = MinimizerDB.simplifyPercent or 0
     if pct <= 0 then return false end
+
+    if Minimizer.Threat.ShouldUnsimplify(unit) then
+        return false
+    end
 
     -- No simplificar si fue marcado por cast
     if nameplate and nameplate.MinimizerNeverSimplify then
@@ -292,6 +341,12 @@ local function OnEvent(self, event, unit, ...)
         or event == "UNIT_LEVEL" then
         -- La clase de enemigo puede cambiar durante una transformaciÃ³n.
         Minimizer.Core.ApplyToUnit(unit)
+    elseif event == "UNIT_THREAT_SITUATION_UPDATE"
+        or event == "PLAYER_ROLES_ASSIGNED"
+        or event == "GROUP_ROSTER_UPDATE"
+        or event == "PLAYER_TALENT_UPDATE"
+        or event == "PLAYER_SPECIALIZATION_CHANGED" then
+        Minimizer.Core.ApplyToAll()
     elseif event == "UNIT_SPELLCAST_START"
         or event == "UNIT_SPELLCAST_STOP"
         or event == "UNIT_SPELLCAST_FAILED"
@@ -329,6 +384,11 @@ EventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 EventFrame:RegisterEvent("UNIT_DISPLAYPOWER")
 EventFrame:RegisterEvent("UNIT_CLASSIFICATION_CHANGED")
 EventFrame:RegisterEvent("UNIT_LEVEL")
+EventFrame:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
+EventFrame:RegisterEvent("PLAYER_ROLES_ASSIGNED")
+EventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+EventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
+EventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_START")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_STOP")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_FAILED")
@@ -369,4 +429,13 @@ SlashCmdList["MINIMIZER"] = function(msg)
 
     print("|cff33ff99Minimizer|r: simplificación ajustada a " .. value .. "%")
     Minimizer.Core.ApplyToAll()
+end
+
+-- Blizzard puede restaurar su color rojo al actualizar la healthbar. El hook
+-- es seguro y sólo vuelve a ejecutar nuestro módulo visual para esa unidad.
+if CompactUnitFrame_UpdateHealthColor then
+    hooksecurefunc("CompactUnitFrame_UpdateHealthColor", function(unitFrame)
+        local unit = unitFrame and unitFrame.unit
+        if unit then Minimizer.Core.ApplyToUnit(unit) end
+    end)
 end
