@@ -6,3 +6,4 @@
 ## SavedVariables: MinimizerDB
 
 Core.lua
+HealthBarColor.lua

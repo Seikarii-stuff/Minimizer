@@ -1,50 +1,44 @@
 -- ============================================================================
--- Minimizer - Nameplate Simplifier & Indicator Addon (WoW 12.1 Canon)
+-- Minimizer - Core.lua (WoW 12.1 Midnight Canonical & Taint-Free)
 -- ============================================================================
 
 local ADDON_NAME, Minimizer = ...
 _G.Minimizer = Minimizer
 
 -------------------------------------------------------------------------------
--- 1. CONFIGURACIÓN Y BASE DE DATOS
+-- 1. DATABASE & CONFIGURATION
 -------------------------------------------------------------------------------
 MinimizerDB = MinimizerDB or {
     simplifyPercent = 0,
     enableTargetMarkers = true,
     enableFocusMarkers = true,
-    enableFocusColor = true,
-}
-
-local CONSTANTS = {
-    MAX_SCALE = 1.0,
-    MIN_SCALE = 0.5,
 }
 
 -------------------------------------------------------------------------------
--- 2. HELPER UTILITIES (Anti-Taint & API Safety)
+-- 2. UTILITY HELPERS (Taint, Token & API Validation)
 -------------------------------------------------------------------------------
 Minimizer.Utils = {}
 
+-- Identifica si la API nativa C_NamePlateManager está disponible[cite: 3]
 function Minimizer.Utils.IsSimplifiedAvailable()
     return C_NamePlateManager and type(C_NamePlateManager.SetNamePlateSimplified) == "function"
 end
 
-function Minimizer.Utils.GetScaleForPercent(percent)
-    percent = math.max(0, math.min(100, percent or 0))
-    local factor = percent / 100
-    return CONSTANTS.MAX_SCALE - (CONSTANTS.MAX_SCALE - CONSTANTS.MIN_SCALE) * factor
-end
-
+-- Resuelve y sanitiza la nameplate correspondiente para cualquier unit token[cite: 1, 3]
 function Minimizer.Utils.GetNamePlateForUnit(unit)
-    if not unit or not UnitExists(unit) then return nil end
+    if not unit or type(unit) ~= "string" or not UnitExists(unit) then 
+        return nil 
+    end
 
-    if C_NamePlate and C_NamePlate.GetNamePlateForUnit and type(unit) == "string" and unit:match("^nameplate%d+$") then
+    -- C_NamePlate.GetNamePlateForUnit solo permite tokens de tipo "nameplateN"[cite: 1]
+    if unit:match("^nameplate%d+$") then
         return C_NamePlate.GetNamePlateForUnit(unit)
     end
 
+    -- Para tokens como "target", "focus" o "bossN", se busca la nameplate activa[cite: 1]
     if C_NamePlate and C_NamePlate.GetNamePlates then
         for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
-            local token = nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit) or nameplate.unit
+            local token = nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit)
             if token and UnitIsUnit(token, unit) then
                 return nameplate
             end
@@ -54,10 +48,25 @@ function Minimizer.Utils.GetNamePlateForUnit(unit)
     return nil
 end
 
+-- Normaliza la unidad obteniendo siempre un token valido de nameplate ("nameplateN")
+function Minimizer.Utils.GetValidNamePlateToken(unit, nameplate)
+    if type(unit) == "string" and unit:match("^nameplate%d+$") then
+        return unit
+    end
+    if nameplate then
+        local token = nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit)
+        if type(token) == "string" and token:match("^nameplate%d+$") then
+            return token
+        end
+    end
+    return nil
+end
+
 -------------------------------------------------------------------------------
--- 3. CACHE & STATE DETECTOR
+-- 3. CACHE & DECISION ENGINE (Sin comparaciones inseguras)
 -------------------------------------------------------------------------------
 Minimizer.Cache = {}
+Minimizer.Modules = Minimizer.Modules or {}
 
 function Minimizer.Cache.IsUnitCasting(unit)
     if not unit or not UnitExists(unit) then return false end
@@ -67,13 +76,18 @@ end
 function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
     if not unit or not UnitExists(unit) then return false end
 
+    -- Solo simplificar enemigos/atacables
+    if not UnitCanAttack("player", unit) then return false end
+
     local pct = MinimizerDB.simplifyPercent or 0
     if pct <= 0 then return false end
 
+    -- No simplificar si fue marcado por cast
     if nameplate and nameplate.MinimizerNeverSimplify then
         return false
     end
 
+    -- No simplificar si está casteando activamente
     if Minimizer.Cache.IsUnitCasting(unit) then
         return false
     end
@@ -82,7 +96,7 @@ function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
 end
 
 -------------------------------------------------------------------------------
--- 4. INDICADORES VISUALES Y COLOR DE FOCUS
+-- 4. VISUAL MARKERS (Target & Focus Highlights - 100% Overlay, 0% Taint)
 -------------------------------------------------------------------------------
 Minimizer.Markers = {}
 
@@ -91,12 +105,12 @@ function Minimizer.Markers.Ensure(nameplate)
     if nameplate.MinimizerMarkers then return nameplate.MinimizerMarkers end
 
     local uf = nameplate.UnitFrame or nameplate
-    local anchorFrame = uf.healthBar or uf.HealthBar or uf
+    local anchor = uf.healthBar or uf.HealthBar or uf
 
     local function CreateArrow(text, point, relPoint, xOff, yOff, r, g, b)
         local fs = uf:CreateFontString(nil, "OVERLAY")
         fs:SetFont(STANDARD_TEXT_FONT, 14, "OUTLINE")
-        fs:SetPoint(point, anchorFrame, relPoint, xOff, yOff)
+        fs:SetPoint(point, anchor, relPoint, xOff, yOff)
         fs:SetText(text)
         fs:SetTextColor(r or 1, g or 1, b or 1)
         fs:Hide()
@@ -118,80 +132,75 @@ function Minimizer.Markers.Update(unit, nameplate)
     local markers = Minimizer.Markers.Ensure(nameplate)
     if not markers then return end
 
-    local npToken = nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit) or unit
+    local token = Minimizer.Utils.GetValidNamePlateToken(unit, nameplate) or unit
+    if not token or not UnitExists(token) then 
+        markers.targetLeft:Hide()
+        markers.targetRight:Hide()
+        markers.focusLeft:Hide()
+        markers.focusRight:Hide()
+        return 
+    end
 
-    local enableTarget = MinimizerDB.enableTargetMarkers ~= false
-    local enableFocus  = MinimizerDB.enableFocusMarkers ~= false
-
-    local isTarget = enableTarget and UnitIsUnit(npToken, "target")
-    local isFocus  = enableFocus and UnitIsUnit(npToken, "focus")
+    local isTarget = (MinimizerDB.enableTargetMarkers ~= false) and UnitIsUnit(token, "target")
+    local isFocus  = (MinimizerDB.enableFocusMarkers ~= false) and UnitIsUnit(token, "focus")
 
     markers.targetLeft:SetShown(isTarget == true)
     markers.targetRight:SetShown(isTarget == true)
     markers.focusLeft:SetShown(isFocus == true)
     markers.focusRight:SetShown(isFocus == true)
+end
 
-    -- Aplicar color amarillo a la barra de vida del Focus
-    local uf = nameplate.UnitFrame
-    if uf and uf.healthBar and MinimizerDB.enableFocusColor ~= false then
-        if isFocus then
-            if not markers.colorOverridden then
-                uf.healthBar:SetStatusBarColor(1, 1, 0, 1) -- Color amarillo para Focus
-                markers.colorOverridden = true
-            end
-        elseif markers.colorOverridden then
-            -- Restaurar el color original de la barra de vida según Blizzard (Amenaza/Reacción)
-            if CompactUnitFrame_UpdateHealthColor then
-                CompactUnitFrame_UpdateHealthColor(uf)
-            end
-            markers.colorOverridden = false
+-------------------------------------------------------------------------------
+-- 5. CORE ENGINE (Aplica Simplificación Canónica C-Side)
+-------------------------------------------------------------------------------
+Minimizer.Core = {}
+
+-- Los módulos visuales se registran aquí en vez de acoplarse al manejador de
+-- eventos. Cada módulo puede implementar UpdateNamePlate y OnNamePlateRemoved.
+function Minimizer.Core.RegisterModule(name, module)
+    if type(name) ~= "string" or type(module) ~= "table" then return end
+
+    Minimizer.Modules[name] = module
+    Minimizer.Core.ApplyToAll()
+end
+
+function Minimizer.Core.UpdateModules(unit, nameplate)
+    for _, module in pairs(Minimizer.Modules) do
+        if type(module.UpdateNamePlate) == "function" then
+            module:UpdateNamePlate(unit, nameplate)
         end
     end
 end
 
--------------------------------------------------------------------------------
--- 5. MOTOR CORE (Aplica Cambios & Maneja Estado)
--------------------------------------------------------------------------------
-Minimizer.Core = {}
-
 function Minimizer.Core.ApplyToUnit(unit)
-    if not unit or not UnitExists(unit) then return end
+    if not unit then return end
 
     local nameplate = Minimizer.Utils.GetNamePlateForUnit(unit)
     if not nameplate then return end
 
-    local npToken = nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit) or unit
+    local npToken = Minimizer.Utils.GetValidNamePlateToken(unit, nameplate)
+    if not npToken then return end
 
-    -- 1. Simplificación (solo enemigos/mobs atacables)
-    if UnitCanAttack("player", npToken) or UnitCanAttack("player", unit) then
-        local shouldSimplify = Minimizer.Cache.ShouldSimplifyUnit(npToken, nameplate)
+    -- 1. Evaluación de simplificación
+    local shouldSimplify = Minimizer.Cache.ShouldSimplifyUnit(npToken, nameplate)
 
-        if Minimizer.Utils.IsSimplifiedAvailable() then
-            -- Solo invocar si el estado de simplificación cambia respecto a la última reevaluación
-            if nameplate.MinimizerCurrentSimplify ~= shouldSimplify then
-                C_NamePlateManager.SetNamePlateSimplified(npToken, shouldSimplify)
-                nameplate.MinimizerCurrentSimplify = shouldSimplify
-            end
-        end
-
-        -- 2. Escala (solo se modifica fuera de combate para evitar Taint en marcos protegidos)
-        if not InCombatLockdown() then
-            local scalePercent = shouldSimplify and (MinimizerDB.simplifyPercent or 0) or 0
-            local targetScale = Minimizer.Utils.GetScaleForPercent(scalePercent)
-            if nameplate:GetScale() ~= targetScale then
-                nameplate:SetScale(targetScale)
-            end
+    -- 2. Aplicación vía API C nativa de Blizzard (evita modificar SetScale en SecureFrames)[cite: 3]
+    if Minimizer.Utils.IsSimplifiedAvailable() then
+        if nameplate.MinimizerState ~= shouldSimplify then
+            C_NamePlateManager.SetNamePlateSimplified(npToken, shouldSimplify)
+            nameplate.MinimizerState = shouldSimplify
         end
     end
 
-    -- 3. Actualizar Marcadores y Color de Focus
+    -- 3. Actualización de marcadores visuales overlay
     Minimizer.Markers.Update(npToken, nameplate)
+    Minimizer.Core.UpdateModules(npToken, nameplate)
 end
 
 function Minimizer.Core.ApplyToAll()
     if not C_NamePlate or not C_NamePlate.GetNamePlates then return end
     for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
-        local token = nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit) or nameplate.unit
+        local token = Minimizer.Utils.GetValidNamePlateToken(nil, nameplate)
         if token then
             Minimizer.Core.ApplyToUnit(token)
         end
@@ -199,8 +208,7 @@ function Minimizer.Core.ApplyToAll()
 end
 
 function Minimizer.Core.MarkNeverSimplify(unit)
-    if not unit or not UnitExists(unit) then return end
-
+    if not unit then return end
     local nameplate = Minimizer.Utils.GetNamePlateForUnit(unit)
     if nameplate and not nameplate.MinimizerNeverSimplify then
         nameplate.MinimizerNeverSimplify = true
@@ -209,32 +217,36 @@ function Minimizer.Core.MarkNeverSimplify(unit)
 end
 
 function Minimizer.Core.ClearNeverSimplify(unit)
+    if not unit then return end
     local nameplate = Minimizer.Utils.GetNamePlateForUnit(unit)
     if nameplate then
-        nameplate.MinimizerNeverSimplify = nil
-        nameplate.MinimizerCurrentSimplify = nil
-        if nameplate.MinimizerMarkers then
-            nameplate.MinimizerMarkers.colorOverridden = nil
+        for _, module in pairs(Minimizer.Modules) do
+            if type(module.OnNamePlateRemoved) == "function" then
+                module:OnNamePlateRemoved(unit, nameplate)
+            end
         end
+        nameplate.MinimizerNeverSimplify = nil
+        nameplate.MinimizerState = nil
     end
 end
 
 -------------------------------------------------------------------------------
--- 6. EVENTOS & SECURE HOOKS (Sincronización por Eventos)
+-- 6. EVENT MANAGEMENT & SECURE HOOKS
 -------------------------------------------------------------------------------
 local EventFrame = CreateFrame("Frame", "MinimizerEventFrame")
 
 local function OnEvent(self, event, unit, ...)
-    if event == "NAME_PLATE_UNIT_ADDED" then
-        Minimizer.Core.ApplyToUnit(unit)
-    elseif event == "NAME_PLATE_UNIT_REMOVED" then
-        Minimizer.Core.ClearNeverSimplify(unit)
-    elseif event == "PLAYER_ENTERING_WORLD"
+    if event == "PLAYER_ENTERING_WORLD"
         or event == "PLAYER_TARGET_CHANGED"
         or event == "PLAYER_FOCUS_CHANGED"
         or event == "PLAYER_REGEN_DISABLED"
         or event == "PLAYER_REGEN_ENABLED" then
         Minimizer.Core.ApplyToAll()
+    elseif event == "UNIT_DISPLAYPOWER"
+        or event == "UNIT_CLASSIFICATION_CHANGED"
+        or event == "UNIT_LEVEL" then
+        -- La clase de enemigo puede cambiar durante una transformaciÃ³n.
+        Minimizer.Core.ApplyToUnit(unit)
     elseif event == "UNIT_SPELLCAST_START"
         or event == "UNIT_SPELLCAST_CHANNEL_START"
         or event == "UNIT_SPELLCAST_EMPOWER_START" then
@@ -244,25 +256,25 @@ local function OnEvent(self, event, unit, ...)
             simplifyPercent = 0,
             enableTargetMarkers = true,
             enableFocusMarkers = true,
-            enableFocusColor = true,
         }
     end
 end
 
 EventFrame:RegisterEvent("ADDON_LOADED")
-EventFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
-EventFrame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 EventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 EventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 EventFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
 EventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 EventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+EventFrame:RegisterEvent("UNIT_DISPLAYPOWER")
+EventFrame:RegisterEvent("UNIT_CLASSIFICATION_CHANGED")
+EventFrame:RegisterEvent("UNIT_LEVEL")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_START")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_START")
 EventFrame:SetScript("OnEvent", OnEvent)
 
--- Integración segura con NamePlateDriverFrame mediante hooksecurefunc
+-- Secure Hooks canónicos según especificación de Platynator[cite: 3]
 if NamePlateDriverFrame then
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit)
         if unit then Minimizer.Core.ApplyToUnit(unit) end
@@ -273,7 +285,7 @@ if NamePlateDriverFrame then
 end
 
 -------------------------------------------------------------------------------
--- 7. COMANDOS BARRA SLASH (/simp)
+-- 7. SLASH COMMANDS (/simp)
 -------------------------------------------------------------------------------
 SLASH_MINIMIZER1 = "/simp"
 SlashCmdList["MINIMIZER"] = function(msg)
