@@ -65,9 +65,12 @@ function HealthBarColor:GetKind(unit, nameplate)
     -- El aggro total conserva prioridad sobre el rosa del absorb.
     -- La excepción de aggro se basa en la situación del jugador; la rama de
     -- tanque se decide en Threat.IsPlayerTank(), no por el color de Blizzard.
-    local threat = Minimizer.Threat and Minimizer.Threat.GetSituation
-        and Minimizer.Threat.GetSituation(unit, "player")
-    if threat == 3 then return "aggro" end
+    -- Ser tanque sólo cambia la regla de simplificación. El rojo se reserva
+    -- estrictamente para aggro sólido del jugador (situación 3).
+    if Minimizer.Threat and Minimizer.Threat.PlayerHasAggro
+        and Minimizer.Threat.PlayerHasAggro(unit) then
+        return "aggro"
+    end
     if Minimizer.Absorb and Minimizer.Absorb.HasAbsorb(unit, nameplate) then return "absorb" end
     return self:GetEliteType(unit)
 end

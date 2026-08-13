@@ -73,6 +73,16 @@ Minimizer.Modules = Minimizer.Modules or {}
 Minimizer.Threat = Minimizer.Threat or {}
 Minimizer.Absorb = Minimizer.Absorb or {}
 
+function Minimizer.Threat.IsThreatContext()
+    if not GetInstanceInfo then return false end
+    local _, instanceType = GetInstanceInfo()
+    if instanceType == "party" or instanceType == "raid" then
+        return true
+    end
+    return C_PartyInfo and C_PartyInfo.IsDelveInProgress
+        and C_PartyInfo.IsDelveInProgress() == true or false
+end
+
 function Minimizer.Absorb.HasAbsorb(unit, nameplate)
     if not unit or not UnitExists(unit) then return false end
     local absorbs = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit)
@@ -107,8 +117,17 @@ end
 function Minimizer.Threat.GetSituation(unit, source)
     if not unit or not UnitExists(unit) then return nil end
     local situation = UnitThreatSituation(source or "player", unit)
+    -- La situación puede ser secreta en Midnight. Nunca la conviertas en una
+    -- decisión Lua ni la trates como aggro por coerción: sólo el número 3 es
+    -- aggro sólido según la API documentada.
     if issecretvalue and issecretvalue(situation) then return nil end
+    if type(situation) ~= "number" then return nil end
     return situation
+end
+
+function Minimizer.Threat.PlayerHasAggro(unit)
+    return Minimizer.Threat.IsThreatContext()
+        and Minimizer.Threat.GetSituation(unit, "player") == 3
 end
 
 function Minimizer.Threat.GetTankSituation(unit)
@@ -131,6 +150,9 @@ function Minimizer.Threat.GetTankSituation(unit)
 end
 
 function Minimizer.Threat.ShouldUnsimplify(unit)
+    if not Minimizer.Threat.IsThreatContext() then
+        return false
+    end
     if Minimizer.Threat.IsPlayerTank() then
         -- En grupo, cualquier tanque puede estar gestionando la amenaza.
         local situation = Minimizer.Threat.GetTankSituation(unit)
@@ -363,6 +385,8 @@ local EventFrame = CreateFrame("Frame", "MinimizerEventFrame")
 
 local function OnEvent(self, event, unit, ...)
     if event == "PLAYER_ENTERING_WORLD"
+        or event == "ZONE_CHANGED_NEW_AREA"
+        or event == "PLAYER_DIFFICULTY_CHANGED"
         or event == "PLAYER_TARGET_CHANGED"
         or event == "PLAYER_FOCUS_CHANGED"
         or event == "PLAYER_REGEN_DISABLED"
@@ -411,6 +435,8 @@ end
 
 EventFrame:RegisterEvent("ADDON_LOADED")
 EventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+EventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+EventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
 EventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 EventFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
 EventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
