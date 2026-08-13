@@ -300,3 +300,15 @@ Para replicar el comportamiento descrito en el requerimiento, la estrategia corr
 3. usar `SetNamePlateHitTestInsets` para controlar clics,
 4. renderizar los highlights de target/focus mediante assets y condiciones de diseño, y
 5. respetar secretos y taint en cada rama de decisión.
+
+
+
+
+Notas:
+
+Firma real de EvaluateColorValueFromBoolean resuelta: la llamada con tablas de color falló (bad argument #2), pero con escalares sueltos funcionó y devolvió un solo valor. Es decir, la firma real es EvaluateColorValueFromBoolean(state, valueIfTrue:number, valueIfFalse:number) -> number — NO acepta un color RGB de una vez. Para pintar una barra hay que llamarla 3 veces (una por canal):
+lua
+local r = C_CurveUtil.EvaluateColorValueFromBoolean(notInterruptible, grisR, verdeR)
+local g = C_CurveUtil.EvaluateColorValueFromBoolean(notInterruptible, grisG, verdeG)
+local b = C_CurveUtil.EvaluateColorValueFromBoolean(notInterruptible, grisB, verdeB)
+castBar:SetStatusBarColor(r, g, b)
