@@ -74,13 +74,8 @@ Minimizer.Threat = Minimizer.Threat or {}
 Minimizer.Absorb = Minimizer.Absorb or {}
 
 function Minimizer.Threat.IsThreatContext()
-    if not GetInstanceInfo then return false end
-    local _, instanceType = GetInstanceInfo()
-    if instanceType == "party" or instanceType == "raid" then
-        return true
-    end
-    return C_PartyInfo and C_PartyInfo.IsDelveInProgress
-        and C_PartyInfo.IsDelveInProgress() == true or false
+    -- La amenaza se evalúa tanto en mazmorras como en mundo abierto.
+    return true
 end
 
 function Minimizer.Absorb.HasAbsorb(unit, nameplate)
@@ -126,7 +121,10 @@ function Minimizer.Threat.GetSituation(unit, source)
 end
 
 function Minimizer.Threat.PlayerHasAggro(unit)
+    -- Un tanque con aggro conserva el color de categoría del mob; el rojo se
+    -- reserva para un jugador no-tanque que ha robado aggro.
     return Minimizer.Threat.IsThreatContext()
+        and not Minimizer.Threat.IsPlayerTank()
         and Minimizer.Threat.GetSituation(unit, "player") == 3
 end
 
