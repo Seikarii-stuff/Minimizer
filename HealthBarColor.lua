@@ -101,6 +101,37 @@ function HealthBarColor:GetHealthBar(nameplate)
     return unitFrame and (unitFrame.healthBar or unitFrame.HealthBar)
 end
 
+function HealthBarColor:EnsureCastOverlays(healthBar)
+    if healthBar.MinimizerCastOverlays then
+        return healthBar.MinimizerCastOverlays
+    end
+
+    local gray = healthBar:CreateTexture(nil, "OVERLAY")
+    gray:SetAllPoints(healthBar)
+    gray:SetColorTexture(0.45, 0.45, 0.45, 1)
+    gray:Hide()
+
+    local danger = healthBar:CreateTexture(nil, "OVERLAY")
+    danger:SetAllPoints(healthBar)
+    danger:SetColorTexture(0.28, 0.05, 0.38, 1)
+    danger:Hide()
+
+    healthBar.MinimizerCastOverlays = { gray = gray, danger = danger }
+    return healthBar.MinimizerCastOverlays
+end
+
+local function SetSecretAlpha(texture, value)
+    if value == nil then
+        texture:SetAlpha(0)
+        return
+    end
+    if texture.SetAlphaFromBoolean then
+        texture:SetAlphaFromBoolean(value)
+    elseif not IsSecretValue(value) then
+        texture:SetAlpha(value and 1 or 0)
+    end
+end
+
 function HealthBarColor:UpdateNamePlate(unit, nameplate)
     if not unit or not UnitExists(unit) then return end
 
@@ -114,36 +145,39 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
 
     local baseKind = self:GetKind(unit)
-    local kind = baseKind
-    local isCasting, isUninterruptible = Minimizer.Cast.GetState(unit)
+    local isCasting, _, uninterruptibleValue = Minimizer.Cast.GetState(unit)
+    local overlays = self:EnsureCastOverlays(healthBar)
+    overlays.gray:Hide()
+    overlays.danger:Hide()
 
-    if baseKind ~= "focus" and isCasting then
-        local isCasterOrSuperior = baseKind == "caster"
-            or baseKind == "boss"
-            or baseKind == "miniboss"
-        if isUninterruptible then
-            if isCasterOrSuperior then
-                -- Solo mientras el hechizo ininterrumpible sigue activo.
-                kind = "dangerCast"
-            else
-                kind = "castUninterruptible"
-                nameplate.MinimizerPersistentCastColorKind = kind
-            end
-        else
-            kind = "castInterruptible"
-            if not isCasterOrSuperior then
-                nameplate.MinimizerPersistentCastColorKind = kind
-            end
+    local isCasterOrSuperior = baseKind == "caster"
+        or baseKind == "boss"
+        or baseKind == "miniboss"
+    local kind = baseKind
+
+    if baseKind == "focus" then
+        -- El focus conserva siempre la prioridad amarilla.
+    elseif isCasterOrSuperior then
+        -- El overlay usa C-side SetAlphaFromBoolean para aceptar el booleano
+        -- secreto sin probarlo en Lua. Sólo se muestra mientras casteando.
+        if isCasting then
+            overlays.danger:Show()
+            SetSecretAlpha(overlays.danger, uninterruptibleValue)
         end
-    elseif baseKind ~= "focus" and baseKind ~= "caster"
-        and baseKind ~= "boss" and baseKind ~= "miniboss"
-        and nameplate.MinimizerPersistentCastColorKind then
-        kind = nameplate.MinimizerPersistentCastColorKind
-    elseif baseKind == "caster" or baseKind == "boss" or baseKind == "miniboss" then
         nameplate.MinimizerPersistentCastColorKind = nil
+    elseif isCasting then
+        -- El color base verde es persistente. El overlay gris queda con la
+        -- alpha calculada por C-side a partir de la interruptibilidad secreta.
+        kind = "castInterruptible"
+        nameplate.MinimizerPersistentCastColorKind = kind
+        overlays.gray:Show()
+        SetSecretAlpha(overlays.gray, uninterruptibleValue)
+    elseif nameplate.MinimizerPersistentCastColorKind then
+        kind = nameplate.MinimizerPersistentCastColorKind
+        overlays.gray:Show()
     end
 
-    local color = COLORS[kind]
+    local color = COLORS[kind] or COLORS.melee
     healthBar:SetStatusBarColor(color[1], color[2], color[3])
     nameplate.MinimizerHealthBarColorKind = kind
 end
@@ -154,6 +188,11 @@ function HealthBarColor:OnNamePlateRemoved(_, nameplate)
         nameplate.MinimizerHealthBarColorKind = nil
         nameplate.MinimizerHealthBarColorUnit = nil
         nameplate.MinimizerPersistentCastColorKind = nil
+        local healthBar = self:GetHealthBar(nameplate)
+        if healthBar and healthBar.MinimizerCastOverlays then
+            healthBar.MinimizerCastOverlays.gray:Hide()
+            healthBar.MinimizerCastOverlays.danger:Hide()
+        end
     end
 end
 

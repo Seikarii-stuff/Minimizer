@@ -95,11 +95,13 @@ function Minimizer.Cast.GetState(unit)
     end
 
     -- Los secretos no se pueden inspeccionar desde Lua. En ese caso dejamos
-    -- la clasificación indeterminada y nunca la convertimos en booleano.
+    -- la clasificación indeterminada y devolvemos el valor sólo para APIs
+    -- C-side como SetAlphaFromBoolean().
     if IsSecretValue(uninterruptible) then
-        return true, nil
+        return true, nil, uninterruptible
     end
-    return true, uninterruptible == true
+    local safeValue = uninterruptible == true
+    return true, safeValue, safeValue
 end
 
 function Minimizer.Cast.IsUnitCasting(unit)
