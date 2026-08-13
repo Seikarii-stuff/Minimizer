@@ -117,6 +117,34 @@ local function DescribeBarCandidate(pathLabel, frame)
     for _, method in ipairs(BAR_METHOD_PROBE) do
         Emit("    ." .. method .. " = " .. SafeString(type(frame[method])))
     end
+
+    -- GetName(): aunque el campo Lua no tenga un nombre útil (child1, child2...),
+    -- el frame XML subyacente casi seguro sí lo tiene (p.ej. "...CastingBar",
+    -- "...PowerBar"). Esto identifica el widget sin tener que comparar colores
+    -- entre dos casteos distintos.
+    if frame.GetName then
+        Emit("    .GetName() = " .. SafeCall(frame.GetName, frame))
+    end
+    if frame.GetParent then
+        local ok, parent = pcall(frame.GetParent, frame)
+        if ok and parent and parent.GetName then
+            Emit("    .GetParent():GetName() = " .. SafeCall(parent.GetName, parent))
+        end
+    end
+
+    -- Estado real: color e IsShown, para poder cruzar "¿cambia entre casting
+    -- true/false?" y "¿cambia entre interrumpible/no interrumpible?" sin
+    -- adivinar por posición en el árbol.
+    if frame.GetStatusBarColor then
+        Emit("    .GetStatusBarColor() = " .. SafeCall(frame.GetStatusBarColor, frame))
+    end
+    if frame.IsShown then
+        Emit("    .IsShown() = " .. SafeCall(frame.IsShown, frame))
+    end
+    if frame.GetValue and frame.GetMinMaxValues then
+        Emit("    .GetValue() = " .. SafeCall(frame.GetValue, frame))
+        Emit("    .GetMinMaxValues() = " .. SafeCall(frame.GetMinMaxValues, frame))
+    end
 end
 
 -- Escaneo plano con pairs(): encuentra campos nombrados aunque no cuelguen
@@ -255,10 +283,18 @@ local function CheckProjectMdAPIs()
     CheckAPI({ "C_CurveUtil", "CreateColorCurve" })
     CheckAPI({ "C_CurveUtil", "CreateCurve" })
     if C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
-        Emit("  Prueba de firma EvaluateColorValueFromBoolean(true, {1,0,0}, {0,1,0}):")
-        Emit("    " .. SafeCall(C_CurveUtil.EvaluateColorValueFromBoolean, true, { 1, 0, 0 }, { 0, 1, 0 }))
-        Emit("  Prueba de firma EvaluateColorValueFromBoolean(true, 1,0,0, 0,1,0):")
-        Emit("    " .. SafeCall(C_CurveUtil.EvaluateColorValueFromBoolean, true, 1, 0, 0, 0, 1, 0))
+        -- Firma confirmada en corridas previas: (state, valueIfTrue:number,
+        -- valueIfFalse:number) -> number (escalar, NO un color RGB de una vez).
+        -- Se llama una vez por canal para construir el color completo.
+        Emit("  Firma confirmada: EvaluateColorValueFromBoolean(state, numTrue, numFalse) -> number")
+        Emit("  Prueba canal-por-canal, state=true, colorTrue={0.1,1,0.1} colorFalse={0.45,0.45,0.45}:")
+        Emit("    R: " .. SafeCall(C_CurveUtil.EvaluateColorValueFromBoolean, true, 0.1, 0.45))
+        Emit("    G: " .. SafeCall(C_CurveUtil.EvaluateColorValueFromBoolean, true, 1.0, 0.45))
+        Emit("    B: " .. SafeCall(C_CurveUtil.EvaluateColorValueFromBoolean, true, 0.1, 0.45))
+        Emit("  Misma prueba con state=false (debería devolver los valores 'False'):")
+        Emit("    R: " .. SafeCall(C_CurveUtil.EvaluateColorValueFromBoolean, false, 0.1, 0.45))
+        Emit("    G: " .. SafeCall(C_CurveUtil.EvaluateColorValueFromBoolean, false, 1.0, 0.45))
+        Emit("    B: " .. SafeCall(C_CurveUtil.EvaluateColorValueFromBoolean, false, 0.1, 0.45))
     end
     CheckAPI({ "UnitIsSpellTarget" })
     CheckAPI({ "C_SpellBook", "IsSpellKnown" })
