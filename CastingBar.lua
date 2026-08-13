@@ -108,19 +108,55 @@ end
 function CastingBar:EnsureVisuals(castBar)
     if castBar.MinimizerCastVisuals then return castBar.MinimizerCastVisuals end
 
-    local border = castBar:CreateTexture(nil, "OVERLAY")
-    border:SetPoint("TOPLEFT", castBar, "TOPLEFT", -3, 3)
-    border:SetPoint("BOTTOMRIGHT", castBar, "BOTTOMRIGHT", 3, -3)
+    local targetContainer = CreateFrame("Frame", nil, castBar)
+    targetContainer:SetAllPoints(castBar)
+    targetContainer:SetFrameLevel((castBar:GetFrameLevel() or 0) + 3)
+    local border = targetContainer:CreateTexture(nil, "OVERLAY")
+    border:SetPoint("TOPLEFT", targetContainer, "TOPLEFT", -3, 3)
+    border:SetPoint("BOTTOMRIGHT", targetContainer, "BOTTOMRIGHT", 3, -3)
     border:SetColorTexture(1, 0.05, 0.05, 0.9)
     border:SetBlendMode("ADD")
-    border:Hide()
+    targetContainer:Hide()
+
+    local pulse = border:CreateAnimationGroup()
+    pulse:SetLooping("REPEAT")
+    local fadeOut = pulse:CreateAnimation("Alpha")
+    fadeOut:SetOrder(1)
+    fadeOut:SetDuration(0.35)
+    fadeOut:SetFromAlpha(1)
+    fadeOut:SetToAlpha(0.25)
+    local fadeIn = pulse:CreateAnimation("Alpha")
+    fadeIn:SetOrder(2)
+    fadeIn:SetDuration(0.35)
+    fadeIn:SetFromAlpha(0.25)
+    fadeIn:SetToAlpha(1)
 
     local marker = castBar:CreateTexture(nil, "OVERLAY")
     marker:SetWidth(3)
     marker:SetColorTexture(1, 1, 1, 1)
     marker:Hide()
 
-    castBar.MinimizerCastVisuals = { targetBorder = border, interruptMarker = marker }
+    castBar.MinimizerCastVisuals = {
+        targetContainer = targetContainer,
+        targetBorder = border,
+        targetPulse = pulse,
+        interruptMarker = marker,
+    }
+
+    -- Blizzard repinta la barra después de los eventos. Reaplicar aquí
+    -- garantiza que el color se evalúa después del color nativo.
+    if hooksecurefunc and not castBar.MinimizerColorHooked then
+        castBar.MinimizerColorHooked = true
+        hooksecurefunc(castBar, "SetStatusBarColor", function()
+            local bar = castBar
+            if bar.MinimizerApplyingColor then return end
+            local unit = bar.MinimizerCastUnit
+            if unit and UnitExists(unit) then
+                local isCasting, _, uninterruptible = Minimizer.Cast.GetState(unit)
+                CastingBar:ApplyGreenColor(bar, unit, isCasting, Minimizer.Interrupt.IsReady(), uninterruptible)
+            end
+        end)
+    end
     return castBar.MinimizerCastVisuals
 end
 
@@ -155,20 +191,40 @@ function CastingBar:UpdateInterruptMarker(castBar, visuals, isCasting, ready)
     visuals.interruptMarker:Show()
 end
 
+function CastingBar:ApplyGreenColor(castBar, unit, isCasting, ready, uninterruptible)
+    if not castBar or type(castBar.SetStatusBarColor) ~= "function" then return end
+    local r, g, b, a = 1, 1, 1, 1
+    if castBar.GetStatusBarColor then
+        r, g, b, a = castBar:GetStatusBarColor()
+    end
+    if isCasting and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
+        local greenR = C_CurveUtil.EvaluateColorValueFromBoolean(ready, r, COLORS.ready[1])
+        local greenG = C_CurveUtil.EvaluateColorValueFromBoolean(ready, g, COLORS.ready[2])
+        local greenB = C_CurveUtil.EvaluateColorValueFromBoolean(ready, b, COLORS.ready[3])
+        r = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, greenR, r)
+        g = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, greenG, g)
+        b = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, greenB, b)
+    end
+    castBar.MinimizerApplyingColor = true
+    castBar:SetStatusBarColor(r, g, b, a or 1)
+    castBar.MinimizerApplyingColor = nil
+end
+
 function CastingBar:UpdateNamePlate(unit, nameplate)
     if not unit or not UnitExists(unit) then return end
     local castBar = self:GetCastBar(nameplate)
     if not castBar or type(castBar.SetStatusBarColor) ~= "function" then return end
 
     local visuals = self:EnsureVisuals(castBar)
-    local isCasting = Minimizer.Cast.IsUnitCasting(unit)
+    castBar.MinimizerCastUnit = unit
+    local isCasting, _, uninterruptible = Minimizer.Cast.GetState(unit)
     local ready = Minimizer.Interrupt.IsReady()
 
     -- Diagnóstico temporal: se ignoran interruptibilidad y cooldown para
     -- comprobar de forma aislada que localizamos y pintamos el castbar.
     -- Diagnóstico solicitado: cualquier casteo activo se pinta verde,
     -- independientemente del cooldown o de la interruptibilidad.
-    local canColorGreen = isCasting
+    local canColorGreen = false
     if canColorGreen and type(castBar.GetStatusBarColor) == "function" then
         if not castBar.MinimizerDefaultColor then
             local r, g, b, a = castBar:GetStatusBarColor()
@@ -181,16 +237,20 @@ function CastingBar:UpdateNamePlate(unit, nameplate)
         castBar.MinimizerDefaultColor = nil
     end
 
+    self:ApplyGreenColor(castBar, unit, isCasting, ready, uninterruptible)
+
     local targeted = IsSpellTargetingPlayer(unit)
     local spellID = select(9, UnitCastingInfo(unit)) or select(8, UnitChannelInfo(unit))
     local important = IsImportantSpell(spellID)
     if isCasting then
-        visuals.targetBorder:Show()
-        if visuals.targetBorder.SetAlphaFromBoolean then
-            visuals.targetBorder:SetAlphaFromBoolean(targeted)
+        visuals.targetContainer:Show()
+        if visuals.targetContainer.SetAlphaFromBoolean then
+            visuals.targetContainer:SetAlphaFromBoolean(targeted)
         end
+        visuals.targetPulse:Play()
     else
-        visuals.targetBorder:Hide()
+        visuals.targetPulse:Stop()
+        visuals.targetContainer:Hide()
     end
     -- El cliente ya resalta los casts importantes; sólo conservamos el dato
     -- para futuras animaciones sin duplicar su indicador nativo.
@@ -217,21 +277,6 @@ local CAST_EVENTS = {
 for event in pairs(CAST_EVENTS) do EventFrame:RegisterEvent(event) end
 EventFrame:SetScript("OnEvent", function(_, event, unit)
     if unit and CAST_EVENTS[event] then CastingBar:OnCastEvent(unit, event) end
-end)
-
-local PulseFrame = CreateFrame("Frame")
-PulseFrame:SetScript("OnUpdate", function(_, elapsed)
-    CastingBar.pulse = (CastingBar.pulse or 0) + elapsed
-    if CastingBar.pulse < 0.05 then return end
-    CastingBar.pulse = 0
-    local alpha = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(GetTime() * 8))
-    for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
-        local visuals = CastingBar:GetCastBar(nameplate)
-        visuals = visuals and visuals.MinimizerCastVisuals
-        if visuals and visuals.targetBorder:IsShown() then
-            visuals.targetBorder:SetAlpha(alpha)
-        end
-    end
 end)
 
 Minimizer.Core.RegisterModule("CastingBar", CastingBar)
