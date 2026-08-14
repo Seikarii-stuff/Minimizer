@@ -70,20 +70,19 @@ function Focus:SetMode(mode)
 end
 
 local driver = CreateFrame("Frame")
-local cooldownUpdatePending = false
 driver:RegisterEvent("PLAYER_FOCUS_CHANGED")
 driver:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 driver:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 driver:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+
+local debouncedUpdate = Minimizer.Utils.Debounce(function()
+    Focus:UpdateFace()
+end)
+
 driver:SetScript("OnEvent", function(_, event)
     if event ~= "SPELL_UPDATE_COOLDOWN" then
         Focus:UpdateFace()
         return
     end
-    if cooldownUpdatePending then return end
-    cooldownUpdatePending = true
-    C_Timer.After(0, function()
-        cooldownUpdatePending = false
-        Focus:UpdateFace()
-    end)
+    debouncedUpdate()
 end)
