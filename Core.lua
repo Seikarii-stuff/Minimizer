@@ -275,13 +275,6 @@ function Minimizer.Markers.Ensure(nameplate)
 end
 
 function Minimizer.Markers.Update(unit, nameplate)
-    if MinimizerDB.focusIndicator == "face" then
-        if nameplate.MinimizerMarkers then
-            for _, marker in pairs(nameplate.MinimizerMarkers) do marker:Hide() end
-        end
-        if Minimizer.Focus then Minimizer.Focus:UpdateFace() end
-        return
-    end
     local markers = Minimizer.Markers.Ensure(nameplate)
     if not markers then return end
 
@@ -297,10 +290,15 @@ function Minimizer.Markers.Update(unit, nameplate)
     local isTarget = (MinimizerDB.enableTargetMarkers ~= false) and UnitIsUnit(token, "target")
     local isFocus  = (MinimizerDB.enableFocusMarkers ~= false) and UnitIsUnit(token, "focus")
 
+    -- Futuro: añadir aquí el cooldown mayor de daño o defensivo sobre el target.
     markers.targetLeft:SetShown(isTarget == true)
     markers.targetRight:SetShown(isTarget == true)
-    markers.focusLeft:SetShown(isFocus == true)
-    markers.focusRight:SetShown(isFocus == true)
+    local showFocusArrows = MinimizerDB.focusIndicator ~= "face"
+    markers.focusLeft:SetShown(isFocus == true and showFocusArrows)
+    markers.focusRight:SetShown(isFocus == true and showFocusArrows)
+    if MinimizerDB.focusIndicator == "face" and Minimizer.Focus then
+        Minimizer.Focus:UpdateFace()
+    end
 end
 
 -------------------------------------------------------------------------------
