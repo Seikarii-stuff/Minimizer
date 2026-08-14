@@ -132,7 +132,11 @@ HookIndicator = function(indicator, healthBar)
             local unit = nameplate and (nameplate.namePlateUnitToken
                 or (nameplate.UnitFrame and nameplate.UnitFrame.unit))
             if unit then
-                HealthBarColor:UpdateNamePlate(unit, nameplate)
+                if Minimizer and Minimizer.Core and Minimizer.Core.ApplyToUnit then
+                    Minimizer.Core.ApplyToUnit(unit)
+                else
+                    HealthBarColor:UpdateNamePlate(unit, nameplate)
+                end
             end
         end
         hooksecurefunc(indicator, "Show", triggerUpdate)

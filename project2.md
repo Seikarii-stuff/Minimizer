@@ -208,24 +208,15 @@ if type(situation) ~= "number" then return nil end
 - Cacheado por unit+source en `Minimizer.Cache.units[unit]["threat:" .. source]`,
   invalidado en `UNIT_THREAT_SITUATION_UPDATE` / `UNIT_THREAT_LIST_UPDATE`.
 
-### 1.10 Absorb: fallback a indicador visual cuando el número es secreto
+### 1.10 Absorb: depender EXCLUSIVAMENTE del indicador visual (`IsShown()`)
 ```lua
-local absorbs = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit)
-if Minimizer.Utils.IsSecretValue(absorbs) or absorbs == nil then
-    -- no se puede leer el número: se cae a mirar si el overlay nativo está visible
-    local indicator = healthBar and (healthBar.totalAbsorbOverlay or healthBar.totalAbsorb)
-    return indicator and indicator.IsShown and indicator:IsShown() == true or false
-end
-if type(absorbs) == "number" and absorbs > 0 then return true end
+local indicator = healthBar and (healthBar.totalAbsorbOverlay or healthBar.totalAbsorb)
+return indicator and indicator.IsShown and indicator:IsShown() == true or false
 ```
-- Este patrón **no está en la guía original de Platynator** tal cual, es una solución
-  propia del proyecto: cuando el valor numérico es secreto, en vez de intentar inferir
-  nada sobre él, se usa la señal visual que Blizzard ya calculó y expuso de forma seria
-  (`IsShown()` de su propio overlay de absorb). Es un patrón sólido y reutilizable:
-  **"si un número puede ser secreto, busca si Blizzard ya expone la misma información
-  como un widget visible/oculto, y usa eso en vez de intentar comparar el número."**
-  Vale la pena generalizar este patrón para otros datos que puedan volverse secretos en
-  el futuro (daño, HP exacto, etc.).
+- Originalmente se intentaba leer `UnitGetTotalAbsorbs` y escuchar eventos como `UNIT_ABSORB_AMOUNT_CHANGED` o `UNIT_AURA`. Esta decisión se ha **descartado por completo**.
+- Se ha decidido utilizar única y exclusivamente el estado visual del indicador (`IsShown()`) porque es **MUCHO más fiable y MUCHO más barato** a nivel de rendimiento. Blizzard ya hace el trabajo pesado de calcular cuándo un escudo es lo suficientemente relevante como para mostrarse; nosotros simplemente conectamos un `hooksecurefunc` a los métodos `Show` y `Hide` del indicador en `HealthBarColor.lua`.
+- **Regla de oro sobre eventos:** Leer auras o cantidades de escudos a través de eventos (`UNIT_AURA`, `UNIT_ABSORB_AMOUNT_CHANGED`, etc.) conlleva problemas de desincronización y escudos "pre-existentes" que no disparan eventos al aparecer la placa. **Hay que evitar escuchar estos eventos salvo que no quede otra manera de hacer las cosas.** Si Blizzard expone el estado en un widget visual de su propia UI, "engancharse" a ese widget es siempre la solución canónica y correcta.
+
 
 ---
 

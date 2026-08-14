@@ -106,21 +106,7 @@ end
 function Minimizer.Absorb.HasAbsorb(unit, nameplate)
     if not unit or not UnitExists(unit) then return false end
     nameplate = nameplate or (Minimizer.Utils and Minimizer.Utils.GetNamePlateForUnit and Minimizer.Utils.GetNamePlateForUnit(unit))
-    local absorbs = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit)
-
-    -- En WoW 12.1 Midnight, valores numéricos y auras pueden ser secretos (IsSecretValue).
-    -- NUNCA evaluar 'not absorbs' ni 'absorbs > 0' sin comprobar IsSecretValue primero para evitar taint.
-    if Minimizer.Utils.IsSecretValue(absorbs) or absorbs == nil then
-        local unitFrame = nameplate and (nameplate.UnitFrame or nameplate)
-        local healthBar = unitFrame and (unitFrame.healthBar or unitFrame.HealthBar)
-        local indicator = healthBar and (healthBar.totalAbsorbOverlay or healthBar.totalAbsorb)
-        return indicator and indicator.IsShown and indicator:IsShown() == true or false
-    end
-
-    if type(absorbs) == "number" and absorbs > 0 then
-        return true
-    end
-
+    
     local unitFrame = nameplate and (nameplate.UnitFrame or nameplate)
     local healthBar = unitFrame and (unitFrame.healthBar or unitFrame.HealthBar)
     local indicator = healthBar and (healthBar.totalAbsorbOverlay or healthBar.totalAbsorb)
@@ -536,8 +522,6 @@ local function OnEvent(self, event, unit, ...)
                 end
                 Minimizer.Core.RequestApplyToAll()
             end
-        elseif (event == "UNIT_ABSORB_AMOUNT_CHANGED" or event == "UNIT_AURA") and unit then
-            Minimizer.Core.ApplyToUnit(unit)
         elseif Minimizer.Cache.InvalidateAll then
             Minimizer.Cache.InvalidateAll("threat:player")
             Minimizer.Core.RequestApplyToAll()
@@ -601,8 +585,6 @@ EventFrame:RegisterEvent("UNIT_CLASSIFICATION_CHANGED")
 EventFrame:RegisterEvent("UNIT_LEVEL")
 EventFrame:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
 EventFrame:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
-EventFrame:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED")
-EventFrame:RegisterEvent("UNIT_AURA")
 EventFrame:RegisterEvent("PLAYER_ROLES_ASSIGNED")
 EventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 EventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
