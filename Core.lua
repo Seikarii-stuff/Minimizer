@@ -502,7 +502,7 @@ local function OnEvent(self, event, unit, ...)
     elseif event == "UNIT_DISPLAYPOWER"
         or event == "UNIT_CLASSIFICATION_CHANGED"
         or event == "UNIT_LEVEL" then
-        -- La clase de enemigo puede cambiar durante una transformaciÃ³n.
+        -- La clase de enemigo puede cambiar durante una transformacion.
         Minimizer.Core.ApplyToUnit(unit)
     elseif event == "UNIT_THREAT_SITUATION_UPDATE"
         or event == "UNIT_THREAT_LIST_UPDATE"
