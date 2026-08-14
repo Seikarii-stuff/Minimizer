@@ -1,9 +1,9 @@
 ## Interface: 120100, 120007
-## Interface: 120100, 120007
 ## Title: Minimizer
 ## Notes: Simplifica nameplates enemigas usando APIs nativas de Blizzard. /simp 0-100
-## Author: Tu
-## Version: 0.1-core
+## Author: Seikarii
+## Version: 1.0
+## IconTexture: 136006
 ## SavedVariables: MinimizerDB
 
 Bootstrap.lua
