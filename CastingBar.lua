@@ -21,45 +21,19 @@ local function IsSpellTargetingPlayer(unit)
 end
 
 
-local function FindCastBarInGrandchildren(healthBar, ...)
-    for i = 1, select("#", ...) do
-        local grandchild = select(i, ...)
-        if type(grandchild) == "table"
-            and grandchild ~= healthBar
-            and type(grandchild.SetStatusBarColor) == "function"
-            and type(grandchild.GetValue) == "function" then
-            return grandchild
-        end
-    end
-    return nil
-end
-
-local function FindCastBarInChildren(healthBar, ...)
-    for i = 1, select("#", ...) do
-        local child = select(i, ...)
-        if type(child) == "table" and type(child.GetChildren) == "function" then
-            local grandchild = FindCastBarInGrandchildren(healthBar, child:GetChildren())
-            if grandchild then return grandchild end
-        end
-    end
-    return nil
-end
-
 function CastingBar:GetCastBar(nameplate)
-    local unitFrame = nameplate and (nameplate.UnitFrame or nameplate)
-    if not unitFrame or type(unitFrame.GetChildren) ~= "function" then return nil end
-
     local cached = nameplate.MinimizerCastBar
     if cached and type(cached.SetStatusBarColor) == "function"
         and type(cached.GetValue) == "function" then
         return cached
     end
 
-    local healthBar = Minimizer.Utils.GetHealthBar(nameplate)
-    local grandchild = FindCastBarInChildren(healthBar, unitFrame:GetChildren())
-    if grandchild then
-        nameplate.MinimizerCastBar = grandchild
-        return grandchild
+    if Minimizer.Widgets and Minimizer.Widgets.FindCastBar then
+        local castBar = Minimizer.Widgets.FindCastBar(nameplate)
+        if castBar then
+            nameplate.MinimizerCastBar = castBar
+            return castBar
+        end
     end
     return nil
 end
