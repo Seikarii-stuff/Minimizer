@@ -164,6 +164,7 @@ function Minimizer.Threat.PlayerHasAggro(unit)
         return false
     end
     if Minimizer.Threat.IsPlayerTank() then
+        if not UnitAffectingCombat(unit) then return false end
         local situation = Minimizer.Threat.GetSituation(unit, "player")
         return situation == nil or situation < 3
     else
@@ -190,6 +191,7 @@ function Minimizer.Threat.ShouldUnsimplify(unit)
         return false
     end
     if Minimizer.Threat.IsPlayerTank() then
+        if not UnitAffectingCombat(unit) then return false end
         -- En grupo, cualquier tanque puede estar gestionando la amenaza.
         local situation = Minimizer.Threat.GetTankSituation(unit)
         return situation == nil or situation == 0
