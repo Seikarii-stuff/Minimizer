@@ -404,13 +404,17 @@ function Minimizer.Core.ApplyToUnit(unit)
     -- 1. Evaluación de simplificación
     local shouldSimplify = false
     local reason = ""
-    
+
+    -- Fast-path: solo "no simp" es permanente por diseño (jefes/casters no
+    -- cambian de categoría). "persistent" (cast interrumpible) y "temporal"
+    -- (aggro, absorb, cast no interrumpible) deben reevaluarse siempre porque
+    -- la condición que los causa puede desaparecer en cualquier momento.
     if nameplate.MinimizerDesimplifiedPersistent then
         shouldSimplify = false
-        reason = "persistent (fast-path)"
+        reason = "no simp (fast-path)"
     else
         shouldSimplify, reason = Minimizer.Cache.ShouldSimplifyUnit(npToken, nameplate)
-        if reason == "no simp" or reason == "persistent" then
+        if reason == "no simp" then
             nameplate.MinimizerDesimplifiedPersistent = true
         end
     end

@@ -20,11 +20,6 @@ local function IsSpellTargetingPlayer(unit)
     return target and UnitIsUnit(target, "player")
 end
 
-local function IsImportantSpell(spellID)
-    if not spellID or Minimizer.Utils.IsSecretValue(spellID) then return false end
-    return C_Spell and C_Spell.IsSpellImportant
-        and C_Spell.IsSpellImportant(spellID) == true
-end
 
 -- El proyecto deja el proveedor de cooldown desacoplado para que pueda
 -- sustituirse por el sistema de interrupciones de cada clase/spec.
@@ -158,16 +153,10 @@ function CastingBar:UpdateNamePlate(unit, nameplate)
     local isChanneling = UnitChannelInfo(unit) ~= nil
     local ready = Minimizer.Interrupt.IsReady()
 
-    -- Diagnóstico temporal: se ignoran interruptibilidad y cooldown para
-    -- comprobar de forma aislada que localizamos y pintamos el castbar.
-    -- Diagnóstico solicitado: cualquier casteo activo se pinta verde,
-    -- independientemente del cooldown o de la interruptibilidad.
     self:ApplyGreenColor(castBar, unit, isCasting, isChanneling, ready, uninterruptible)
 
     local targeted = IsSpellTargetingPlayer(unit)
-    local spellID = select(9, UnitCastingInfo(unit)) or select(8, UnitChannelInfo(unit))
-    local important = IsImportantSpell(spellID)
-    if isCasting then
+    if isCasting or isChanneling then
         visuals.targetContainer:Show()
         if visuals.targetContainer.SetAlphaFromBoolean then
             visuals.targetContainer:SetAlphaFromBoolean(targeted)
@@ -177,9 +166,6 @@ function CastingBar:UpdateNamePlate(unit, nameplate)
         visuals.targetPulse:Stop()
         visuals.targetContainer:Hide()
     end
-    -- El cliente ya resalta los casts importantes; sólo conservamos el dato
-    -- para futuras animaciones sin duplicar su indicador nativo.
-    nameplate.MinimizerImportantCast = important
 end
 
 function CastingBar:OnNamePlateRemoved(_, nameplate)

@@ -26,9 +26,8 @@ local function UpdateCooldown()
         and C_Spell.GetSpellCooldownDuration(interruptSpellID)
     if duration and cooldown.SetCooldownFromDurationObject then
         cooldown:SetCooldownFromDurationObject(duration)
-        if duration.IsZero and cooldown.SetAlphaFromBoolean then
-            cooldown:SetAlphaFromBoolean(duration:IsZero(), 0, 1)
-        end
+        -- SetAlphaFromBoolean no se usa aquí: el cooldown frame gestiona su propio
+        -- visual de cuenta atrás. El shade del retrato lo maneja EvaluateColorValueFromBoolean.
     elseif C_Spell.GetSpellCooldown then
         local info = C_Spell.GetSpellCooldown(interruptSpellID)
         if info and cooldown.SetCooldownFromExpression then
@@ -37,6 +36,10 @@ local function UpdateCooldown()
             cooldown:SetCooldownTable(info)
         end
     end
+    -- Shade del retrato: 1.0 (brillante) cuando listo, 0.38 (gris) cuando en CD.
+    -- EvaluateColorValueFromBoolean(state, valueIfTrue, valueIfFalse):
+    --   ready=true  → shade 1.0 (corte disponible, retrato brillante)
+    --   ready=false → shade 0.38 (corte en CD, retrato gris)
     if Minimizer.Interrupt and Minimizer.Interrupt.IsReady
         and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
         local ready = Minimizer.Interrupt.IsReady()
@@ -44,6 +47,7 @@ local function UpdateCooldown()
         portrait:SetVertexColor(shade, shade, shade, 1)
     end
 end
+
 
 function Focus:UpdateFace()
     if MinimizerDB.focusIndicator ~= "face" then frame:Hide(); return end
