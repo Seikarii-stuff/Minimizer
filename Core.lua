@@ -160,11 +160,15 @@ function Minimizer.Threat.GetSituation(unit, source)
 end
 
 function Minimizer.Threat.PlayerHasAggro(unit)
-    -- Un tanque con aggro conserva el color de categoría del mob; el rojo se
-    -- reserva para un jugador no-tanque que ha robado aggro.
-    return Minimizer.Threat.IsThreatContext()
-        and not Minimizer.Threat.IsPlayerTank()
-        and Minimizer.Threat.GetSituation(unit, "player") == 3
+    if not Minimizer.Threat.IsThreatContext() then
+        return false
+    end
+    if Minimizer.Threat.IsPlayerTank() then
+        local situation = Minimizer.Threat.GetSituation(unit, "player")
+        return situation == nil or situation < 3
+    else
+        return Minimizer.Threat.GetSituation(unit, "player") == 3
+    end
 end
 
 function Minimizer.Threat.GetTankSituation(unit)
@@ -513,16 +517,28 @@ local function OnEvent(self, event, unit, ...)
         or event == "PLAYER_TALENT_UPDATE"
         or event == "PLAYER_SPECIALIZATION_CHANGED" then
         if event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then
-            if Minimizer.Cache.InvalidateUnit then
-                Minimizer.Cache.InvalidateUnit(unit, "threat:player")
-                for _, tankToken in ipairs(Minimizer.Threat.tankTokens) do
-                    Minimizer.Cache.InvalidateUnit(unit, "threat:" .. tankToken)
+            if unit and unit:match("^nameplate%d+$") then
+                if Minimizer.Cache.InvalidateUnit then
+                    Minimizer.Cache.InvalidateUnit(unit, "threat:player")
+                    for _, tankToken in ipairs(Minimizer.Threat.tankTokens) do
+                        Minimizer.Cache.InvalidateUnit(unit, "threat:" .. tankToken)
+                    end
                 end
+                Minimizer.Core.ApplyToUnit(unit)
+            else
+                if Minimizer.Cache.InvalidateAll then
+                    Minimizer.Cache.InvalidateAll("threat:player")
+                    for _, tankToken in ipairs(Minimizer.Threat.tankTokens) do
+                        Minimizer.Cache.InvalidateAll("threat:" .. tankToken)
+                    end
+                end
+                Minimizer.Core.RequestApplyToAll()
             end
         elseif (event == "UNIT_ABSORB_AMOUNT_CHANGED" or event == "UNIT_AURA") and unit then
             Minimizer.Core.ApplyToUnit(unit)
         elseif Minimizer.Cache.InvalidateAll then
             Minimizer.Cache.InvalidateAll("threat:player")
+            Minimizer.Core.RequestApplyToAll()
         end
         if event == "PLAYER_ROLES_ASSIGNED" or event == "GROUP_ROSTER_UPDATE"
             or event == "PLAYER_TALENT_UPDATE" or event == "PLAYER_SPECIALIZATION_CHANGED" then
