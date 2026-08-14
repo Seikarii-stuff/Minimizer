@@ -320,3 +320,11 @@ castBar:SetStatusBarColor(r, g, b)
 - Área clicable por placa: `nameplate:CanChangeHitTestPoints()` y `nameplate:SetAllHitTestPoints(clickRegion)`.
 - Área usada para apilado: `nameplate:SetStackingBoundsFrame(frame)`.
 - Estas APIs controlan regiones distintas: cambiar el tamaño visual no garantiza que el hit-test o el apilado coincidan automáticamente. Deben validarse por separado antes de usarlas.
+
+
+
+
+FUTURO:
+Añadir ccs al lado de la cara del focus (cara+cc) cap 3
+Añadir ofensivos/defensivos en el target (ofensivo+defensivo) cap3
+Hara falta algun tipo de db 
