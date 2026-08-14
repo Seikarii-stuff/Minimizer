@@ -108,6 +108,35 @@ function Minimizer.Utils.Debounce(fn)
     end
 end
 
+-- Limita la frecuencia de ejecución a máximo 1 llamada cada `interval` segundos (ej. 0.033s para 30 FPS).
+-- Si se producen llamadas intermedias, la última se pospone para ejecutarse cuando venza el intervalo.
+function Minimizer.Utils.Throttle(fn, interval)
+    interval = interval or 0.033
+    local lastTime = 0
+    local pending = false
+    local lastArgs
+    return function(...)
+        local now = GetTime()
+        lastArgs = {...}
+        local elapsed = now - lastTime
+        if elapsed >= interval then
+            lastTime = now
+            fn(unpack(lastArgs))
+        elseif not pending then
+            pending = true
+            local remaining = interval - elapsed
+            if remaining < 0 then remaining = 0 end
+            C_Timer.After(remaining, function()
+                pending = false
+                lastTime = GetTime()
+                if lastArgs then
+                    fn(unpack(lastArgs))
+                end
+            end)
+        end
+    end
+end
+
 -- Busca el primer spellID de una lista que el jugador conozca.
 -- spellList puede ser un numero suelto o una tabla de numeros.
 -- Si ninguno esta "conocido" segun las APIs, devuelve el primero de la lista

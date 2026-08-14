@@ -40,6 +40,7 @@ Mocks.nameplates = {}
 Mocks.time = 0
 Mocks.frames = {}
 Mocks.events = {}
+Mocks.timers = {}
 
 function _G.GetTime()
     return Mocks.time
@@ -47,6 +48,16 @@ end
 
 function Mocks.AdvanceTime(seconds)
     Mocks.time = Mocks.time + seconds
+    local i = 1
+    while i <= #Mocks.timers do
+        local t = Mocks.timers[i]
+        if Mocks.time >= t.fireTime then
+            table.remove(Mocks.timers, i)
+            t.callback()
+        else
+            i = i + 1
+        end
+    end
 end
 
 -- Frames
@@ -149,8 +160,14 @@ end
 
 _G.C_Timer = {
     After = function(duration, callback)
-        -- Just execute immediately for tests
-        callback()
+        if duration <= 0 then
+            callback()
+        else
+            table.insert(Mocks.timers, {
+                fireTime = Mocks.time + duration,
+                callback = callback,
+            })
+        end
     end,
     NewTicker = function(duration, callback, iterations)
         -- Not implementing full ticker for now

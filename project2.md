@@ -281,6 +281,7 @@ hablar primero con el desarrollador principal.
   - ShouldSimplifyUnit: 4.34% (0.0840 s)
   - PlayerHasAggro: 2.89% (0.0560 s)
 
-### Throttle check Target/Focus (ver Fase 10.3)
-- 100 llamadas reales en 100 eventos SPELL_UPDATE_COOLDOWN simulados en el mock.
-- El debounce actual (`C_Timer.After(0, ...)`) colapsa múltiples eventos disparados dentro del mismo frame de renderizado, pero no limita la frecuencia real a lo largo del tiempo entre frames sucesivos. En combate intenso con rotaciones rápidas de cooldowns se evaluará implementar un throttle por tiempo real (p. ej. `C_Timer` a 10Hz o cooldown timestamp mínimo de 0.1s) en un pase futuro.
+### Throttle check Target/Focus (implementado a 30 FPS / 0.033s)
+- **Implementación**: `Minimizer.Utils.Throttle(fn, 0.033)` en `Target.lua` y `Focus.lua`.
+- **Resultado del benchmark**: Ante 100 eventos `SPELL_UPDATE_COOLDOWN` simulados en ~1 segundo, las llamadas reales se reducen de 100 a **25 llamadas** (~25-30 FPS cap).
+- Se eliminó el 75% de los repintados redundantes sin perder fluidez visual ni respuesta inmediata al primer evento.

@@ -96,7 +96,8 @@ function Focus:SetMode(mode)
     if Minimizer.Core then Minimizer.Core.ApplyToAll() end
 end
 
-Focus.DebouncedUpdate = Minimizer.Utils.Debounce(function()
+-- Throttle a 30 FPS (0.033s): visuales de focus no necesitan repintarse más rápido.
+Focus.DebouncedUpdate = Minimizer.Utils.Throttle(function()
     Focus:UpdateFace()
-end)
+end, 0.033)
 

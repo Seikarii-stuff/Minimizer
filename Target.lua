@@ -42,8 +42,8 @@ function Target:UpdateTargetCDs()
     end
 end
 
--- El debounce se conserva pero se expone para que Events.lua lo use.
-Target.DebouncedUpdate = Minimizer.Utils.Debounce(function()
+-- Throttle a 30 FPS (0.033s): visuales de target no necesitan repintarse más rápido.
+Target.DebouncedUpdate = Minimizer.Utils.Throttle(function()
     Target:UpdateTargetCDs()
-end)
+end, 0.033)
 
