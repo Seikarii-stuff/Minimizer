@@ -259,33 +259,39 @@ function Minimizer.Cache.IsUnitCasting(unit)
 end
 
 function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
-    if not unit or not UnitExists(unit) then return false end
+    if not unit or not UnitExists(unit) then return false, "invalid" end
 
     -- Solo simplificar enemigos/atacables
-    if not UnitCanAttack("player", unit) then return false end
+    if not UnitCanAttack("player", unit) then return false, "friendly" end
 
     local pct = MinimizerDB.simplifyPercent or 0
-    if pct <= 0 then return false end
+    if pct <= 0 then return false, "disabled" end
 
+    -- No Simp: Superiores y Casters
+    if Minimizer.Classification and Minimizer.Classification.GetEliteType then
+        local eliteType = Minimizer.Classification.GetEliteType(unit)
+        if eliteType == "boss" or eliteType == "miniboss" or eliteType == "caster" then
+            return false, "no simp"
+        end
+    end
+
+    -- Temporal: Absorb, Aggro, Cast ininterrumpible
     if Minimizer.Threat.ShouldUnsimplify(unit) then
-        return false
+        return false, "temporal"
     end
-
     if Minimizer.Absorb.HasAbsorb(unit, nameplate) then
-        return false
+        return false, "temporal"
+    end
+    if Minimizer.Cast.IsUnitCastUninterruptible(unit) then
+        return false, "temporal"
     end
 
-    -- No simplificar si fue marcado por cast
-    if nameplate and nameplate.MinimizerNeverSimplify then
-        return false
-    end
-
-    -- No simplificar si está casteando activamente
+    -- Persistent: Cast interrumpible/channel
     if Minimizer.Cache.IsUnitCasting(unit) then
-        return false
+        return false, "persistent"
     end
 
-    return true
+    return true, "simplify"
 end
 
 -------------------------------------------------------------------------------
@@ -403,7 +409,18 @@ function Minimizer.Core.ApplyToUnit(unit)
     Minimizer.ActiveNameplates[npToken] = nameplate
 
     -- 1. Evaluación de simplificación
-    local shouldSimplify = Minimizer.Cache.ShouldSimplifyUnit(npToken, nameplate)
+    local shouldSimplify = false
+    local reason = ""
+    
+    if nameplate.MinimizerDesimplifiedPersistent then
+        shouldSimplify = false
+        reason = "persistent (fast-path)"
+    else
+        shouldSimplify, reason = Minimizer.Cache.ShouldSimplifyUnit(npToken, nameplate)
+        if reason == "no simp" or reason == "persistent" then
+            nameplate.MinimizerDesimplifiedPersistent = true
+        end
+    end
 
     -- 2. Aplicación vía API C nativa de Blizzard (evita modificar SetScale en SecureFrames)[cite: 3]
     if Minimizer.Utils.IsSimplifiedAvailable() then
@@ -443,14 +460,7 @@ function Minimizer.Core.RequestApplyToAll()
     end)
 end
 
-function Minimizer.Core.MarkNeverSimplify(unit)
-    if not unit then return end
-    local nameplate = Minimizer.Utils.GetNamePlateForUnit(unit)
-    if nameplate and not nameplate.MinimizerNeverSimplify then
-        nameplate.MinimizerNeverSimplify = true
-        Minimizer.Core.ApplyToUnit(unit)
-    end
-end
+
 
 function Minimizer.Core.ClearNeverSimplify(unit)
     if not unit then return end
@@ -466,7 +476,7 @@ function Minimizer.Core.ClearNeverSimplify(unit)
             end
         end
         Minimizer.Markers.Clear(nameplate)
-        nameplate.MinimizerNeverSimplify = nil
+        nameplate.MinimizerDesimplifiedPersistent = nil
         nameplate.MinimizerState = nil
         nameplate.MinimizerCastBar = nil
     end
@@ -487,6 +497,13 @@ local function OnEvent(self, event, unit, ...)
         or event == "PLAYER_FOCUS_CHANGED"
         or event == "PLAYER_REGEN_DISABLED"
         or event == "PLAYER_REGEN_ENABLED" then
+        if event == "PLAYER_REGEN_ENABLED" then
+            if C_NamePlate and C_NamePlate.GetNamePlates then
+                for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
+                    nameplate.MinimizerDesimplifiedPersistent = nil
+                end
+            end
+        end
         if event == "PLAYER_ENTERING_WORLD" then
             Minimizer.Threat.RefreshTankTokens()
         end
@@ -550,7 +567,7 @@ local function OnEvent(self, event, unit, ...)
         if event == "UNIT_SPELLCAST_START"
             or event == "UNIT_SPELLCAST_CHANNEL_START"
             or event == "UNIT_SPELLCAST_EMPOWER_START" then
-            Minimizer.Core.MarkNeverSimplify(unit)
+            Minimizer.Core.ApplyToUnit(unit)
         else
             Minimizer.Core.ApplyToUnit(unit)
         end
@@ -607,7 +624,9 @@ EventFrame:SetScript("OnEvent", OnEvent)
 -- Secure Hooks canónicos según especificación de Platynator[cite: 3]
 if NamePlateDriverFrame then
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit)
-        if unit then Minimizer.Core.ApplyToUnit(unit) end
+        if unit then 
+            C_Timer.After(0.01, function() Minimizer.Core.ApplyToUnit(unit) end) 
+        end
     end)
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit)
         if unit then Minimizer.Core.ClearNeverSimplify(unit) end

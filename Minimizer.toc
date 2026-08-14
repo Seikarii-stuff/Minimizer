@@ -9,6 +9,7 @@ Config.lua
 Constants.lua
 Cache.lua
 Core.lua
+ClassificationUtils.lua
 Interrupt.lua
 HealthBarColor.lua
 CastingBar.lua
