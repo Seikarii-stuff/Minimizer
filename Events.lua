@@ -31,10 +31,24 @@ local function OnEvent(self, event, unit, ...)
             end
         end
         UpdateNameplates()
+
+    elseif event == "NAME_PLATE_UNIT_ADDED" then
+        -- NAME_PLATE_UNIT_ADDED garantiza que el token ya está asignado al frame.
+        -- Es el momento canónico para aplicar la simplificación inicial.
+        -- Filtramos tokens no-nameplate (ej. "preview" del panel de opciones).
+        if unit and unit:match("^nameplate%d+$") then
+            Minimizer.Core.ApplyToUnit(unit)
+            UpdateNameplates()
+        end
+
     elseif event == "UNIT_DISPLAYPOWER"
         or event == "UNIT_CLASSIFICATION_CHANGED"
         or event == "UNIT_LEVEL" then
-        Minimizer.Core.ApplyToUnit(unit)
+        -- Solo actuar sobre nameplates reales
+        if unit and unit:match("^nameplate%d+$") then
+            Minimizer.Core.ApplyToUnit(unit)
+        end
+
     elseif event == "UNIT_THREAT_SITUATION_UPDATE"
         or event == "UNIT_THREAT_LIST_UPDATE"
         or event == "PLAYER_ROLES_ASSIGNED"
@@ -48,6 +62,8 @@ local function OnEvent(self, event, unit, ...)
                 end
                 Minimizer.Core.ApplyToUnit(unit)
             else
+                -- Evento global de amenaza (sin token de nameplate): invalida todo
+                -- pero no procesa unidades que no sean nameplates enemigas.
                 if Minimizer.Cache.InvalidateAll then
                     Minimizer.Cache.InvalidateAll("threat")
                 end
@@ -61,6 +77,7 @@ local function OnEvent(self, event, unit, ...)
             end
             UpdateNameplates()
         end
+
     elseif event == "UNIT_SPELLCAST_START"
         or event == "UNIT_SPELLCAST_STOP"
         or event == "UNIT_SPELLCAST_FAILED"
@@ -73,6 +90,9 @@ local function OnEvent(self, event, unit, ...)
         or event == "UNIT_SPELLCAST_EMPOWER_START"
         or event == "UNIT_SPELLCAST_EMPOWER_STOP"
         or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
+        -- Filtro explícito: solo nameplates enemigas. Descarta aliados, pets,
+        -- party, boss frames que disparen estos eventos globalmente.
+        if not unit or not unit:match("^nameplate%d+$") then return end
         if Minimizer.Cache.InvalidateUnit then
             Minimizer.Cache.InvalidateUnit(unit, "absorb")
         end
@@ -80,6 +100,7 @@ local function OnEvent(self, event, unit, ...)
             Minimizer.Cast.InvalidateState(unit)
         end
         Minimizer.Core.ApplyToUnit(unit)
+
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         local interrupt = Minimizer.Interrupt
         local ready = interrupt and interrupt.IsReady and interrupt.IsReady()
@@ -91,7 +112,7 @@ local function OnEvent(self, event, unit, ...)
     end
 end
 
--- Global events
+-- Eventos globales (no dependen de unidad específica)
 EventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 EventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 EventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
@@ -104,76 +125,52 @@ EventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 EventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
 EventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 EventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
--- NAME_PLATE_UNIT_ADDED garantiza que el token ya está asignado al frame,
--- a diferencia de OnNamePlateAdded que puede disparar antes de que el frame pool
--- haya terminado de inicializar el token. Es el momento canónico para simplificar.
+-- NAME_PLATE_UNIT_ADDED: garantiza que el token ya está asignado al frame.
 EventFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
-EventFrame:SetScript("OnEvent", function(self, event, unit, ...)
-    if event == "NAME_PLATE_UNIT_ADDED" then
-        -- El token ya está garantizado en este punto. Intentar aplicar directamente
-        -- y luego solicitar un pase completo que recoja a los que puedan haber fallado.
-        if unit then
-            Minimizer.Core.ApplyToUnit(unit)
-        end
-        UpdateNameplates()
-        return
-    end
-    OnEvent(self, event, unit, ...)
-end)
+-- Eventos de unidad registrados globalmente. El filtro ^nameplate%d+$ en OnEvent
+-- descarta aliados/pets/party. Es más robusto que RegisterUnitEvent por frame
+-- en pulls masivos donde los frames pueden no estar listos aún.
+EventFrame:RegisterEvent("UNIT_DISPLAYPOWER")
+EventFrame:RegisterEvent("UNIT_CLASSIFICATION_CHANGED")
+EventFrame:RegisterEvent("UNIT_LEVEL")
+EventFrame:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
+EventFrame:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_START")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_STOP")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_FAILED")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTIBLE")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_UPDATE")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_START")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_STOP")
+EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_UPDATE")
+EventFrame:SetScript("OnEvent", OnEvent)
 
 -- Secure Hooks canónicos
 if NamePlateDriverFrame then
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit)
-        if not unit then return end
-
-        -- Registrar eventos de unidad en el frame individual de la nameplate.
-        -- Se intenta inmediatamente; si el frame no está listo aún, el evento
-        -- NAME_PLATE_UNIT_ADDED se encargará de aplicar la simplificación.
-        local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
-        if nameplate then
-            if not nameplate.MinimizerEventFrame then
-                nameplate.MinimizerEventFrame = CreateFrame("Frame", nil, nameplate)
-                nameplate.MinimizerEventFrame:SetScript("OnEvent", function(_, event, evUnit, ...)
-                    OnEvent(EventFrame, event, evUnit, ...)
-                end)
-            end
-            local ef = nameplate.MinimizerEventFrame
-            ef:RegisterUnitEvent("UNIT_DISPLAYPOWER", unit)
-            ef:RegisterUnitEvent("UNIT_CLASSIFICATION_CHANGED", unit)
-            ef:RegisterUnitEvent("UNIT_LEVEL", unit)
-            ef:RegisterUnitEvent("UNIT_THREAT_SITUATION_UPDATE", unit)
-            ef:RegisterUnitEvent("UNIT_THREAT_LIST_UPDATE", unit)
-            ef:RegisterUnitEvent("UNIT_SPELLCAST_START", unit)
-            ef:RegisterUnitEvent("UNIT_SPELLCAST_STOP", unit)
-            ef:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", unit)
-            ef:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", unit)
-            ef:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", unit)
-            ef:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit)
-            ef:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", unit)
-            ef:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", unit)
-            ef:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", unit)
-            ef:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", unit)
-            ef:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP", unit)
-            ef:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", unit)
-        end
+        -- Blizzard también llama este hook para "preview" (panel de opciones).
+        -- Filtrar cualquier token que no sea nameplate real.
+        if not unit or not unit:match("^nameplate%d+$") then return end
+        -- El apply lo gestiona NAME_PLATE_UNIT_ADDED, que garantiza que el token
+        -- ya está asignado. Este hook solo se usa para limpiar estado residual.
     end)
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit)
-        if unit then 
-            Minimizer.Core.ClearNeverSimplify(unit)
-            -- Al eliminar la nameplate el frame de eventos se destruye con su parent,
-            -- pero desregistramos explícitamente para no dejar eventos huérfanos.
-            local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
-            if nameplate and nameplate.MinimizerEventFrame then
-                nameplate.MinimizerEventFrame:UnregisterAllEvents()
-            end
-        end
+        -- Filtrar tokens no válidos (ej. "preview")
+        if not unit or not unit:match("^nameplate%d+$") then return end
+        Minimizer.Core.ClearNeverSimplify(unit)
     end)
 end
 
 if CompactUnitFrame_UpdateHealthColor then
     hooksecurefunc("CompactUnitFrame_UpdateHealthColor", function(unitFrame)
         local unit = unitFrame and unitFrame.unit
-        if unit then Minimizer.Core.ApplyToUnit(unit) end
+        -- Solo actuar si es una nameplate enemiga, no party frames ni retratos
+        if unit and unit:match("^nameplate%d+$") then
+            Minimizer.Core.ApplyToUnit(unit)
+        end
     end)
 end
-
