@@ -22,6 +22,30 @@ end
 local function GetSuperiorKind(unit, classification)
     if Minimizer.Utils.IsSecretValue(classification) then return nil end
     if classification == "worldboss" then return "boss" end
+
+    if classification == "elite" or classification == "rareelite" then
+        local level = UnitEffectiveLevel(unit)
+        local playerLevel = UnitEffectiveLevel("player")
+        
+        if not Minimizer.Utils.IsSecretValue(level) and not Minimizer.Utils.IsSecretValue(playerLevel)
+           and type(level) == "number" and type(playerLevel) == "number" then
+            
+            local isSkull = level == -1
+            local aboveOne = level >= playerLevel + 1
+            
+            if isSkull or aboveOne then
+                local aboveTwo = level >= playerLevel + 2
+                local lieutenant = (not isSkull) and UnitIsLieutenant and UnitIsLieutenant(unit)
+                
+                if not lieutenant and (isSkull or aboveTwo) then
+                    return "boss"
+                else
+                    return "miniboss"
+                end
+            end
+        end
+    end
+
     if UnitIsLieutenant and UnitIsLieutenant(unit) == true then return "miniboss" end
     return nil
 end
