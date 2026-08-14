@@ -14,7 +14,7 @@ Minimizer.Constants.HealthColors = {
     aggro = { 1.00, 0.00, 0.00 },
     castInterruptible = { 0.10, 1.00, 0.10 },
     dangerCast = { 0.28, 0.05, 0.38 },
-    superiorUninterruptible = { 0.00, 0.00, 0.00 },
+    superiorUninterruptible = { 0.50, 0.50, 0.50 },
 }
 Minimizer.Constants.CastColors = {
     ready = { 0.10, 1.00, 0.10 },

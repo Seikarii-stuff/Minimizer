@@ -88,7 +88,7 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate)
 
     -- Direct StatusBar coloring only. Secret interruptibility is resolved
     -- channel-by-channel in C-side, as documented by project.md.
-    if isCasting and baseKind ~= "focus" and baseKind ~= "absorb" and baseKind ~= "aggro"
+    if isCasting and isSuperior and baseKind ~= "focus" and baseKind ~= "absorb" and baseKind ~= "aggro"
         and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
         local castColor = COLORS.superiorUninterruptible
         r = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, castColor[1], color[1])
