@@ -112,29 +112,42 @@ if NamePlateDriverFrame then
         if unit then 
             C_Timer.After(0.01, function() Minimizer.Core.ApplyToUnit(unit) end) 
             
-            -- Dynamically register unit events for this nameplate
-            EventFrame:RegisterUnitEvent("UNIT_DISPLAYPOWER", unit)
-            EventFrame:RegisterUnitEvent("UNIT_CLASSIFICATION_CHANGED", unit)
-            EventFrame:RegisterUnitEvent("UNIT_LEVEL", unit)
-            EventFrame:RegisterUnitEvent("UNIT_THREAT_SITUATION_UPDATE", unit)
-            EventFrame:RegisterUnitEvent("UNIT_THREAT_LIST_UPDATE", unit)
-            EventFrame:RegisterUnitEvent("UNIT_SPELLCAST_START", unit)
-            EventFrame:RegisterUnitEvent("UNIT_SPELLCAST_STOP", unit)
-            EventFrame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", unit)
-            EventFrame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", unit)
-            EventFrame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", unit)
-            EventFrame:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit)
-            EventFrame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", unit)
-            EventFrame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", unit)
-            EventFrame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", unit)
-            EventFrame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", unit)
-            EventFrame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP", unit)
-            EventFrame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", unit)
+            local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
+            if nameplate then
+                if not nameplate.MinimizerEventFrame then
+                    nameplate.MinimizerEventFrame = CreateFrame("Frame", nil, nameplate)
+                    nameplate.MinimizerEventFrame:SetScript("OnEvent", function(self, event, evUnit, ...)
+                        OnEvent(EventFrame, event, evUnit, ...)
+                    end)
+                end
+                local ef = nameplate.MinimizerEventFrame
+                ef:RegisterUnitEvent("UNIT_DISPLAYPOWER", unit)
+                ef:RegisterUnitEvent("UNIT_CLASSIFICATION_CHANGED", unit)
+                ef:RegisterUnitEvent("UNIT_LEVEL", unit)
+                ef:RegisterUnitEvent("UNIT_THREAT_SITUATION_UPDATE", unit)
+                ef:RegisterUnitEvent("UNIT_THREAT_LIST_UPDATE", unit)
+                ef:RegisterUnitEvent("UNIT_SPELLCAST_START", unit)
+                ef:RegisterUnitEvent("UNIT_SPELLCAST_STOP", unit)
+                ef:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", unit)
+                ef:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", unit)
+                ef:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", unit)
+                ef:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit)
+                ef:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", unit)
+                ef:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+                ef:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", unit)
+                ef:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", unit)
+                ef:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP", unit)
+                ef:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", unit)
+            end
         end
     end)
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit)
         if unit then 
             Minimizer.Core.ClearNeverSimplify(unit)
+            local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
+            if nameplate and nameplate.MinimizerEventFrame then
+                nameplate.MinimizerEventFrame:UnregisterAllEvents()
+            end
         end
     end)
 end
