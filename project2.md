@@ -35,7 +35,8 @@
 ### Definiciones
 
 - **Superior**: `boss` o `miniboss` (morado). Determinado por nivel skull / worldboss / elite+2 niveles.
-- **Inferior**: CUALQUIER unidad que no sea superior — melee (blanco), caster/hasmana (azul), trivial (negro), esbirros, menores. Los azules no tienen regla especial de cast; siguen la misma leyenda que cualquier inferior.
+- **Inferior**: CUALQUIER unidad que no sea superior — melee (blanco), caster/hasmana (azul), trivial (negro), esbirros, menores.  Los azules (caster/hasmana) NO siguen estas mismas reglas de cast, SOLO CAMBIA DE COLOR CON AGRO,FOCUS O SHIELD.
+
 - **Persistente**: el flag/color permanece incluso después de que termine el cast o el escudo.
 - **Temporal**: el flag/color desaparece en cuanto desaparece la condición.
 
