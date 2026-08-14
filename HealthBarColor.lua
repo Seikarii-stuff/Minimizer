@@ -69,8 +69,7 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
           5. Inferior (cualquier no-superior) casteando interrumpible o canalizando
                       → verde PERSISTENTE (flag permanece tras el cast).
           6. Inferior casteando ininterrumpible → gris TEMPORAL (solo mientras castea).
-          Los azules (caster/hasmana) siguen estas mismas reglas de cast; no cambian
-          de color por ser azules, cambian por lo mismo que cualquier otro inferior.
+        Los azules (caster/hasmana) NO siguen estas mismas reglas de cast, SOLO CAMBIA DE COLOR CON AGRO,FOCUS O SHIELD.
     ]]
 
     -- displayKind ya resuelve la prioridad focus > aggro > absorb > eliteType
