@@ -29,6 +29,12 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
         HookIndicator(indicator, healthBar)
     end
 
+    -- Las nameplates se reutilizan; resetear el color persistente si cambia la unidad
+    if nameplate.MinimizerHealthBarColorUnit ~= unit then
+        nameplate.MinimizerHealthBarColorUnit = unit
+        nameplate.MinimizerPersistentCastColorKind = nil
+    end
+
     -- Fallback defensivo: si por alguna razon se llama sin snapshot (no
     -- deberia pasar tras la Fase 3, pero por si acaso algun caller viejo
     -- queda suelto), recalcula localmente en vez de crashear.
@@ -43,18 +49,62 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     local color = COLORS[baseKind] or COLORS.melee
     local r, g, b = color[1], color[2], color[3]
 
-    local isCasting, uninterruptible
+    local isCasting, rawUninterruptible
     if snapshot then
-        isCasting, uninterruptible = snapshot.isCasting, snapshot.isUninterruptible
+        isCasting = snapshot.isCasting
+        rawUninterruptible = snapshot.rawUninterruptible
+        if rawUninterruptible == nil then rawUninterruptible = snapshot.isUninterruptible end
     else
-        isCasting, _, uninterruptible = Minimizer.Cast.GetState(unit)
+        isCasting, _, rawUninterruptible = Minimizer.Cast.GetState(unit)
     end
-    if uninterruptible == nil then uninterruptible = false end
-    local isSuperior = baseKind == "boss" or baseKind == "miniboss"
+    if rawUninterruptible == nil then rawUninterruptible = false end
 
-    if isCasting and isSuperior and baseKind ~= "focus" and baseKind ~= "absorb" and baseKind ~= "aggro" then
-        local castColor = COLORS.superiorUninterruptible
-        r, g, b = Minimizer.Utils.EvaluateColorRGB(uninterruptible, castColor, color)
+    --[[
+        LEYENDA M+ (NO MODIFICAR SIN PERMISO):
+        Prioridad descendente — la primera regla que aplica gana:
+          1. Focus    → amarillo, sin cambio de simplificacion.
+          2. Aggro    → rojo gestionado por Blizzard, dessimp TEMPORAL.
+          3. Shield   → rosa (absorb), dessimp TEMPORAL.
+          4. Superior (boss/miniboss) casteando ininterrumpible → gris TEMPORAL.
+          5. Inferior (cualquier no-superior) casteando interrumpible o canalizando
+                      → verde PERSISTENTE (flag permanece tras el cast).
+          6. Inferior casteando ininterrumpible → gris TEMPORAL (solo mientras castea).
+          Los azules (caster/hasmana) siguen estas mismas reglas de cast; no cambian
+          de color por ser azules, cambian por lo mismo que cualquier otro inferior.
+    ]]
+
+    -- displayKind ya resuelve la prioridad focus > aggro > absorb > eliteType
+    -- (calculado en Core.BuildSnapshot). Aqui solo leemos el resultado.
+    local isSuperior = baseKind == "boss" or baseKind == "miniboss"
+    local isSpecial  = baseKind == "focus" or baseKind == "absorb" or baseKind == "aggro"
+
+    if not isSpecial then
+        if isSuperior then
+            -- Regla 4: superior casteando ininterrumpible -> gris TEMPORAL.
+            -- Si el cast es interrumpible, el superior conserva su color base (morado).
+            if isCasting and rawUninterruptible == true then
+                local c = COLORS.superiorUninterruptible
+                r, g, b = c[1], c[2], c[3]
+            end
+        else
+            -- Reglas 5 & 6: CUALQUIER inferior (melee, caster, trivial, etc.)
+            if isCasting then
+                if rawUninterruptible == true then
+                    -- Ininterrumpible -> gris TEMPORAL. No tocar el flag persistente.
+                    local c = COLORS.superiorUninterruptible
+                    r, g, b = c[1], c[2], c[3]
+                else
+                    -- Interrumpible o canal -> verde PERSISTENTE.
+                    nameplate.MinimizerPersistentCastColorKind = "castInterruptible"
+                    local c = COLORS.castInterruptible
+                    r, g, b = c[1], c[2], c[3]
+                end
+            elseif nameplate.MinimizerPersistentCastColorKind == "castInterruptible" then
+                -- Ya casteo algo interrumpible antes: mantener verde aunque ya no castee.
+                local c = COLORS.castInterruptible
+                r, g, b = c[1], c[2], c[3]
+            end
+        end
     end
 
     Minimizer.Utils.GuardedCall(healthBar, "MinimizerHealthColorApplying", function()

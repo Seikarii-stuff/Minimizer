@@ -16,7 +16,41 @@
 
 ---
 
+## LEYENDA M+ — CONVENCIÓN DE COLORES Y SIMPLIFICACIÓN (NO MODIFICAR SIN PERMISO)
+
+> Esta es la leyenda de Mythic+ estándar que sigue TODO el mundo.
+> **No cambiar nada de esta sección ni la lógica que la implementa sin permiso explícito.**
+
+### Prioridad de color (descendente — la primera regla que aplica gana)
+
+| Prioridad | Condición | Color | Simplificación |
+|-----------|-----------|-------|----------------|
+| 1 | **Focus** | Amarillo | Sin cambio (focus no altera simplificación) |
+| 2 | **Aggro** (situación 3) | Rojo gestionado por Blizzard | TEMPORAL (mientras dura) |
+| 3 | **Shield/Absorb** activo | Rosa (`absorb`) | TEMPORAL (mientras dura) |
+| 4 | **Superior** (boss/miniboss) + cast **ininterrumpible** | Gris | TEMPORAL (solo mientras castea) |
+| 5 | **Inferior** (cualquier no-superior) + cast **interrumpible** o canalización | Verde **PERSISTENTE** | **PERSISTENTE** (flag permanente) |
+| 6 | **Inferior** + cast **ininterrumpible** | Gris | TEMPORAL (solo mientras castea) |
+
+### Definiciones
+
+- **Superior**: `boss` o `miniboss` (morado). Determinado por nivel skull / worldboss / elite+2 niveles.
+- **Inferior**: CUALQUIER unidad que no sea superior — melee (blanco), caster/hasmana (azul), trivial (negro), esbirros, menores. Los azules no tienen regla especial de cast; siguen la misma leyenda que cualquier inferior.
+- **Persistente**: el flag/color permanece incluso después de que termine el cast o el escudo.
+- **Temporal**: el flag/color desaparece en cuanto desaparece la condición.
+
+### Rationale M+
+
+En Mythic+, cualquier inferior que castee algo interrumpible ES wipe potencial si no se para.
+Verde persistente: el grupo sabe que esa unidad ya demostró capacidad de castear y hay que
+priorizarla incluso después del cast actual. Gris (ininterrumpible): peligroso pero no interrumpible.
+Los superiores son siempre peligrosos (morado); solo se avisa con gris temporal cuando su cast
+es ininterrumpible, pues si es interrumpible el grupo ya sabe que tiene que interrupirlo.
+
+---
+
 ## 0. Mapa de módulos (estado actual, orden de carga del .toc)
+
 
 ```
 Bootstrap.lua       -> Minimizer (inicialización global, ADDON_LOADED)

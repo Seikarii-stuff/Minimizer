@@ -153,16 +153,16 @@ do
         cast = { name = "Test", startTime = 0, endTime = 2000, uninterruptible = true }
     })
     simplify, reason = addonTable.Decision.ShouldSimplifyUnit("d_cast_uninterr", nil)
-    check(simplify == false and reason == "persistent",
-        "Decision: cast uninterrumpible = persistent (no simplifica)")
+    check(simplify == false and reason == "temporal",
+        "Decision: cast ininterrumpible inferior = temporal dessimp (solo mientras castea)")
 
     Mocks.CreateTestUnit("d_cast_interr", {
         level = 70, classification = "normal", faction = "Horde",
         cast = { name = "Test", startTime = 0, endTime = 2000, uninterruptible = false }
     })
     simplify, reason = addonTable.Decision.ShouldSimplifyUnit("d_cast_interr", nil)
-    check(simplify == false and reason == "temporal",
-        "Decision: cast interrumpible = temporal (no simplifica mientras castea)")
+    check(simplify == false and reason == "no simp",
+        "Decision: cast interrumpible inferior = dessimp PERSISTENTE (wipe potencial en M+)")
 
     Mocks.CreateTestUnit("d_aggro", {
         level = 70, classification = "normal", faction = "Horde", threatSituation = 3
@@ -218,8 +218,105 @@ do
         "Threat: situacion 0 NO debe tratarse como aggro (cuidado con truthiness)")
 end
 
+-- --- TEST GROUP 5: HealthBarColor — Leyenda M+ ---
+--   Inferior interrumpible  -> verde PERSISTENTE
+--   Inferior ininterrumpible -> gris TEMPORAL
+--   Superior ininterrumpible -> gris TEMPORAL
+--   Superior interrumpible   -> morado (sin cambio)
+do
+    -- 1a. Melee (blanco) casteando interrumpible -> verde
+    Mocks.CreateTestUnit("nameplate10", {
+        level = 70, classification = "normal", faction = "Horde", powerType = 1,
+        cast = { name = "Melee Spell", startTime = 0, endTime = 2000, uninterruptible = false }
+    })
+    local npMelee = Mocks.CreateTestNameplate("nameplate10")
+    addonTable.Cast.InvalidateState("nameplate10")
+    addonTable.Core.ApplyToUnit("nameplate10")
+    local hbMelee = addonTable.Utils.GetHealthBar(npMelee)
+    local r, g, b = hbMelee:GetStatusBarColor()
+    check(math.abs(r - 0.10) < 0.01 and math.abs(g - 1.00) < 0.01 and math.abs(b - 0.10) < 0.01,
+        "HealthBarColor: inferior (melee) castea interrumpible -> verde")
+
+    -- 1b. Melee termina el cast -> persiste verde (flag)
+    Mocks.units["nameplate10"].cast = nil
+    addonTable.Cast.InvalidateState("nameplate10")
+    addonTable.Core.ApplyToUnit("nameplate10")
+    r, g, b = hbMelee:GetStatusBarColor()
+    check(math.abs(r - 0.10) < 0.01 and math.abs(g - 1.00) < 0.01 and math.abs(b - 0.10) < 0.01,
+        "HealthBarColor: inferior (melee) termina cast -> PERSISTE verde (flag)")
+
+    -- 2a. Caster (azul) casteando interrumpible -> verde PERSISTENTE (misma leyenda que melee)
+    Mocks.CreateTestUnit("nameplate13", {
+        level = 70, classification = "normal", faction = "Horde", powerType = 0, -- hasmana
+        cast = { name = "Caster Frostbolt", startTime = 0, endTime = 2500, uninterruptible = false }
+    })
+    local npCaster = Mocks.CreateTestNameplate("nameplate13")
+    addonTable.Cast.InvalidateState("nameplate13")
+    addonTable.Core.ApplyToUnit("nameplate13")
+    local hbCaster = addonTable.Utils.GetHealthBar(npCaster)
+    r, g, b = hbCaster:GetStatusBarColor()
+    check(math.abs(r - 0.10) < 0.01 and math.abs(g - 1.00) < 0.01 and math.abs(b - 0.10) < 0.01,
+        "HealthBarColor: inferior (caster/azul) castea interrumpible -> verde")
+
+    -- 2b. Caster termina cast -> persiste verde
+    Mocks.units["nameplate13"].cast = nil
+    addonTable.Cast.InvalidateState("nameplate13")
+    addonTable.Core.ApplyToUnit("nameplate13")
+    r, g, b = hbCaster:GetStatusBarColor()
+    check(math.abs(r - 0.10) < 0.01 and math.abs(g - 1.00) < 0.01 and math.abs(b - 0.10) < 0.01,
+        "HealthBarColor: inferior (caster/azul) termina cast -> PERSISTE verde (flag)")
+
+    -- 3. Inferior casteando ininterrumpible -> gris TEMPORAL
+    Mocks.CreateTestUnit("nameplate14", {
+        level = 70, classification = "normal", faction = "Horde", powerType = 1,
+        cast = { name = "Unint Spell", startTime = 0, endTime = 2000, uninterruptible = true }
+    })
+    local npMeleeUnint = Mocks.CreateTestNameplate("nameplate14")
+    addonTable.Cast.InvalidateState("nameplate14")
+    addonTable.Core.ApplyToUnit("nameplate14")
+    local hbMeleeUnint = addonTable.Utils.GetHealthBar(npMeleeUnint)
+    r, g, b = hbMeleeUnint:GetStatusBarColor()
+    check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01,
+        "HealthBarColor: inferior casteando ininterrumpible -> gris TEMPORAL")
+
+    -- 3b. Inferior termina cast ininterrumpible -> vuelve a su color base (no persiste)
+    Mocks.units["nameplate14"].cast = nil
+    addonTable.Cast.InvalidateState("nameplate14")
+    addonTable.Core.ApplyToUnit("nameplate14")
+    r, g, b = hbMeleeUnint:GetStatusBarColor()
+    check(math.abs(r - 1.00) < 0.01 and math.abs(g - 1.00) < 0.01 and math.abs(b - 1.00) < 0.01,
+        "HealthBarColor: inferior termina cast ininterrumpible -> vuelve blanco (no persiste)")
+
+    -- 4. Boss casteando ininterrumpible -> gris TEMPORAL
+    Mocks.CreateTestUnit("nameplate11", {
+        level = -1, classification = "elite", faction = "Horde",
+        cast = { name = "Boss MegaCast", startTime = 0, endTime = 2000, uninterruptible = true }
+    })
+    local npBossUnint = Mocks.CreateTestNameplate("nameplate11")
+    addonTable.Cast.InvalidateState("nameplate11")
+    addonTable.Core.ApplyToUnit("nameplate11")
+    local hbBossUnint = addonTable.Utils.GetHealthBar(npBossUnint)
+    r, g, b = hbBossUnint:GetStatusBarColor()
+    check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01,
+        "HealthBarColor: boss (superior) casteando ininterrumpible -> gris TEMPORAL")
+
+    -- 5. Boss casteando interrumpible -> permanece morado (sin cambio)
+    Mocks.CreateTestUnit("nameplate12", {
+        level = -1, classification = "elite", faction = "Horde",
+        cast = { name = "Boss NormalCast", startTime = 0, endTime = 2000, uninterruptible = false }
+    })
+    local npBossInt = Mocks.CreateTestNameplate("nameplate12")
+    addonTable.Cast.InvalidateState("nameplate12")
+    addonTable.Core.ApplyToUnit("nameplate12")
+    local hbBossInt = addonTable.Utils.GetHealthBar(npBossInt)
+    r, g, b = hbBossInt:GetStatusBarColor()
+    check(math.abs(r - 0.65) < 0.01 and math.abs(g - 0.25) < 0.01 and math.abs(b - 1.00) < 0.01,
+        "HealthBarColor: boss (superior) casteando interrumpible -> permanece morado")
+end
+
 -- --- RESUMEN FINAL ---
 print(string.format("\n=== SMOKE TEST RESULTS: %d/%d passed ===\n", testsRun - testsFailed, testsRun))
 if testsFailed > 0 then
     error(testsFailed .. " test(s) failed. Revisa los FAIL de arriba antes de continuar.")
 end
+

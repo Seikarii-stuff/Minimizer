@@ -53,11 +53,12 @@ function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
     end
     if isCasting then
         if isUninterruptible == true then
-            -- Cast imposible de interrumpir: la unidad siempre esta "activa" mientras castea
-            return false, "persistent"
-        else
-            -- Cast interrumpible: temporal, solo mientras dure el cast
+            -- Cast ininterrumpible: desimplificar TEMPORALMENTE solo mientras dure el cast.
             return false, "temporal"
+        else
+            -- Cast interrumpible o canal: unidad peligrosa de forma PERSISTENTE
+            -- (en M+ cualquier inferior que castee es wipe potencial).
+            return false, "no simp"
         end
     end
 

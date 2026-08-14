@@ -114,6 +114,13 @@ function FrameMixin:Show() self.shown = true end
 function FrameMixin:IsShown() return self.shown end
 function FrameMixin:SetAlpha(alpha) self.alpha = alpha end
 function FrameMixin:GetAlpha() return self.alpha or 1 end
+function FrameMixin:SetStatusBarColor(r, g, b, a) self.statusBarColor = { r, g, b, a or 1 } end
+function FrameMixin:GetStatusBarColor()
+    if self.statusBarColor then
+        return self.statusBarColor[1], self.statusBarColor[2], self.statusBarColor[3], self.statusBarColor[4]
+    end
+    return 1, 1, 1, 1
+end
 
 -- Explicit dummy methods instead of catch-all __index
 local function dummyMethod() end
@@ -169,8 +176,15 @@ _G.C_Timer = {
             })
         end
     end,
-    NewTicker = function(duration, callback, iterations)
-        -- Not implementing full ticker for now
+}
+
+_G.C_CurveUtil = {
+    EvaluateColorValueFromBoolean = function(state, valueIfTrue, valueIfFalse)
+        if state == true then
+            return valueIfTrue
+        else
+            return valueIfFalse
+        end
     end
 }
 
