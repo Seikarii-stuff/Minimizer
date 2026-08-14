@@ -331,6 +331,7 @@ Son, en la práctica, **hooks de debugging manual** (se pueden setear a mano des
 formalizaron como feature. No es taint-unsafe, pero es deuda de diseño: si el refactor
 expone un panel de opciones, falta decidir si esto se vuelve una opción real o se
 elimina.
+NOTA DEL DEV: EVALUAR SI SOLO SON DE DEBUGGING Y NO AFECTAN AL CODIGO DE PRODUCCION Y BORRARLAS
 
 ### 🟡 3.4 Cobertura incompleta de la tabla de interrupts por clase
 
@@ -349,17 +350,7 @@ spell" (`IsSpellKnownOrInSpellBook` / `IsPlayerSpell` como fallback en cascada),
 el peor caso es "no se muestra ningún indicator de interrupt para esa spec", no un
 crash ni taint — pero es una limitación funcional a tener en cuenta, no un bug de
 seguridad.
-Nota: añadir los faltantes y migrar a algun tipo de data.lua para cortes y para la feature futura de cds defensivos/ofensivos
-
-### 🟢 3.5 Higiene de archivo — mojibake / encoding mixto en `Core.lua`
-
-Hay comentarios con caracteres corruptos, p. ej.
-`-- La clase de enemigo puede cambiar durante una transformaciÃ³n.` (debería ser
-"transformación"). Es evidencia de que el archivo fue guardado/editado alguna vez con
-una codificación distinta a UTF-8 consistente (o pasó por una herramienta que
-rompió tildes). No afecta la ejecución (son comentarios), pero **antes de reescribir
-Core.lua conviene re-guardar todo el árbol como UTF-8 sin BOM** para que el diff del
-refactor no arrastre basura de encoding mezclada con cambios reales.
+Nota: añadir los faltantes y preparar para la feature futura de cds defensivos/ofensivos que se mostraran sobre el target. (el cd ofensivo de 1.5m/2m/3m de cada clase y spec y su personal de 1-2m)
 
 ---
 
