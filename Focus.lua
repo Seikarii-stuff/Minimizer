@@ -16,18 +16,28 @@ local cooldown = CreateFrame("Cooldown", "MinimizerFocusCooldown", frame, "Coold
 cooldown:SetAllPoints()
 cooldown:SetDrawEdge(true)
 if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
+if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
+if cooldown.SetReverse then cooldown:SetReverse(true) end
 cooldown:SetSwipeTexture("Interface\\HUD\\UI-HUD-CoolDown-Swipe")
 
 local function UpdateCooldown()
     local interruptSpellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
         and Minimizer.Interrupt.GetSpellID()
-    if not interruptSpellID or not C_Spell or not C_Spell.GetSpellCooldown then return end
-    local info = C_Spell.GetSpellCooldown(interruptSpellID)
-    if not info then return end
-    if cooldown.SetCooldownFromExpression then
-        cooldown:SetCooldownFromExpression(interruptSpellID)
-    elseif cooldown.SetCooldownTable then
-        cooldown:SetCooldownTable(info)
+    if not interruptSpellID or not C_Spell then return end
+    local duration = C_Spell.GetSpellCooldownDuration
+        and C_Spell.GetSpellCooldownDuration(interruptSpellID)
+    if duration and cooldown.SetCooldownFromDurationObject then
+        cooldown:SetCooldownFromDurationObject(duration)
+        if duration.IsZero and cooldown.SetAlphaFromBoolean then
+            cooldown:SetAlphaFromBoolean(duration:IsZero(), 0, 1)
+        end
+    elseif C_Spell.GetSpellCooldown then
+        local info = C_Spell.GetSpellCooldown(interruptSpellID)
+        if info and cooldown.SetCooldownFromExpression then
+            cooldown:SetCooldownFromExpression(interruptSpellID)
+        elseif info and cooldown.SetCooldownTable then
+            cooldown:SetCooldownTable(info)
+        end
     end
     if Minimizer.Interrupt and Minimizer.Interrupt.IsReady
         and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
