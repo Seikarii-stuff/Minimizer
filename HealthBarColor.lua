@@ -49,15 +49,25 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     local color = COLORS[baseKind] or COLORS.melee
     local r, g, b = color[1], color[2], color[3]
 
-    local isCasting, rawUninterruptible
+    local isCasting, uninterruptible, rawUninterruptible
     if snapshot then
         isCasting = snapshot.isCasting
         rawUninterruptible = snapshot.rawUninterruptible
         if rawUninterruptible == nil then rawUninterruptible = snapshot.isUninterruptible end
+        if rawUninterruptible == nil then
+            uninterruptible = false
+        else
+            if Minimizer and Minimizer.Utils and Minimizer.Utils.IsSecretValue and Minimizer.Utils.IsSecretValue(rawUninterruptible) then
+                uninterruptible = nil
+            else
+                uninterruptible = (rawUninterruptible == true)
+            end
+        end
     else
-        isCasting, _, rawUninterruptible = Minimizer.Cast.GetState(unit)
+        isCasting, uninterruptible, rawUninterruptible = Minimizer.Cast.GetState(unit)
     end
     if rawUninterruptible == nil then rawUninterruptible = false end
+    if uninterruptible == nil then uninterruptible = false end
 
     --[[
         LEYENDA M+ (NO MODIFICAR SIN PERMISO):
@@ -75,20 +85,21 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     -- displayKind ya resuelve la prioridad focus > aggro > absorb > eliteType
     -- (calculado en Core.BuildSnapshot). Aqui solo leemos el resultado.
     local isSuperior = baseKind == "boss" or baseKind == "miniboss"
-    local isSpecial  = baseKind == "focus" or baseKind == "absorb" or baseKind == "aggro"
+    -- 'Azules' (caster) no siguen las reglas de casteo; solo cambian por focus/aggro/absorb
+    local isSpecial  = baseKind == "focus" or baseKind == "absorb" or baseKind == "aggro" or baseKind == "caster"
 
     if not isSpecial then
         if isSuperior then
             -- Regla 4: superior casteando ininterrumpible -> gris TEMPORAL.
             -- Si el cast es interrumpible, el superior conserva su color base (morado).
-            if isCasting and rawUninterruptible == true then
+            if isCasting and uninterruptible then
                 local c = COLORS.superiorUninterruptible
                 r, g, b = c[1], c[2], c[3]
             end
         else
             -- Reglas 5 & 6: CUALQUIER inferior (melee, caster, trivial, etc.)
             if isCasting then
-                if rawUninterruptible == true then
+                if uninterruptible then
                     -- Ininterrumpible -> gris TEMPORAL. No tocar el flag persistente.
                     local c = COLORS.superiorUninterruptible
                     r, g, b = c[1], c[2], c[3]
