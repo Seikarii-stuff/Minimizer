@@ -88,4 +88,143 @@ Mocks.AdvanceTime(0.5)
 print("Firing NAME_PLATE_UNIT_REMOVED for nameplate1")
 Mocks.FireEvent("NAME_PLATE_UNIT_REMOVED", "nameplate1")
 
-print("--- Smoke Test Completed Successfully ---")
+print("--- Smoke Test Loaded Successfully ---")
+
+-- ============================================================
+-- TEST SUITE: aserciones de comportamiento (no solo carga)
+-- ============================================================
+local testsRun = 0
+local testsFailed = 0
+
+local function check(condition, description)
+    testsRun = testsRun + 1
+    if not condition then
+        testsFailed = testsFailed + 1
+        print("|cffff0000FAIL|r: " .. description)
+    else
+        print("|cff00ff00OK|r: " .. description)
+    end
+end
+
+-- --- Reset: limpiar unidades/nameplates de la simulación anterior ---
+Mocks.units = {}
+Mocks.nameplates = {}
+
+-- --- TEST GROUP 1: Classification.GetEliteType ---
+do
+    Mocks.CreateTestUnit("player", { level = 70, faction = "Alliance", isPlayer = true, class = "WARRIOR" })
+
+    Mocks.CreateTestUnit("t_trivial", { level = 5, classification = "normal", faction = "Horde" })
+    check(addonTable.Classification.GetEliteType("t_trivial") == "trivial",
+        "Classification: nivel muy bajo respecto al jugador = trivial")
+
+    Mocks.CreateTestUnit("t_trivial2", { level = 70, classification = "trivial", faction = "Horde" })
+    check(addonTable.Classification.GetEliteType("t_trivial2") == "trivial",
+        "Classification: clasificacion nativa 'trivial' = trivial")
+
+    Mocks.CreateTestUnit("t_boss_skull", { level = -1, classification = "elite", faction = "Horde", isLieutenant = false })
+    check(addonTable.Classification.GetEliteType("t_boss_skull") == "boss",
+        "Classification: elite con nivel skull (-1) = boss")
+
+    Mocks.CreateTestUnit("t_miniboss_lt", { level = 70, classification = "normal", faction = "Horde", isLieutenant = true })
+    check(addonTable.Classification.GetEliteType("t_miniboss_lt") == "miniboss",
+        "Classification: lieutenant no-elite = miniboss")
+
+    Mocks.CreateTestUnit("t_caster", { level = 70, classification = "normal", faction = "Horde", powerType = 0 })
+    check(addonTable.Classification.GetEliteType("t_caster") == "caster",
+        "Classification: con mana y sin elite/trivial = caster")
+
+    Mocks.CreateTestUnit("t_melee", { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
+    check(addonTable.Classification.GetEliteType("t_melee") == "melee",
+        "Classification: sin mana y sin elite/trivial = melee")
+end
+
+-- --- TEST GROUP 2: Decision.ShouldSimplifyUnit ---
+do
+    MinimizerDB.simplifyPercent = 50 -- necesario o Decision devuelve "disabled" siempre
+
+    Mocks.CreateTestUnit("d_friendly", { level = 70, classification = "normal", faction = "Alliance" })
+    local simplify, reason = addonTable.Decision.ShouldSimplifyUnit("d_friendly", nil)
+    check(simplify == false and reason == "friendly",
+        "Decision: unidad amiga nunca se simplifica")
+
+    Mocks.CreateTestUnit("d_boss", { level = -1, classification = "elite", faction = "Horde" })
+    simplify, reason = addonTable.Decision.ShouldSimplifyUnit("d_boss", nil)
+    check(simplify == false and reason == "no simp",
+        "Decision: boss nunca se simplifica")
+
+    Mocks.CreateTestUnit("d_cast_uninterr", {
+        level = 70, classification = "normal", faction = "Horde",
+        cast = { name = "Test", startTime = 0, endTime = 2000, uninterruptible = true }
+    })
+    simplify, reason = addonTable.Decision.ShouldSimplifyUnit("d_cast_uninterr", nil)
+    check(simplify == false and reason == "persistent",
+        "Decision: cast uninterrumpible = persistent (no simplifica)")
+
+    Mocks.CreateTestUnit("d_cast_interr", {
+        level = 70, classification = "normal", faction = "Horde",
+        cast = { name = "Test", startTime = 0, endTime = 2000, uninterruptible = false }
+    })
+    simplify, reason = addonTable.Decision.ShouldSimplifyUnit("d_cast_interr", nil)
+    check(simplify == false and reason == "temporal",
+        "Decision: cast interrumpible = temporal (no simplifica mientras castea)")
+
+    Mocks.CreateTestUnit("d_aggro", {
+        level = 70, classification = "normal", faction = "Horde", threatSituation = 3
+    })
+    simplify, reason = addonTable.Decision.ShouldSimplifyUnit("d_aggro", nil)
+    check(simplify == false and reason == "temporal",
+        "Decision: con aggro del jugador = temporal (no simplifica)")
+
+    Mocks.CreateTestUnit("d_normal", { level = 70, classification = "normal", faction = "Horde" })
+    simplify, reason = addonTable.Decision.ShouldSimplifyUnit("d_normal", nil)
+    check(simplify == true and reason == "simplify",
+        "Decision: unidad normal sin nada especial SI se simplifica")
+
+    MinimizerDB.simplifyPercent = 0
+    simplify, reason = addonTable.Decision.ShouldSimplifyUnit("d_normal", nil)
+    check(simplify == false and reason == "disabled",
+        "Decision: simplifyPercent=0 desactiva la simplificacion")
+    MinimizerDB.simplifyPercent = 50 -- restaurar para no afectar tests siguientes
+end
+
+-- --- TEST GROUP 3: Cast.GetState cachea y se invalida ---
+do
+    Mocks.CreateTestUnit("c_unit", {
+        level = 70, faction = "Horde",
+        cast = { name = "Test", startTime = 0, endTime = 2000, uninterruptible = false }
+    })
+    local isCasting1 = addonTable.Cast.GetState("c_unit")
+    check(isCasting1 == true, "Cast: detecta casting activo")
+
+    -- Cambiar el estado subyacente SIN invalidar: debe devolver el valor cacheado (viejo)
+    Mocks.units["c_unit"].cast = nil
+    local isCasting2 = addonTable.Cast.GetState("c_unit")
+    check(isCasting2 == true, "Cast: sin invalidar, devuelve el valor CACHEADO aunque el estado real cambio")
+
+    -- Ahora invalidar y volver a leer: debe reflejar el estado real (nil = false)
+    addonTable.Cast.InvalidateState("c_unit")
+    local isCasting3 = addonTable.Cast.GetState("c_unit")
+    check(isCasting3 == false, "Cast: tras InvalidateState, refleja el estado real actualizado")
+end
+
+-- --- TEST GROUP 4: Threat.PlayerHasAggro (no-tank) ---
+do
+    Mocks.CreateTestUnit("th_aggro", { level = 70, faction = "Horde", threatSituation = 3 })
+    check(addonTable.Threat.PlayerHasAggro("th_aggro") == true,
+        "Threat: situacion 3 = PlayerHasAggro true")
+
+    Mocks.CreateTestUnit("th_noaggro", { level = 70, faction = "Horde", threatSituation = 1 })
+    check(addonTable.Threat.PlayerHasAggro("th_noaggro") == false,
+        "Threat: situacion 1 = PlayerHasAggro false")
+
+    Mocks.CreateTestUnit("th_zero", { level = 70, faction = "Horde", threatSituation = 0 })
+    check(addonTable.Threat.PlayerHasAggro("th_zero") == false,
+        "Threat: situacion 0 NO debe tratarse como aggro (cuidado con truthiness)")
+end
+
+-- --- RESUMEN FINAL ---
+print(string.format("\n=== SMOKE TEST RESULTS: %d/%d passed ===\n", testsRun - testsFailed, testsRun))
+if testsFailed > 0 then
+    error(testsFailed .. " test(s) failed. Revisa los FAIL de arriba antes de continuar.")
+end
