@@ -18,6 +18,11 @@ if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
 if cooldown.SetReverse then cooldown:SetReverse(true) end
 cooldown:SetSwipeTexture("Interface\\HUD\\UI-HUD-CoolDown-Swipe")
 
+local ccFrame, ccIcon, ccCooldown
+if Minimizer.Widgets and Minimizer.Widgets.CreateCDWidget then
+    ccFrame, ccIcon, ccCooldown = Minimizer.Widgets.CreateCDWidget("MinimizerFocusMassCC", 30)
+end
+
 local function UpdateCooldown()
     local interruptSpellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
         and Minimizer.Interrupt.GetSpellID()
@@ -50,22 +55,48 @@ end
 
 
 function Focus:UpdateFace()
-    if MinimizerDB.focusIndicator ~= "face" then frame:Hide(); return end
-    if not UnitExists("focus") or UnitIsDead("focus") then frame:Hide(); return end
+    if MinimizerDB.focusIndicator ~= "face" then 
+        frame:Hide()
+        if ccFrame then ccFrame:Hide() end
+        return 
+    end
+    if not UnitExists("focus") or UnitIsDead("focus") then 
+        frame:Hide()
+        if ccFrame then ccFrame:Hide() end
+        return 
+    end
     local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit
         and C_NamePlate.GetNamePlateForUnit("focus")
-    if not plate then frame:Hide(); return end
+    if not plate then 
+        frame:Hide()
+        if ccFrame then ccFrame:Hide() end
+        return 
+    end
     SetPortraitTexture(portrait, "player")
     frame:ClearAllPoints()
     frame:SetPoint("BOTTOM", plate, "TOP", 0, 10)
     frame:Show()
     UpdateCooldown()
+
+    if ccFrame and Minimizer.Widgets and Minimizer.Widgets.GetCDSpellID then
+        local ccID = Minimizer.Widgets.GetCDSpellID(Minimizer.Data.MASS_CC_SPELLS)
+        local showCC = Minimizer.Widgets.UpdateCDWidget(ccFrame, ccIcon, ccCooldown, ccID)
+        if showCC then
+            ccFrame:ClearAllPoints()
+            ccFrame:SetPoint("LEFT", frame, "RIGHT", 5, 0)
+        else
+            ccFrame:Hide()
+        end
+    end
 end
 
 function Focus:SetMode(mode)
     if mode ~= "arrows" and mode ~= "face" then return end
     MinimizerDB.focusIndicator = mode
-    if mode ~= "face" then frame:Hide() end
+    if mode ~= "face" then 
+        frame:Hide() 
+        if ccFrame then ccFrame:Hide() end
+    end
     if Minimizer.Core then Minimizer.Core.ApplyToAll() end
 end
 

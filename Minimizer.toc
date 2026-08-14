@@ -24,5 +24,6 @@ Markers.lua
 HealthBarColor.lua
 CastingBar.lua
 Focus.lua
+Target.lua
 Events.lua
 SlashCommands.lua

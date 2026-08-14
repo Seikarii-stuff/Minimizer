@@ -21,8 +21,15 @@ Minimizer.Data.INTERRUPT_SPELLS = {
 
 Minimizer.Data.OFFENSIVE_CDS = {
     -- Preparado para CDs ofensivos (1.5m/2m/3m por clase y spec)
+    DEATHKNIGHT = {439843}, -- Marca de segador (debug)
 }
 
 Minimizer.Data.DEFENSIVE_CDS = {
     -- Preparado para CDs defensivos (personales de 1-2m por clase y spec)
+    DEATHKNIGHT = {49028}, -- Arma de runa danzante (debug)
+}
+
+Minimizer.Data.MASS_CC_SPELLS = {
+    -- Preparado para Mass CCs
+    DEATHKNIGHT = {207167}, -- Granizo cegador / Blinding Sleet (debug)
 }
