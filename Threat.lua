@@ -38,9 +38,6 @@ function Minimizer.Threat.RefreshTankTokens()
     end
 end
 
-function Minimizer.Threat.IsThreatContext()
-    return true
-end
 
 function Minimizer.Threat.IsPlayerTank()
     if UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK" then
@@ -78,9 +75,6 @@ function Minimizer.Threat.GetSituation(unit, source)
 end
 
 function Minimizer.Threat.PlayerHasAggro(unit)
-    if not Minimizer.Threat.IsThreatContext() then
-        return false
-    end
     if Minimizer.Threat.IsPlayerTank() then
         if not UnitAffectingCombat(unit) then return false end
         local situation = Minimizer.Threat.GetSituation(unit, "player")
@@ -105,9 +99,6 @@ function Minimizer.Threat.GetTankSituation(unit)
 end
 
 function Minimizer.Threat.ShouldUnsimplify(unit)
-    if not Minimizer.Threat.IsThreatContext() then
-        return false
-    end
     if Minimizer.Threat.IsPlayerTank() then
         if not UnitAffectingCombat(unit) then return false end
         local situation = Minimizer.Threat.GetTankSituation(unit)

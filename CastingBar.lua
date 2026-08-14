@@ -76,16 +76,16 @@ function CastingBar:EnsureVisuals(castBar)
             local bar = castBar
             if bar.MinimizerApplyingColor then return end
             local unit = bar.MinimizerCastUnit
-            if unit and UnitExists(unit) then
+            if unit and UnitExists(unit) and not Minimizer.Utils.IsPvPUnit(unit) then
                 local isCasting, _, uninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
-                CastingBar:ApplyGreenColor(bar, unit, isCasting, isChanneling, Minimizer.Interrupt.IsReady(), uninterruptible)
+                CastingBar:ApplyCastColor(bar, unit, isCasting, isChanneling, Minimizer.Interrupt.IsReady(), uninterruptible)
             end
         end)
     end
     return castBar.MinimizerCastVisuals
 end
 
-function CastingBar:ApplyGreenColor(castBar, unit, isCasting, isChanneling, ready, uninterruptible)
+function CastingBar:ApplyCastColor(castBar, unit, isCasting, isChanneling, ready, uninterruptible)
     if not castBar or type(castBar.SetStatusBarColor) ~= "function" then return end
     local r, g, b, a = 1, 1, 1, 1
     if castBar.GetStatusBarColor then
@@ -106,6 +106,8 @@ end
 
 function CastingBar:UpdateNamePlate(unit, nameplate)
     if not unit or not UnitExists(unit) then return end
+    -- En PvP dejamos el castbar de Blizzard sin modificar.
+    if Minimizer.Utils.IsPvPUnit(unit) then return end
     local castBar = self:GetCastBar(nameplate)
     if not castBar or type(castBar.SetStatusBarColor) ~= "function" then return end
 
@@ -114,7 +116,7 @@ function CastingBar:UpdateNamePlate(unit, nameplate)
     local isCasting, _, uninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
     local ready = Minimizer.Interrupt.IsReady()
 
-    self:ApplyGreenColor(castBar, unit, isCasting, isChanneling, ready, uninterruptible)
+    self:ApplyCastColor(castBar, unit, isCasting, isChanneling, ready, uninterruptible)
 
     local targeted = IsSpellTargetingPlayer(unit)
     if isCasting or isChanneling then

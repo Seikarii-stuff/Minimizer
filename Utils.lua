@@ -89,6 +89,12 @@ function Minimizer.Utils.GuardedCall(obj, flagName, fn)
     obj[flagName] = nil
 end
 
+-- Devuelve true si la unidad es un jugador enemigo (PvP). En ese caso los
+-- modulos de color deben dejar las barras de Blizzard sin tocar.
+function Minimizer.Utils.IsPvPUnit(unit)
+    return unit and UnitIsPlayer(unit) and UnitCanAttack("player", unit)
+end
+
 function Minimizer.Utils.Debounce(fn)
     local pending = false
     return function(...)

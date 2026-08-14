@@ -18,6 +18,8 @@ local HookIndicator
 
 function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     if not unit or not UnitExists(unit) then return end
+    -- En PvP dejamos la healthbar de Blizzard sin modificar.
+    if Minimizer.Utils.IsPvPUnit(unit) then return end
     local healthBar = self:GetHealthBar(nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
     HookHealthBar(healthBar)
@@ -69,7 +71,7 @@ HookHealthBar = function(healthBar)
             if healthBar.MinimizerHealthColorApplying then return end
             local nameplate = Minimizer.Utils.GetNameplateFromHealthBar(healthBar)
             local unit = Minimizer.Utils.GetUnitFromNameplate(nameplate)
-            if unit then
+            if unit and not Minimizer.Utils.IsPvPUnit(unit) then
                 -- Sin snapshot disponible aqui (este hook se dispara fuera del pase
                 -- normal de ApplyToUnit, p.ej. cuando Blizzard repinta la barra por
                 -- su cuenta). UpdateNamePlate ya tiene fallback para snapshot=nil.
