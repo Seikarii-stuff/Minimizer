@@ -1,4 +1,5 @@
--- benchmark.lua
+-- tests/benchmark/benchmark.lua
+-- Run from the project root:  lua tests/benchmark/benchmark.lua
 local Mocks = dofile("tests/wow_mock.lua")
 
 local ADDON_NAME = "Minimizer"
@@ -16,7 +17,7 @@ local function LoadAddonFile(filepath)
     func(ADDON_NAME, addonTable)
 end
 
--- 1. Load Addon
+-- 1. Load Addon (paths relative to project root)
 local files = {
     "Bootstrap.lua", "Utils.lua", "Widgets.lua", "Config.lua",
     "Constants.lua", "data/SpellData.lua", "Cache.lua", "Threat.lua",
@@ -33,8 +34,7 @@ local NUM_NAMEPLATES = 50
 for i = 1, NUM_NAMEPLATES do
     local unitId = "nameplate" .. i
     local isCasting = (i % 3 == 0)
-    local isTarget = (i == 1)
-    
+
     Mocks.CreateTestUnit(unitId, {
         name = "Test Mob " .. i,
         health = math.random(10, 100),
@@ -51,7 +51,9 @@ for i = 1, NUM_NAMEPLATES do
             uninterruptible = (i % 6 == 0),
         } or nil,
         auras = {
-            { name = "Test Buff", icon = 123, count = 1, duration = 10, expirationTime = Mocks.time + 10, source = "player", helpful = false, harmful = true }
+            { name = "Test Buff", icon = 123, count = 1, duration = 10,
+              expirationTime = Mocks.time + 10, source = "player",
+              helpful = false, harmful = true }
         }
     })
     Mocks.CreateTestNameplate(unitId)
@@ -69,7 +71,7 @@ for name, module in pairs(addonTable.Modules) do
             orig(self, unit, nameplate)
             local elapsed = os.clock() - start
             moduleStats[name].count = moduleStats[name].count + 1
-            moduleStats[name].time = moduleStats[name].time + elapsed
+            moduleStats[name].time  = moduleStats[name].time  + elapsed
         end
     end
 end
@@ -82,30 +84,39 @@ addonTable.Core.ApplyToAll = function()
     origApplyToAll()
     local elapsed = os.clock() - start
     coreStats.count = coreStats.count + 1
-    coreStats.time = coreStats.time + elapsed
+    coreStats.time  = coreStats.time  + elapsed
 end
 
 -- 4. Run Benchmark
 local ITERATIONS = 1000
-print(string.format("Running benchmark for %d iterations over %d nameplates...", ITERATIONS, NUM_NAMEPLATES))
+print(string.format("Running benchmark: %d iterations x %d nameplates...", ITERATIONS, NUM_NAMEPLATES))
 
 local benchStart = os.clock()
-
 for i = 1, ITERATIONS do
     Mocks.AdvanceTime(0.01)
     addonTable.Core.ApplyToAll()
 end
+local totalTime = os.clock() - benchStart
 
-local benchEnd = os.clock()
-local totalTime = benchEnd - benchStart
+-- 5. Build Report
+local lines = {}
+local function line(s) lines[#lines + 1] = s end
 
--- 5. Report
-print("\n=== Benchmark Results ===")
-print(string.format("Total Time: %.4f seconds", totalTime))
-print(string.format("Frames: %d", ITERATIONS))
-print(string.format("Avg Time per Frame (ApplyToAll): %.6f ms", (coreStats.time / coreStats.count) * 1000))
+local timestamp = os.date("%Y-%m-%d %H:%M:%S")
+local avgFrameMs = (coreStats.count > 0) and (coreStats.time / coreStats.count) * 1000 or 0
 
-print("\n--- Module Breakdown ---")
+line("")
+line("=== Minimizer Benchmark Results ===")
+line("Date       : " .. timestamp)
+line(string.format("Iterations : %d frames", ITERATIONS))
+line(string.format("Nameplates : %d units", NUM_NAMEPLATES))
+line(string.format("Total Time : %.4f s", totalTime))
+line(string.format("Avg/Frame  : %.6f ms  (ApplyToAll)", avgFrameMs))
+line("")
+line("--- Module Breakdown (sorted by total cost) ---")
+line(string.format("%-22s %-12s %-14s %-10s %s", "Module", "Total (s)", "Avg/call (ms)", "Calls", "Share"))
+line(string.rep("-", 72))
+
 local sortedModules = {}
 for name, stats in pairs(moduleStats) do
     table.insert(sortedModules, { name = name, stats = stats })
@@ -115,9 +126,29 @@ table.sort(sortedModules, function(a, b) return a.stats.time > b.stats.time end)
 for _, mod in ipairs(sortedModules) do
     local s = mod.stats
     if s.count > 0 then
-        local avgTimeMs = (s.time / s.count) * 1000
+        local avgMs   = (s.time / s.count) * 1000
         local percent = (s.time / totalTime) * 100
-        print(string.format("%-20s: Total: %.4fs | Avg/call: %.6fms | Calls: %d | Total Share: %5.2f%%", 
-            mod.name, s.time, avgTimeMs, s.count, percent))
+        line(string.format("%-22s %-12.4f %-14.6f %-10d %5.2f%%",
+            mod.name, s.time, avgMs, s.count, percent))
     end
+end
+
+line("")
+line(string.rep("=", 72))
+line("")
+
+-- 6. Print to stdout
+local report = table.concat(lines, "\n")
+print(report)
+
+-- 7. Save to tests/results/
+local dateTag   = os.date("%Y%m%d_%H%M%S")
+local outPath   = "tests/results/benchmark_" .. dateTag .. ".txt"
+local fh, err   = io.open(outPath, "w")
+if fh then
+    fh:write(report)
+    fh:close()
+    print("Results saved to: " .. outPath)
+else
+    io.stderr:write("Warning: could not write results file: " .. tostring(err) .. "\n")
 end
