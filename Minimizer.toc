@@ -16,7 +16,7 @@ Cache.lua
 Threat.lua
 Absorb.lua
 Cast.lua
-ClassificationUtils.lua
+Classification.lua
 Decision.lua
 Interrupt.lua
 Core.lua

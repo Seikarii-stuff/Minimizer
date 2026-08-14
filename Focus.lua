@@ -12,11 +12,7 @@ local portrait = frame:CreateTexture(nil, "ARTWORK")
 portrait:SetAllPoints()
 local cooldown = CreateFrame("Cooldown", "MinimizerFocusCooldown", frame, "CooldownFrameTemplate")
 cooldown:SetAllPoints()
-cooldown:SetDrawEdge(true)
-if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
-if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
-if cooldown.SetReverse then cooldown:SetReverse(true) end
-cooldown:SetSwipeTexture("Interface\\HUD\\UI-HUD-CoolDown-Swipe")
+Minimizer.Widgets.StyleCooldown(cooldown)
 
 local ccFrame, ccIcon, ccCooldown
 if Minimizer.Widgets and Minimizer.Widgets.CreateCDWidget then
@@ -100,20 +96,7 @@ function Focus:SetMode(mode)
     if Minimizer.Core then Minimizer.Core.ApplyToAll() end
 end
 
-local driver = CreateFrame("Frame")
-driver:RegisterEvent("PLAYER_FOCUS_CHANGED")
-driver:RegisterEvent("NAME_PLATE_UNIT_ADDED")
-driver:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
-driver:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-
-local debouncedUpdate = Minimizer.Utils.Debounce(function()
+Focus.DebouncedUpdate = Minimizer.Utils.Debounce(function()
     Focus:UpdateFace()
 end)
 
-driver:SetScript("OnEvent", function(_, event)
-    if event ~= "SPELL_UPDATE_COOLDOWN" then
-        Focus:UpdateFace()
-        return
-    end
-    debouncedUpdate()
-end)

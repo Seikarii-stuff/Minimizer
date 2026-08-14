@@ -21,31 +21,26 @@ local function LoadAddonFile(filepath)
 end
 
 print("--- Loading Minimizer Addon Files ---")
--- Load files in roughly the order they appear in the .toc or dependency order
-local files = {
-    "Bootstrap.lua",
-    "Utils.lua",
-    "Widgets.lua",
-    "Config.lua",
-    "Constants.lua",
-    "data/SpellData.lua",
-    "Cache.lua",
-    "Threat.lua",
-    "Absorb.lua",
-    "Cast.lua",
-    "ClassificationUtils.lua",
-    "Decision.lua",
-    "Interrupt.lua",
-    "Core.lua",
-    "Markers.lua",
-    "HealthBarColor.lua",
-    "CastingBar.lua",
-    "Focus.lua",
-    "Target.lua",
-    "Events.lua",
-    "SlashCommands.lua"
-}
+local function GetFileListFromToc(tocPath)
+    local list = {}
+    local fh = io.open(tocPath, "r")
+    if not fh then
+        error("No se pudo abrir el .toc en " .. tocPath .. " -- revisa la ruta")
+    end
+    for line in fh:lines() do
+        local trimmed = line:match("^%s*(.-)%s*$")
+        trimmed = trimmed:gsub("\\", "/")
+        if trimmed ~= "" and not trimmed:match("^#") and not trimmed:match("^%.%.") then
+            if trimmed:match("%.lua$") then
+                table.insert(list, trimmed)
+            end
+        end
+    end
+    fh:close()
+    return list
+end
 
+local files = GetFileListFromToc("Minimizer.toc")
 for _, file in ipairs(files) do
     LoadAddonFile(file)
 end

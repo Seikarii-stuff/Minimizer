@@ -61,6 +61,14 @@ function Minimizer.Widgets.InvalidateCDSpellCache()
     cdSpellCache = setmetatable({}, { __mode = "k" })
 end
 
+function Minimizer.Widgets.StyleCooldown(cooldown)
+    cooldown:SetDrawEdge(true)
+    if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
+    if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
+    if cooldown.SetReverse then cooldown:SetReverse(true) end
+    cooldown:SetSwipeTexture("Interface\\HUD\\UI-HUD-CoolDown-Swipe")
+end
+
 function Minimizer.Widgets.CreateCDWidget(name, size)
     local frame = CreateFrame("Frame", name, UIParent)
     frame:SetSize(size, size)
@@ -70,11 +78,7 @@ function Minimizer.Widgets.CreateCDWidget(name, size)
     icon:SetAllPoints()
     local cooldown = CreateFrame("Cooldown", name.."Cooldown", frame, "CooldownFrameTemplate")
     cooldown:SetAllPoints()
-    cooldown:SetDrawEdge(true)
-    if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
-    if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
-    if cooldown.SetReverse then cooldown:SetReverse(true) end
-    cooldown:SetSwipeTexture("Interface\\HUD\\UI-HUD-CoolDown-Swipe")
+    Minimizer.Widgets.StyleCooldown(cooldown)
     return frame, icon, cooldown
 end
 

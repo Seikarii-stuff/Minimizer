@@ -42,23 +42,8 @@ function Target:UpdateTargetCDs()
     end
 end
 
-local driver = CreateFrame("Frame")
-driver:RegisterEvent("PLAYER_TARGET_CHANGED")
-driver:RegisterEvent("NAME_PLATE_UNIT_ADDED")
-driver:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
-driver:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-
-local debouncedUpdate = Minimizer.Utils.Debounce(function()
+-- El debounce se conserva pero se expone para que Events.lua lo use.
+Target.DebouncedUpdate = Minimizer.Utils.Debounce(function()
     Target:UpdateTargetCDs()
 end)
 
-driver:SetScript("OnEvent", function(_, event, unitID)
-    if event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" then
-        if unitID and not UnitIsUnit(unitID, "target") then return end
-    end
-    if event ~= "SPELL_UPDATE_COOLDOWN" then
-        Target:UpdateTargetCDs()
-        return
-    end
-    debouncedUpdate()
-end)

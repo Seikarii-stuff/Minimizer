@@ -352,6 +352,17 @@ function _G.UnitIsPlayer(unit)
     return u and u.isPlayer or false
 end
 
+function _G.UnitIsDead(unit)
+    local u = getUnit(unit)
+    return u and (u.health and u.health <= 0 or u.isDead) or false
+end
+
+function _G.SetPortraitTexture(texture, unit)
+    if texture and texture.SetTexture then
+        texture:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
+    end
+end
+
 function _G.UnitClass(unit)
     local u = getUnit(unit)
     if not u then return nil, nil, 0 end

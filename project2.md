@@ -11,44 +11,47 @@
 > buscar "¿cómo se resolvía X?" y encontrar la respuesta verificada, sin tener que
 > releer todos los .lua ni arriesgarse a romper taint por reinventar una solución que
 > ya se había resuelto correctamente.
+>
+> Nota: el punto de "falta de panel de opciones/localizacion" identificado en un review anterior queda fuera de alcance de este proyecto -- el producto final que consume este addon ya tiene su propio menu, implementar uno aqui duplicaria trabajo.
 
 ---
 
 ## 0. Mapa de módulos (estado actual, orden de carga del .toc)
 
 ```
-Config.lua      -> Minimizer.Config      (SavedVariables, defaults, migración)
-Constants.lua   -> Minimizer.Constants   (tablas de color estáticas)
-Cache.lua       -> Minimizer.Cache       (cache genérico unit -> {kind -> valor})
-Core.lua        -> Minimizer.Utils, Minimizer.Cache (extendido), Minimizer.Threat,
-                    Minimizer.Absorb, Minimizer.Cast, Minimizer.Markers,
-                    Minimizer.Core, Minimizer.Bench, eventos, slash command
-Interrupt.lua   -> Minimizer.Interrupt   (spellID de interrupción + cooldown)
-HealthBarColor.lua -> Minimizer.HealthBarColor (módulo registrado)
-CastingBar.lua  -> Minimizer.CastingBar  (módulo registrado)
-Focus.lua       -> Minimizer.Focus       (retrato de focus + cooldown de interrupt)
+Bootstrap.lua       -> Minimizer (inicialización global, ADDON_LOADED)
+Utils.lua           -> Minimizer.Utils (helpers puros, guards de secretos, debounce, tokens)
+Widgets.lua         -> Minimizer.Widgets (búsqueda de castbars, creación y estilo de widgets de CD)
+Config.lua          -> Minimizer.Config (SavedVariables MinimizerDB, defaults, migración)
+Constants.lua       -> Minimizer.Constants (paletas de color de salud y cast)
+data/SpellData.lua  -> Minimizer.Data (tablas de spellIDs por clase: interrupts, CDs ofensivos/defensivos, CC)
+Cache.lua           -> Minimizer.Cache (cache genérico unit -> {kind -> valor})
+Threat.lua          -> Minimizer.Threat (detección de aggro/tanque, sincronización de tokens)
+Absorb.lua          -> Minimizer.Absorb (detección de absorción visual vía indicator:IsShown())
+Cast.lua            -> Minimizer.Cast (lectura segura de casts/canalizaciones e invalidación)
+Classification.lua  -> Minimizer.Classification (clasificación de unidades: boss, miniboss, caster, melee, trivial)
+Decision.lua        -> Minimizer.Decision (motor de decisión de simplificación ShouldSimplifyUnit)
+Interrupt.lua       -> Minimizer.Interrupt (spellID de interrupción + cache de cooldown a nivel de pase)
+Core.lua            -> Minimizer.Core (orquestación, ciclo de vida, registro de módulos, snapshot)
+Markers.lua         -> Minimizer.Markers (gestión de marcas de objetivo)
+HealthBarColor.lua  -> Minimizer.HealthBarColor (módulo registrado: coloreo de healthbars nativas)
+CastingBar.lua      -> Minimizer.CastingBar (módulo registrado: coloreo de castbars nativas, visuales de objetivo)
+Focus.lua           -> Minimizer.Focus (retrato de focus, indicador de CD de interrupt y CC masivo)
+Target.lua          -> Minimizer.Target (widgets de CDs defensivos y ofensivos sobre el objetivo)
+Events.lua          -> Minimizer (EventFrame centralizado con tabla de dispatch)
+SlashCommands.lua   -> Minimizer (comandos de consola /simp)
 ```
 
-**Detalle importante para el refactor:** `Minimizer.Cache` se define en `Cache.lua`
-(`Cache.units`, `GetUnitState`, `InvalidateUnit`, `InvalidateAll`) y **se vuelve a abrir
-y extender en `Core.lua`** (`Cache.IsUnitCasting`, `Cache.ShouldSimplifyUnit`). No es un
-error: es el mismo table compartido (`Minimizer.Cache = Minimizer.Cache or {}` en ambos
-archivos, y `Cache.lua` carga antes que `Core.lua` en el `.toc`). Si se reestructura en
-módulos separados hay que decidir explícitamente si este patrón de "extender el mismo
-namespace desde dos archivos" se mantiene o se separa en `Cache` (estado puro) vs un
-motor de decisión aparte (hoy mezclados).
+`Core.lua` construye un `snapshot` por unidad una vez por pase (`BuildSnapshot`, dentro de `ApplyToUnit`) y lo pasa tanto a `Decision.ShouldSimplifyUnit` como a `Core.UpdateModules` → cada módulo visual registrado. Esto sustituye al patrón anterior donde `Decision` y `HealthBarColor` recalculaban `Classification.GetEliteType`/`Absorb.HasAbsorb` cada uno por su cuenta.
 
 `Minimizer.Core.RegisterModule(name, module)` es el único punto de entrada para que un
 módulo visual (`HealthBarColor`, `CastingBar`) se enganche al ciclo de vida de las
 nameplates. Un módulo registrado debe exponer opcionalmente:
-- `module:UpdateNamePlate(unit, nameplate)` — llamado desde `Core.UpdateModules` en cada
+- `module:UpdateNamePlate(unit, nameplate, snapshot)` — llamado desde `Core.UpdateModules` en cada
   pase de `ApplyToUnit`.
 - `module:OnNamePlateRemoved(unit, nameplate)` — llamado desde `Core.ClearNeverSimplify`.
 
-Esto **sí es un patrón canónico bien resuelto**: separa la lógica de decisión (Core,
-Threat, Cast, Absorb) de la lógica de presentación (HealthBarColor, CastingBar, Focus),
-igual que Platynator separa `DesignForContext.lua` (decisión) de `Colors.lua`
-(presentación). Vale la pena conservarlo en la reestructuración.
+Esto separa la lógica de decisión (Core, Threat, Cast, Absorb, Classification, Decision) de la lógica de presentación (HealthBarColor, CastingBar, Focus, Target), manteniendo el flujo desacoplado y de alto rendimiento.
 
 ---
 
@@ -64,9 +67,7 @@ C_NamePlateManager.SetNamePlateSimplified(unitToken, bool)
 ```
 - Verificado en `Core.lua`, `Minimizer.Core.ApplyToUnit`.
 - Se llama **solo cuando cambia el estado** (`nameplate.MinimizerState ~= shouldSimplify`),
-  nunca en cada tick. Esto es intencional: llamar a esta API en cada frame es el tipo de
-  cosa que puede generar overhead/parpadeo y además es innecesario porque la API no es
-  idempotente-gratis.
+  o cuando se solicita un `forceUpdate` explícito.
 - Disponibilidad comprobada primero con `Minimizer.Utils.IsSimplifiedAvailable()`
   (`C_NamePlateManager and type(...) == "function"`). Nunca se llama sin este guard.
 
@@ -78,21 +79,14 @@ Minimizer.Utils.GetNamePlateForUnit(unit)
   `C_NamePlate.GetNamePlateForUnit(unit)`.
 - Camino lento (para `target`, `focus`, `bossN`, etc.): itera
   `C_NamePlate.GetNamePlates()` y compara con `UnitIsUnit(token, unit)`.
-- **Desviación respecto a la guía original de Platynator** (ver sección 2.1): la guía
-  documentaba la firma `C_NamePlate.GetNamePlateForUnit(unit, issecure())`, pero el
-  código real **nunca pasa el segundo argumento**. Funciona hoy, pero no está verificado
-  qué pasa en contextos de combate/secure. Marcar como pendiente de verificar (ver
-  sección 3).
 
 ### 1.3 Hooks seguros del ciclo de vida de nameplates
 ```lua
 hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit) ... end)
 hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit) ... end)
 ```
-- Verificado en `Core.lua`, sección 6. Es el patrón canónico documentado: nunca se llama
+- Verificado en `Events.lua`. Es el patrón canónico documentado: nunca se llama
   a `OnNamePlateAdded`/`Removed` directamente, solo se "escucha" con `hooksecurefunc`.
-  Esto es lo que evita taint por transición addon-controlled — no tocar esto en el
-  refactor salvo para añadir más hooks del mismo tipo.
 - Mismo patrón aplicado a re-coloreo nativo:
   ```lua
   hooksecurefunc("CompactUnitFrame_UpdateHealthColor", function(unitFrame) ... end)
@@ -101,209 +95,139 @@ hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit) ...
   ```
   Blizzard repinta las barras después de sus propios eventos; en vez de pelear por el
   orden de ejecución, el addon deja que Blizzard pinte primero y **reaplica su color
-  encima via hook**. Es la misma filosofía que "usar hooksecurefunc en vez de llamadas
-  directas" de la guía original, pero llevada a un caso que la guía no cubría
-  explícitamente (recoloreo competitivo con el cliente). **Documentar esto como patrón
-  canónico propio del proyecto**, no viene de Platynator tal cual.
+  encima via hook**.
 
 ### 1.4 Guardas de reentrancia en hooks de auto-repintado
 ```lua
-castBar.MinimizerApplyingColor = true
-castBar:SetStatusBarColor(r, g, b, a)
-castBar.MinimizerApplyingColor = nil
+Minimizer.Utils.GuardedCall(castBar, "MinimizerApplyingColor", function()
+    castBar:SetStatusBarColor(r, g, b, a or 1)
+end)
 ```
 ```lua
-healthBar.MinimizerHealthColorApplying = true
-healthBar:SetStatusBarColor(r, g, b)
-healthBar.MinimizerHealthColorApplying = nil
+Minimizer.Utils.GuardedCall(healthBar, "MinimizerHealthColorApplying", function()
+    healthBar:SetStatusBarColor(r, g, b)
+end)
 ```
-- Ambos módulos usan una flag booleana para que su propio hook de `SetStatusBarColor`
-  no se dispare a sí mismo en bucle infinito. **Patrón canónico nuevo, no documentado en
-  la guía original — es imprescindible conservarlo** en cualquier módulo futuro que
-  haga hook sobre un setter que el propio módulo también llama.
+- Ambos módulos usan el helper `GuardedCall` para que su propio hook de `SetStatusBarColor`
+  no se dispare a sí mismo en bucle infinito.
 
 ### 1.5 Lectura de estado de cast sin coerción de secretos
 ```lua
 local castName, _, _, _, _, _, _, castUninterruptible = UnitCastingInfo(unit)
 local channelName, _, _, _, _, _, channelUninterruptible = UnitChannelInfo(unit)
 ```
-- Verificado en `Core.lua` → `ReadCastState`. Índice `[8]` para cast, `[7]` para channel,
-  igual que documentaba la guía original (`castInfo[8]`, `channelInfo[7]`).
-- Punto crítico ya resuelto correctamente: **no se usa `and/or` para elegir entre
-  `castUninterruptible` y `channelUninterruptible`**, se usa un `if/elseif` explícito.
-  El comentario en el código lo explica: un valor secreto sometido a una prueba lógica
-  Lua (`and/or`, `not`, comparación) tainted/rompe. Esto es la aplicación correcta del
-  principio de la guía original ("no inferir valores secretos por lógica Lua compleja").
-- Cuando el valor es secreto (`Minimizer.Utils.IsSecretValue(uninterruptible)`), la
-  función devuelve `true, nil, uninterruptible` — es decir, deja `uninterruptible`
-  (el segundo valor, para lógica Lua) en `nil` (indeterminado) pero **conserva el valor
-  secreto crudo como tercer retorno** para que el consumidor lo use solo con APIs
-  C-side (`SetAlphaFromBoolean`, `EvaluateColorValueFromBoolean`). Este patrón de
-  "double return: uno seguro para Lua, uno crudo para C-side" es la forma correcta de
-  propagar un secreto sin evaluarlo — replicar este patrón en cualquier código nuevo
-  que maneje valores potencialmente secretos.
+- Verificado en `Cast.lua` → `ReadCastState`. Índice `[8]` para cast, `[7]` para channel.
+- Se usa `if/elseif` explícito en vez de `and/or` para evitar coerción de secretos.
+- Devuelve `isCasting, uninterruptible, rawUninterruptible, isChanneling`.
 
 ### 1.6 Cache de estado de cast (memoización de un solo unit)
 ```lua
-local cachedCastUnit, cachedIsCasting, cachedUninterruptible, cachedRawUninterruptible
+local cachedCastUnit, cachedIsCasting, cachedUninterruptible, cachedRawUninterruptible, cachedIsChanneling
 local cachedCastValid = false
 function Minimizer.Cast.GetState(unit) ... end
 function Minimizer.Cast.InvalidateState(unit) ... end
 ```
-- Cache de **una sola entrada** (no un diccionario por unit), invalidada por evento de
-  cast. Esto es válido porque el consumo típico es "leer el estado de la unidad que
-  acaba de disparar el evento", pero **no sirve como cache multi-unit** — si el
-  refactor necesita leer el estado de cast de varias unidades en el mismo frame sin
-  invalidar entre medias, esta cache de una sola entrada las pisará. Vigilar este
-  límite al portar a la nueva arquitectura (candidato a fusionarse con
-  `Minimizer.Cache.units`, que sí es multi-unit).
+- Cache de una sola entrada invalidada por evento de cast.
 
 ### 1.7 `SetAlphaFromBoolean` para aceptar valores secretos directamente
 ```lua
-if cooldown.SetAlphaFromBoolean then
-    cooldown:SetAlphaFromBoolean(duration:IsZero(), 0, 1)   -- Focus.lua
+if visuals.targetContainer.SetAlphaFromBoolean then
+    visuals.targetContainer:SetAlphaFromBoolean(targeted)
 end
-...
-visuals.targetContainer:SetAlphaFromBoolean(targeted)        -- CastingBar.lua
 ```
-- Coincide exactamente con el patrón documentado en la guía original
-  (`Display/CannotInterruptMarker.lua` de Platynator). Siempre con guard
-  `if widget.SetAlphaFromBoolean then ... else fallback end` — nunca se asume que la
-  API existe en todos los clientes/widgets.
 
 ### 1.8 Firma real de `EvaluateColorValueFromBoolean` (resuelta empíricamente)
 ```lua
 C_CurveUtil.EvaluateColorValueFromBoolean(state, valueIfTrue:number, valueIfFalse:number) -> number
 ```
-- **Esto NO acepta una tabla de color RGB de una sola vez.** Se probó y falló con
-  `bad argument #2` al pasar una tabla; funciona pasando escalares. Por eso en
-  `CastingBar.lua` y `HealthBarColor.lua` cada color se arma con **3 llamadas
-  independientes**, una por canal:
+- Encapsulado en `Minimizer.Utils.EvaluateColorRGB(state, colorTrue, colorFalse)` canal por canal:
   ```lua
-  local r = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, colorA[1], colorB[1])
-  local g = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, colorA[2], colorB[2])
-  local b = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, colorA[3], colorB[3])
+  return C_CurveUtil.EvaluateColorValueFromBoolean(state, colorTrue[1], colorFalse[1]),
+         C_CurveUtil.EvaluateColorValueFromBoolean(state, colorTrue[2], colorFalse[2]),
+         C_CurveUtil.EvaluateColorValueFromBoolean(state, colorTrue[3], colorFalse[3])
   ```
-- **Cuidado con el orden de los argumentos**: es
-  `(state, valueIfTrue, valueIfFalse)` — el primer valor numérico es el que se usa
-  cuando `state` es verdadero. Los tres call-sites actuales (`CastingBar:ApplyGreenColor`
-  dos veces, `HealthBarColor:UpdateNamePlate` una vez, `Focus.lua` `UpdateCooldown` una
-  vez) respetan este orden, pero **hay que releer cada uno con cuidado antes de tocarlo**
-  porque invertir el orden no da error de sintaxis, solo pinta el color equivocado
-  silenciosamente. Esto es exactamente el tipo de bug "no truena, pero está mal" que
-  hay que vigilar en el refactor.
-- Todo esto está anotado en las "Notas" al final del `project.md` original — se
-  promueve aquí a sección principal porque es la API más usada y más fácil de romper
-  del addon.
 
 ### 1.9 Amenaza (threat) sin coerción de secretos
 ```lua
-local situation = UnitThreatSituation(source or "player", unit)
-if issecretvalue and issecretvalue(situation) then return nil end
+local situation = UnitThreatSituation(source, unit)
+if Minimizer.Utils.IsSecretValue(situation) then return nil end
 if type(situation) ~= "number" then return nil end
 ```
-- Coincide con la guía original: solo el número `3` se trata como aggro sólido, nunca
-  por coerción (`if situation then` sería incorrecto porque `0` es truthy en Lua).
-  `Minimizer.Threat.PlayerHasAggro` compara explícitamente `== 3`.
-- Cacheado por unit+source en `Minimizer.Cache.units[unit]["threat:" .. source]`,
-  invalidado en `UNIT_THREAT_SITUATION_UPDATE` / `UNIT_THREAT_LIST_UPDATE`.
 
 ### 1.10 Absorb: depender EXCLUSIVAMENTE del indicador visual (`IsShown()`)
 ```lua
 local indicator = healthBar and (healthBar.totalAbsorbOverlay or healthBar.totalAbsorb)
 return indicator and indicator.IsShown and indicator:IsShown() == true or false
 ```
-- Originalmente se intentaba leer `UnitGetTotalAbsorbs` y escuchar eventos como `UNIT_ABSORB_AMOUNT_CHANGED` o `UNIT_AURA`. Esta decisión se ha **descartado por completo**.
-- Se ha decidido utilizar única y exclusivamente el estado visual del indicador (`IsShown()`) porque es **MUCHO más fiable y MUCHO más barato** a nivel de rendimiento. Blizzard ya hace el trabajo pesado de calcular cuándo un escudo es lo suficientemente relevante como para mostrarse; nosotros simplemente conectamos un `hooksecurefunc` a los métodos `Show` y `Hide` del indicador en `HealthBarColor.lua`.
-- **Regla de oro sobre eventos:** Leer auras o cantidades de escudos a través de eventos (`UNIT_AURA`, `UNIT_ABSORB_AMOUNT_CHANGED`, etc.) conlleva problemas de desincronización y escudos "pre-existentes" que no disparan eventos al aparecer la placa. **Hay que evitar escuchar estos eventos salvo que no quede otra manera de hacer las cosas.** Si Blizzard expone el estado en un widget visual de su propia UI, "engancharse" a ese widget es siempre la solución canónica y correcta.
-
 
 ---
 
 ## 2. Discrepancias entre la guía original (Platynator) y la implementación real
 
-Estos son los puntos donde el código actual **se desvía** de lo que decía el
-`project.md` original. No implica que estén mal — Minimizer no es Platynator, tiene su
-propio motor —, pero hay que saber que son desviaciones deliberadas o pendientes de
-revisar, para no "corregir" el código nuevo haciéndolo calzar con la guía vieja por
-error.
-
 1. **`GetNamePlateForUnit` sin `issecure()`.** La guía decía
    `C_NamePlate.GetNamePlateForUnit(unit, issecure())`. El código real omite el segundo
-   argumento siempre. Funciona en las pruebas actuales, pero no hay evidencia de que se
-   haya probado en un escenario donde `issecure()` cambia el resultado (p. ej. dentro de
-   una transición secure). **Acción para el refactor: decidir explícitamente si se debe
-   añadir el segundo argumento, y probarlo en combate.**
-
-2. **No hay `C_NamePlateManager.SetNamePlateHitTestInsets`.** La guía lo documentaba
-   como API disponible, pero Minimizer no la usa en ningún archivo actual. Es
-   "pendiente" — el propio `project.md` original ya tenía una sección "APIs para
-   geometría de nameplates (pendiente)" al final, así que esto es una feature no
-   implementada, no una regresión.
-
+   argumento siempre. Funciona en las pruebas actuales.
+2. **No hay `C_NamePlateManager.SetNamePlateHitTestInsets`.** Es una feature no implementada actualmente.
 3. **`Minimizer.Cast` es un motor propio, no una copia del cache de Platynator.**
-   La guía describía `addonTable.Cache:Get(unit, "cast")` con un objeto rico
-   (`cacheInfo.cast`, `cacheInfo.channel`, `cacheInfo.interrupted`, con persistencia de
-   "cast interrumpido" con timeout). Minimizer **no implementa la persistencia de cast
-   interrumpido** — no existe ningún timeout ni estado `interrupted` guardado. Si el
-   refactor quiere ese comportamiento (mantener el color/estado un momento después de
-   que se interrumpe un cast) hay que construirlo desde cero, no está aquí.
-   Nota del dev: se deja pasar para que blizzard implemente su propio cast interrumpido.
-
-4. **`importantCast` se detecta pero no se usa para pintar nada.** `CastingBar.lua`
-   calcula `IsImportantSpell` / `important` y lo guarda en
-   `nameplate.MinimizerImportantCast`, pero el propio comentario del código dice:
-   *"El cliente ya resalta los casts importantes; sólo conservamos el dato para futuras
-   animaciones sin duplicar su indicador nativo."* Es decir: es un dato calculado y
-   **no consumido todavía**. No es un bug, es trabajo a medias marcado explícitamente
-   — útil saberlo para no asumir que ya hay una animación de cast importante en algún
-   lado.
-   Nota del dev: No se va a usar, tras varias pruebas se llega a la conclusion que el visual de blizzard es suficiente ,feature a borrar.
+   Minimizer no implementa persistencia de cast interrumpido con timeout porque el cliente de Blizzard gestiona sus propios visuales de corte nativos.
+4. **`importantCast` se descartó.** Tras pruebas se determinó que el visual nativo de Blizzard es suficiente.
 
 ---
 
+## 3. Estado post-refactor (snapshot + eventos unificados)
 
+### 3.1 Patrón de snapshot (nuevo)
+`Core.BuildSnapshot(unit, nameplate)` centraliza el cálculo de: `eliteType`,
+`hasAbsorb`, `hasAggro`, `isCasting`, `isUninterruptible`, `rawUninterruptible`, `isChanneling`, y `displayKind`
+(prioridad focus > aggro > absorb > eliteType). Se calcula UNA vez por
+`ApplyToUnit`, SIEMPRE (incluso con el fast-path de
+`MinimizerDesimplifiedPersistent` activo, porque los módulos visuales lo
+necesitan igual). Vive en un table de scratch reutilizado a nivel de módulo
+(`scratchSnapshot` en Core.lua) — no crear un table nuevo por nameplate por
+frame, y nunca guardar una referencia a `snapshot` más allá de la llamada
+síncrona a `ApplyToUnit`.
 
+### 3.2 GetCastBar (duck-typing) — pendiente de encapsular
+`CastingBar:GetCastBar` sigue usando duck-typing (`type(cached.SetStatusBarColor) == "function"`)
+para validar el cache. No se ha tocado en este refactor. Queda pendiente
+para un pase futuro si se decide dar a esto una interfaz más formal.
 
+### 3.3 Cache de interrupción (nuevo)
+`Interrupt.IsReady()` ya NO llama a ninguna API de Blizzard directamente —
+lee un valor cacheado (`cachedReady`) que se refresca explícitamente con
+`Interrupt.RefreshReadyCache()`, llamado UNA vez por pase desde
+`Core.ApplyToAll` y también desde el handler de `SPELL_UPDATE_COOLDOWN` en
+Events.lua. Esto eliminó ~100 llamadas/frame a `C_Spell.GetSpellCooldownDuration`
+que antes ocurrían una vez por nameplate.
 
+### 3.4 Events.lua: dispatch table
+La cadena `if/elseif` de 15+ ramas se convirtió en una tabla `handlers[event] = fn`.
+Target.lua y Focus.lua ya NO tienen su propio CreateFrame/RegisterEvent —
+se registran en el EventFrame único de Events.lua. Reglas preservadas:
+- `NAME_PLATE_UNIT_REMOVED` ahora SÍ está registrado globalmente (antes solo
+  lo escuchaban los drivers propios de Target/Focus).
+- `SPELL_UPDATE_COOLDOWN` dispara 3 cosas independientes: refresco del cache
+  de interrupt, el filtro de "solo refrescar nameplates si ready cambió"
+  (sin tocar), y el refresco de Target/Focus (que NO respeta ese filtro,
+  siempre se refrescan vía su propio debounce).
+- Target SÍ filtra por unidad en `NAME_PLATE_UNIT_ADDED`/`REMOVED`
+  (`UnitIsUnit(unit, "target")`); Focus NO filtra (comportamiento heredado,
+  intencional).
 
 ---
 
 ## 4. Checklist canónico de taint / secrets (consolidado y verificado)
 
-Reglas confirmadas por el código real, no solo por la guía teórica. Aplicar estas
-mismas reglas a todo módulo nuevo del refactor:
-
-1. **Nunca evaluar un valor potencialmente secreto con `and/or`, `not`, `==`, `>` etc.**
-   directamente en Lua. Comprobar primero con `issecretvalue(value)`
-   (envuelto en `Minimizer.Utils.IsSecretValue`). Ejemplo real: `ReadCastState` en
-   `Core.lua`.
-2. **Si el valor es secreto, no lo "conviertas" a booleano por tu cuenta.** Propágalo
-   crudo hacia una API C-side que sepa aceptarlo (`SetAlphaFromBoolean`,
-   `EvaluateColorValueFromBoolean`, `SetShown` cuando aplique). Nunca intentes
-   "adivinar" el valor con heurísticas Lua.
-3. **Cuando no exista una API C-side para el dato secreto** (caso absorb), busca si
-   Blizzard ya expone la misma información como estado visual de un widget nativo
-   (`indicator:IsShown()`) y confía en eso en vez de en el número.
-4. **`EvaluateColorValueFromBoolean` es escalar, no acepta tablas de color.** Tres
-   llamadas por color, una por canal RGB, respetando el orden
-   `(state, valueIfTrue, valueIfFalse)`.
-5. **Nunca llamar directamente a `NamePlateDriverFrame:OnNamePlateAdded/Removed`.**
-   Solo escuchar con `hooksecurefunc`.
-6. **Si un módulo hace `hooksecurefunc` sobre un setter que el propio módulo también
-   llama** (p. ej. `SetStatusBarColor`), protegerlo con una flag de reentrancia
-   (`ModuleApplyingX = true/nil`) para no generar un bucle o un doble-repintado.
-7. **Solo simplificar/tocar nameplates a través de
-   `C_NamePlateManager.SetNamePlateSimplified`**, nunca manipulando `SetScale` u otras
-   propiedades de un SecureFrame directamente.
-8. **Aplicar `SetNamePlateSimplified` solo cuando el estado deseado cambia**
-   (comparar contra el último estado aplicado guardado en el frame), no en cada tick.
-9. **Todas las lecturas de threat situation deben verificar `issecretvalue` y
-   `type(x) == "number"` antes de comparar contra `3`.** Nunca tratar `0`/`nil` como
-   "sin amenaza" por truthiness.
-10. **Todo dato derivado de eventos debe invalidarse explícitamente por evento**, nunca
-    confiar en que expira solo. Ver el bloque `OnEvent` de `Core.lua` como referencia de
-    qué evento invalida qué `kind` en la cache.
+1. **Nunca evaluar un valor potencialmente secreto con `and/or`, `not`, `==`, `>` etc.** directamente en Lua. Comprobar primero con `issecretvalue(value)` (envuelto en `Minimizer.Utils.IsSecretValue`).
+2. **Si el valor es secreto, no lo conviertas a booleano.** Propágalo crudo hacia una API C-side (`SetAlphaFromBoolean`, `EvaluateColorValueFromBoolean`).
+3. **Cuando no exista una API C-side para el dato secreto**, busca si Blizzard ya expone la misma información en un widget nativo (`indicator:IsShown()`).
+4. **`EvaluateColorValueFromBoolean` es escalar**, respetando el orden `(state, valueIfTrue, valueIfFalse)`.
+5. **Nunca llamar directamente a `NamePlateDriverFrame:OnNamePlateAdded/Removed`.** Solo escuchar con `hooksecurefunc`.
+6. **Proteger hooks con guardas de reentrancia** (`Minimizer.Utils.GuardedCall`).
+7. **Solo simplificar/tocar nameplates a través de `C_NamePlateManager.SetNamePlateSimplified`**.
+8. **Aplicar `SetNamePlateSimplified` solo cuando el estado deseado cambia**.
+9. **Todas las lecturas de threat situation deben verificar `issecretvalue` y `type(x) == "number"` antes de comparar contra `3`**.
+10. **Todo dato derivado de eventos debe invalidarse explícitamente por evento**.
 
 ---
 
@@ -311,37 +235,52 @@ mismas reglas a todo módulo nuevo del refactor:
 
 **Llevarse tal cual (probado, canónico):**
 - El patrón `Core.RegisterModule` + `UpdateNamePlate`/`OnNamePlateRemoved`.
-- `ReadCastState` con retorno doble (seguro para Lua / crudo para C-side).
-- El patrón de reentrancia en hooks de auto-repintado.
-- El fallback de absorb a indicador visual cuando el número es secreto.
-- La firma real de `EvaluateColorValueFromBoolean` y su uso canal-por-canal.
+- `BuildSnapshot` + propagación a módulos.
+- `ReadCastState` con retorno cuádruple (`isCasting, uninterruptible, rawUninterruptible, isChanneling`).
+- `Interrupt.RefreshReadyCache` por pase en lugar de por nameplate.
+- El patrón de reentrancia con `GuardedCall`.
+- El fallback de absorb a indicador visual `indicator:IsShown()`.
 - La comparación `situation == 3` para aggro sólido.
-
-**Revisar/decidir antes de portar:**
-- `CastingBar:UpdateNamePlate` — resolver el comentario de "diagnóstico temporal"
-  (sección 3.1) antes de copiar la función a la nueva arquitectura.
-- `CastingBar:GetCastBar` — encapsular el duck-typing detrás de una interfaz aislada
-  (sección 3.2).
-- `GetNamePlateForUnit` sin `issecure()` — decidir si hace falta el segundo argumento.
-- Cache de un solo unit en `Minimizer.Cast` (sección 1.6) — decidir si se fusiona con
-  `Minimizer.Cache.units` (multi-unit) para evitar dos sistemas de cache paralelos.
-- Claves de config no declaradas (`interruptSpellID`, `interruptReady`) — formalizar
-  como feature o eliminar.
-
-**No portar / no reintroducir:**
-- Cualquier código que compare un valor de `UnitCastingInfo`/`UnitChannelInfo` con
-  `and/or` en lugar de `if/elseif` explícito.
-- Cualquier llamada a `EvaluateColorValueFromBoolean` pasando una tabla de color en vez
-  de tres escalares.
 
 ---
 
-## 6. Sincronización de estado con la Interfaz Nativa (Target, Focus y Combate)
+## 6. Known Issues & Sincronización
 
-Durante el desarrollo, se identificó un problema crítico de desincronización de estado entre `C_NamePlateManager.SetNamePlateSimplified` y el comportamiento forzado de Blizzard:
-1. **El Target y el Focus están forzados a maximizarse por Blizzard**. Si `Minimizer.Decision` no los detectaba, evaluaba `shouldSimplify = true` y lo aplicaba. Blizzard lo ignoraba silenciosamente, pero Minimizer guardaba en su caché (`nameplate.MinimizerState`) que la placa estaba simplificada. Al cambiar de target, la placa vieja evaluaba de nuevo a `true`, y al comparar con su caché (`true == true`), no aplicaba cambios, quedándose maximizada para siempre.
-2. **Las unidades fuera de combate** se evaluaban a `true` al aparecer, Minimizer las simplificaba en `NAME_PLATE_UNIT_ADDED`, pero Blizzard las repintaba maximizadas al final de ese mismo frame de inicialización. Como fuera de combate no generaban eventos posteriores (ni hechizos, ni amenaza), nunca se corregían.
+### 6.1 Minimizar fuera de combate (EN PROGRESO)
+A día de hoy, TODAS las features del addon funcionan correctamente EXCEPTO
+la simplificación de nameplates fuera de combate, que tiene fallos
+conocidos y está en desarrollo activo. El resto del código (Decision,
+Classification, Threat, Absorb, Cast, HealthBarColor, CastingBar, Markers,
+Target, Focus) se considera correcto y estable. No usar esta sección como
+excusa para "arreglar" código fuera-de-combate sin contexto adicional —
+hablar primero con el desarrollador principal.
 
-**Patrón canónico de solución:**
-- `Minimizer.Decision.ShouldSimplifyUnit` **debe** devolver `false, "target"` y `false, "focus"` explícitamente para alienar su respuesta con lo que Blizzard impone a la fuerza. Esto asegura que la caché de Minimizer sea fiel a la realidad.
-- `Minimizer.Core.ApplyToUnit` **debe** aceptar un parámetro `forceUpdate` para ignorar la comprobación de caché. Este parámetro se envía a `true` mediante el `RequestApplyToAll` retardado (`UpdateNameplates`) que se dispara justo después de `NAME_PLATE_UNIT_ADDED`. De esta forma, el frame nativo de Blizzard hace su configuración inicial y, en el frame inmediatamente posterior, Minimizer aplica autoritativamente el estado correcto saltándose la caché.
+### 6.2 Sincronización de estado con la Interfaz Nativa (Target, Focus y Combate)
+1. **El Target y el Focus están forzados a maximizarse por Blizzard**. `Minimizer.Decision.ShouldSimplifyUnit` devuelve `false, "target"` y `false, "focus"` explícitamente para alienar su respuesta con lo que Blizzard impone a la fuerza.
+2. **Las unidades fuera de combate** se evaluaban a `true` al aparecer, Minimizer las simplificaba en `NAME_PLATE_UNIT_ADDED`, pero Blizzard las repintaba maximizadas al final de ese mismo frame de inicialización. `Minimizer.Core.ApplyToUnit` acepta un parámetro `forceUpdate` enviado a `true` mediante el `RequestApplyToAll` retardado (`UpdateNameplates`) que se dispara justo después de `NAME_PLATE_UNIT_ADDED`.
+
+---
+
+## 7. Baseline de Performance (referencia para detectar regresiones)
+
+### Pre-refactor (2026-08-14)
+- Avg/Frame: 1.748000 ms (ApplyToAll)
+- HealthBarColor: 40.66% del tiempo total (0.7120 s)
+- CastingBar: 15.93% (0.2790 s)
+- Markers: 11.02% (0.1930 s)
+- ~32% restante no instrumentado en esta versión del benchmark (Decision/Classification/Threat/Absorb no tenían profiling propio).
+
+### Post-refactor (2026-08-15)
+- Avg/Frame: 1.935000 ms (con profiling extra activo de GetEliteType, HasAbsorb, ShouldSimplifyUnit, PlayerHasAggro)
+- HealthBarColor: 16.43% del tiempo total (0.3180 s) -> **Mejora de más del 55% en HealthBarColor gracias al snapshot**
+- CastingBar: 14.06% (0.2720 s)
+- Markers: 9.72% (0.1880 s)
+- Desglose no-módulo instrumentado:
+  - GetEliteType: 8.99% (0.1740 s)
+  - HasAbsorb: 7.44% (0.1440 s)
+  - ShouldSimplifyUnit: 4.34% (0.0840 s)
+  - PlayerHasAggro: 2.89% (0.0560 s)
+
+### Throttle check Target/Focus (ver Fase 10.3)
+- 100 llamadas reales en 100 eventos SPELL_UPDATE_COOLDOWN simulados en el mock.
+- El debounce actual (`C_Timer.After(0, ...)`) colapsa múltiples eventos disparados dentro del mismo frame de renderizado, pero no limita la frecuencia real a lo largo del tiempo entre frames sucesivos. En combate intenso con rotaciones rápidas de cooldowns se evaluará implementar un throttle por tiempo real (p. ej. `C_Timer` a 10Hz o cooldown timestamp mínimo de 0.1s) en un pase futuro.

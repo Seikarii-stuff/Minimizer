@@ -1,6 +1,7 @@
 local _, Minimizer = ...
+if not Minimizer then return end
 
-Minimizer.Classification = {}
+Minimizer.Classification = Minimizer.Classification or {}
 
 local function IsTrivial(unit, classification)
     if Minimizer.Utils.IsSecretValue(classification) then return false end
