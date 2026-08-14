@@ -301,6 +301,7 @@ antes del refactor:
 porque si se copia tal cual a la nueva arquitectura se arrastra un comentario engañoso
 sobre qué hace la función.
 
+
 ### 🟠 3.2 Fragilidad — localización del castbar por duck-typing
 
 ```lua
@@ -357,6 +358,7 @@ spell" (`IsSpellKnownOrInSpellBook` / `IsPlayerSpell` como fallback en cascada),
 el peor caso es "no se muestra ningún indicator de interrupt para esa spec", no un
 crash ni taint — pero es una limitación funcional a tener en cuenta, no un bug de
 seguridad.
+Nota: añadir los faltantes y migrar a algun tipo de data.lua para cortes y para la feature futura de cds defensivos/ofensivos
 
 ### 🟢 3.5 Higiene de archivo — mojibake / encoding mixto en `Core.lua`
 
