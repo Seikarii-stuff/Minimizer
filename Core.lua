@@ -67,7 +67,7 @@ end
 -------------------------------------------------------------------------------
 -- 3. CACHE & DECISION ENGINE (Sin comparaciones inseguras)
 -------------------------------------------------------------------------------
-Minimizer.Cache = {}
+Minimizer.Cache = Minimizer.Cache or {}
 Minimizer.Modules = Minimizer.Modules or {}
 Minimizer.ActiveNameplates = Minimizer.ActiveNameplates or {}
 
@@ -105,16 +105,22 @@ end
 
 function Minimizer.Absorb.HasAbsorb(unit, nameplate)
     if not unit or not UnitExists(unit) then return false end
+    local state = Minimizer.Cache.GetUnitState and Minimizer.Cache.GetUnitState(unit)
+    if state and state.absorb ~= nil then return state.absorb end
     local absorbs = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit)
+    local result
     if not absorbs or (issecretvalue and issecretvalue(absorbs)) then
         -- El valor numérico es secreto; el widget nativo de Blizzard sí
         -- expone de forma segura si está mostrando el absorb.
         local unitFrame = nameplate and nameplate.UnitFrame
         local healthBar = unitFrame and (unitFrame.healthBar or unitFrame.HealthBar)
         local indicator = healthBar and (healthBar.totalAbsorbOverlay or healthBar.totalAbsorb)
-        return indicator and indicator.IsShown and indicator:IsShown() == true or false
+        result = indicator and indicator.IsShown and indicator:IsShown() == true or false
+    else
+        result = type(absorbs) == "number" and absorbs > 0
     end
-    return type(absorbs) == "number" and absorbs > 0
+    if state then state.absorb = result end
+    return result
 end
 
 function Minimizer.Threat.IsPlayerTank()
@@ -136,12 +142,16 @@ end
 
 function Minimizer.Threat.GetSituation(unit, source)
     if not unit or not UnitExists(unit) then return nil end
+    local state = Minimizer.Cache.GetUnitState and Minimizer.Cache.GetUnitState(unit)
+    local key = "threat:" .. (source or "player")
+    if state and state[key] ~= nil then return state[key] end
     local situation = UnitThreatSituation(source or "player", unit)
     -- La situación puede ser secreta en Midnight. Nunca la conviertas en una
     -- decisión Lua ni la trates como aggro por coerción: sólo el número 3 es
     -- aggro sólido según la API documentada.
     if issecretvalue and issecretvalue(situation) then return nil end
     if type(situation) ~= "number" then return nil end
+    if state then state[key] = situation end
     return situation
 end
 
@@ -448,6 +458,9 @@ end
 
 function Minimizer.Core.ClearNeverSimplify(unit)
     if not unit then return end
+    if Minimizer.Cache.InvalidateUnit then
+        Minimizer.Cache.InvalidateUnit(unit)
+    end
     Minimizer.Cast.InvalidateState(unit)
     local nameplate = Minimizer.ActiveNameplates[unit] or Minimizer.Utils.GetNamePlateForUnit(unit)
     if nameplate then
@@ -494,6 +507,18 @@ local function OnEvent(self, event, unit, ...)
         or event == "GROUP_ROSTER_UPDATE"
         or event == "PLAYER_TALENT_UPDATE"
         or event == "PLAYER_SPECIALIZATION_CHANGED" then
+        if event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then
+            if Minimizer.Cache.InvalidateUnit then
+                Minimizer.Cache.InvalidateUnit(unit, "threat:player")
+                for _, tankToken in ipairs(Minimizer.Threat.tankTokens) do
+                    Minimizer.Cache.InvalidateUnit(unit, "threat:" .. tankToken)
+                end
+            end
+        elseif event == "UNIT_ABSORB_AMOUNT_CHANGED" and Minimizer.Cache.InvalidateUnit then
+            Minimizer.Cache.InvalidateUnit(unit, "absorb")
+        elseif Minimizer.Cache.InvalidateAll then
+            Minimizer.Cache.InvalidateAll("threat:player")
+        end
         if event == "PLAYER_ROLES_ASSIGNED" or event == "GROUP_ROSTER_UPDATE"
             or event == "PLAYER_TALENT_UPDATE" or event == "PLAYER_SPECIALIZATION_CHANGED" then
             Minimizer.Threat.RefreshTankTokens()
@@ -511,6 +536,9 @@ local function OnEvent(self, event, unit, ...)
         or event == "UNIT_SPELLCAST_EMPOWER_START"
         or event == "UNIT_SPELLCAST_EMPOWER_STOP"
         or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
+        if Minimizer.Cache.InvalidateUnit then
+            Minimizer.Cache.InvalidateUnit(unit, "absorb")
+        end
         Minimizer.Cast.InvalidateState(unit)
         if event == "UNIT_SPELLCAST_START"
             or event == "UNIT_SPELLCAST_CHANNEL_START"
