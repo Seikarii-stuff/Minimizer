@@ -275,6 +275,13 @@ function Minimizer.Markers.Ensure(nameplate)
 end
 
 function Minimizer.Markers.Update(unit, nameplate)
+    if MinimizerDB.focusIndicator == "face" then
+        if nameplate.MinimizerMarkers then
+            for _, marker in pairs(nameplate.MinimizerMarkers) do marker:Hide() end
+        end
+        if Minimizer.Focus then Minimizer.Focus:UpdateFace() end
+        return
+    end
     local markers = Minimizer.Markers.Ensure(nameplate)
     if not markers then return end
 
@@ -478,9 +485,16 @@ end
 -------------------------------------------------------------------------------
 SLASH_MINIMIZER1 = "/simp"
 SlashCmdList["MINIMIZER"] = function(msg)
+    if msg == "arrows" or msg == "face" then
+        if Minimizer.Focus then
+            Minimizer.Focus:SetMode(msg)
+            print("|cff33ff99Minimizer|r: indicador de focus = " .. msg)
+        end
+        return
+    end
     local value = tonumber(msg)
     if not value then
-        print("|cff33ff99Minimizer|r: uso /simp <0-100>. Valor actual: " .. (MinimizerDB.simplifyPercent or 0) .. "%")
+        print("|cff33ff99Minimizer|r: uso /simp <0-100>, /simp arrows o /simp face")
         return
     end
 
