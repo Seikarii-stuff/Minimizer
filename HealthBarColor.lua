@@ -21,22 +21,18 @@ local COLORS = {
     superiorUninterruptible = { 0.00, 0.00, 0.00 },
 }
 
-local function IsSecretValue(value)
-    return issecretvalue and issecretvalue(value)
-end
-
 local function IsTrivial(unit, classification)
-    if IsSecretValue(classification) then return false end
+    if Minimizer.Utils.IsSecretValue(classification) then return false end
     if classification == "trivial" or classification == "minus" then return true end
     local level = UnitEffectiveLevel(unit)
     local playerLevel = UnitEffectiveLevel("player")
-    if IsSecretValue(level) or IsSecretValue(playerLevel) then return false end
+    if Minimizer.Utils.IsSecretValue(level) or Minimizer.Utils.IsSecretValue(playerLevel) then return false end
     return type(level) == "number" and type(playerLevel) == "number"
         and level > 0 and level <= playerLevel - 10
 end
 
 local function GetSuperiorKind(unit, classification)
-    if IsSecretValue(classification) then return nil end
+    if Minimizer.Utils.IsSecretValue(classification) then return nil end
     if classification == "worldboss" then return "boss" end
     if UnitIsLieutenant and UnitIsLieutenant(unit) == true then return "miniboss" end
     return nil
@@ -45,10 +41,10 @@ end
 local function HasMana(unit)
     if UnitHasPowerType and Enum and Enum.PowerType and Enum.PowerType.Mana then
         local value = UnitHasPowerType(unit, Enum.PowerType.Mana)
-        return not IsSecretValue(value) and value == true
+        return not Minimizer.Utils.IsSecretValue(value) and value == true
     end
     local powerType = UnitPowerType(unit)
-    return not IsSecretValue(powerType) and powerType == 0
+    return not Minimizer.Utils.IsSecretValue(powerType) and powerType == 0
 end
 
 function HealthBarColor:GetEliteType(unit)

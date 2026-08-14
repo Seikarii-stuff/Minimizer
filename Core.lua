@@ -19,6 +19,10 @@ MinimizerDB = MinimizerDB or {
 -------------------------------------------------------------------------------
 Minimizer.Utils = {}
 
+function Minimizer.Utils.IsSecretValue(value)
+    return issecretvalue and issecretvalue(value)
+end
+
 -- Identifica si la API nativa C_NamePlateManager está disponible[cite: 3]
 function Minimizer.Utils.IsSimplifiedAvailable()
     return C_NamePlateManager and type(C_NamePlateManager.SetNamePlateSimplified) == "function"
@@ -67,11 +71,34 @@ end
 -------------------------------------------------------------------------------
 Minimizer.Cache = {}
 Minimizer.Modules = Minimizer.Modules or {}
+Minimizer.ActiveNameplates = Minimizer.ActiveNameplates or {}
 
 -- Estado de amenaza. Mantiene la decisión separada de la presentación para
 -- que futuros módulos (incluido CastingBar) puedan reutilizarla.
 Minimizer.Threat = Minimizer.Threat or {}
 Minimizer.Absorb = Minimizer.Absorb or {}
+Minimizer.Threat.tankTokens = Minimizer.Threat.tankTokens or {}
+
+function Minimizer.Threat.RefreshTankTokens()
+    local tokens = Minimizer.Threat.tankTokens
+    wipe(tokens)
+
+    local prefix, count
+    if IsInRaid and IsInRaid() then
+        prefix, count = "raid", 40
+    elseif IsInGroup and IsInGroup() then
+        prefix, count = "party", 4
+    else
+        return
+    end
+
+    for index = 1, count do
+        local token = prefix .. index
+        if UnitExists(token) and UnitGroupRolesAssigned(token) == "TANK" then
+            tokens[#tokens + 1] = token
+        end
+    end
+end
 
 function Minimizer.Threat.IsThreatContext()
     -- La amenaza se evalúa tanto en mazmorras como en mundo abierto.
@@ -130,18 +157,13 @@ end
 
 function Minimizer.Threat.GetTankSituation(unit)
     local best = Minimizer.Threat.GetSituation(unit, "player")
-    for prefix, count in pairs({ party = 4, raid = 40 }) do
-        for index = 1, count do
-            local token = prefix .. index
-            if UnitExists(token) and UnitGroupRolesAssigned(token) == "TANK" then
-                local situation = Minimizer.Threat.GetSituation(unit, token)
-                if situation == 3 then
-                    return situation
-                end
-                if best == nil or (situation and situation > best) then
-                    best = situation
-                end
-            end
+    for _, token in ipairs(Minimizer.Threat.tankTokens) do
+        local situation = Minimizer.Threat.GetSituation(unit, token)
+        if situation == 3 then
+            return situation
+        end
+        if best == nil or (situation and situation > best) then
+            best = situation
         end
     end
     return best
@@ -165,36 +187,57 @@ end
 -- CastingBar. La forma de leerlo sigue los índices documentados en project.md.
 Minimizer.Cast = Minimizer.Cast or {}
 
-local function IsSecretValue(value)
-    return issecretvalue and issecretvalue(value)
-end
-
-function Minimizer.Cast.GetState(unit)
+local function ReadCastState(unit)
     if not unit or not UnitExists(unit) then return false, false end
 
-    local castInfo = { UnitCastingInfo(unit) }
-    local channelInfo = { UnitChannelInfo(unit) }
-    local isCasting = castInfo[1] ~= nil or channelInfo[1] ~= nil
+    local castName, _, _, _, _, _, _, castUninterruptible = UnitCastingInfo(unit)
+    local channelName, _, _, _, _, _, channelUninterruptible = UnitChannelInfo(unit)
+    local isCasting = castName ~= nil or channelName ~= nil
     if not isCasting then return false, false end
 
     -- En casts normales el indicador está en [8], en canales en [7].
     -- No usar `and/or` aquí: el valor puede ser un booleano secreto y una
     -- prueba Lua sobre él provoca taint en Midnight.
     local uninterruptible
-    if castInfo[1] ~= nil then
-        uninterruptible = castInfo[8]
-    elseif channelInfo[1] ~= nil then
-        uninterruptible = channelInfo[7]
+    if castName ~= nil then
+        uninterruptible = castUninterruptible
+    elseif channelName ~= nil then
+        uninterruptible = channelUninterruptible
     end
 
     -- Los secretos no se pueden inspeccionar desde Lua. En ese caso dejamos
     -- la clasificación indeterminada y devolvemos el valor sólo para APIs
     -- C-side como SetAlphaFromBoolean().
-    if IsSecretValue(uninterruptible) then
+    if Minimizer.Utils.IsSecretValue(uninterruptible) then
         return true, nil, uninterruptible
     end
     local safeValue = uninterruptible == true
     return true, safeValue, safeValue
+end
+
+local cachedCastUnit
+local cachedIsCasting, cachedUninterruptible, cachedRawUninterruptible
+local cachedCastValid = false
+
+function Minimizer.Cast.InvalidateState(unit)
+    if not unit or cachedCastUnit == unit then
+        cachedCastUnit = nil
+        cachedIsCasting, cachedUninterruptible, cachedRawUninterruptible = nil, nil, nil
+        cachedCastValid = false
+    end
+end
+
+function Minimizer.Cast.GetState(unit)
+    if cachedCastValid and cachedCastUnit == unit then
+        return cachedIsCasting, cachedUninterruptible, cachedRawUninterruptible
+    end
+    local isCasting, uninterruptible, rawUninterruptible = ReadCastState(unit)
+    cachedCastUnit = unit
+    cachedIsCasting = isCasting
+    cachedUninterruptible = uninterruptible
+    cachedRawUninterruptible = rawUninterruptible
+    cachedCastValid = true
+    return isCasting, uninterruptible, rawUninterruptible
 end
 
 function Minimizer.Cast.IsUnitCasting(unit)
@@ -296,15 +339,29 @@ function Minimizer.Markers.Update(unit, nameplate)
     local showFocusArrows = MinimizerDB.focusIndicator ~= "face"
     markers.focusLeft:SetShown(isFocus == true and showFocusArrows)
     markers.focusRight:SetShown(isFocus == true and showFocusArrows)
-    if MinimizerDB.focusIndicator == "face" and Minimizer.Focus then
-        Minimizer.Focus:UpdateFace()
-    end
+end
+
+function Minimizer.Markers.Clear(nameplate)
+    local markers = nameplate and nameplate.MinimizerMarkers
+    if not markers then return end
+    markers.targetLeft:Hide()
+    markers.targetRight:Hide()
+    markers.focusLeft:Hide()
+    markers.focusRight:Hide()
 end
 
 -------------------------------------------------------------------------------
 -- 5. CORE ENGINE (Aplica Simplificación Canónica C-Side)
 -------------------------------------------------------------------------------
 Minimizer.Core = {}
+local applyAllPending = false
+Minimizer.Bench = Minimizer.Bench or { enabled = false, applyAll = 0, applyAllTime = 0, modules = {} }
+
+function Minimizer.Bench.Reset()
+    Minimizer.Bench.applyAll = 0
+    Minimizer.Bench.applyAllTime = 0
+    wipe(Minimizer.Bench.modules)
+end
 
 -- Los módulos visuales se registran aquí en vez de acoplarse al manejador de
 -- eventos. Cada módulo puede implementar UpdateNamePlate y OnNamePlateRemoved.
@@ -312,13 +369,21 @@ function Minimizer.Core.RegisterModule(name, module)
     if type(name) ~= "string" or type(module) ~= "table" then return end
 
     Minimizer.Modules[name] = module
+    module.MinimizerModuleName = name
     Minimizer.Core.ApplyToAll()
 end
 
 function Minimizer.Core.UpdateModules(unit, nameplate)
     for _, module in pairs(Minimizer.Modules) do
         if type(module.UpdateNamePlate) == "function" then
+            local started = Minimizer.Bench.enabled and GetTimePreciseSec()
             module:UpdateNamePlate(unit, nameplate)
+            if started then
+                local stats = Minimizer.Bench.modules[module] or { name = module.MinimizerModuleName or "unknown", calls = 0, time = 0 }
+                stats.calls = stats.calls + 1
+                stats.time = stats.time + (GetTimePreciseSec() - started)
+                Minimizer.Bench.modules[module] = stats
+            end
         end
     end
 end
@@ -331,6 +396,7 @@ function Minimizer.Core.ApplyToUnit(unit)
 
     local npToken = Minimizer.Utils.GetValidNamePlateToken(unit, nameplate)
     if not npToken then return end
+    Minimizer.ActiveNameplates[npToken] = nameplate
 
     -- 1. Evaluación de simplificación
     local shouldSimplify = Minimizer.Cache.ShouldSimplifyUnit(npToken, nameplate)
@@ -350,12 +416,27 @@ end
 
 function Minimizer.Core.ApplyToAll()
     if not C_NamePlate or not C_NamePlate.GetNamePlates then return end
+    local started = Minimizer.Bench.enabled and GetTimePreciseSec()
     for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
         local token = Minimizer.Utils.GetValidNamePlateToken(nil, nameplate)
         if token then
             Minimizer.Core.ApplyToUnit(token)
         end
     end
+    if started then
+        Minimizer.Bench.applyAll = Minimizer.Bench.applyAll + 1
+        Minimizer.Bench.applyAllTime = Minimizer.Bench.applyAllTime + (GetTimePreciseSec() - started)
+    end
+end
+
+-- Native events arrive in bursts. Coalesce full nameplate passes per frame.
+function Minimizer.Core.RequestApplyToAll()
+    if applyAllPending then return end
+    applyAllPending = true
+    C_Timer.After(0, function()
+        applyAllPending = false
+        Minimizer.Core.ApplyToAll()
+    end)
 end
 
 function Minimizer.Core.MarkNeverSimplify(unit)
@@ -369,22 +450,27 @@ end
 
 function Minimizer.Core.ClearNeverSimplify(unit)
     if not unit then return end
-    local nameplate = Minimizer.Utils.GetNamePlateForUnit(unit)
+    Minimizer.Cast.InvalidateState(unit)
+    local nameplate = Minimizer.ActiveNameplates[unit] or Minimizer.Utils.GetNamePlateForUnit(unit)
     if nameplate then
         for _, module in pairs(Minimizer.Modules) do
             if type(module.OnNamePlateRemoved) == "function" then
                 module:OnNamePlateRemoved(unit, nameplate)
             end
         end
+        Minimizer.Markers.Clear(nameplate)
         nameplate.MinimizerNeverSimplify = nil
         nameplate.MinimizerState = nil
+        nameplate.MinimizerCastBar = nil
     end
+    Minimizer.ActiveNameplates[unit] = nil
 end
 
 -------------------------------------------------------------------------------
 -- 6. EVENT MANAGEMENT & SECURE HOOKS
 -------------------------------------------------------------------------------
 local EventFrame = CreateFrame("Frame", "MinimizerEventFrame")
+local lastInterruptReady
 
 local function OnEvent(self, event, unit, ...)
     if event == "PLAYER_ENTERING_WORLD"
@@ -394,7 +480,10 @@ local function OnEvent(self, event, unit, ...)
         or event == "PLAYER_FOCUS_CHANGED"
         or event == "PLAYER_REGEN_DISABLED"
         or event == "PLAYER_REGEN_ENABLED" then
-        Minimizer.Core.ApplyToAll()
+        if event == "PLAYER_ENTERING_WORLD" then
+            Minimizer.Threat.RefreshTankTokens()
+        end
+        Minimizer.Core.RequestApplyToAll()
     elseif event == "UNIT_DISPLAYPOWER"
         or event == "UNIT_CLASSIFICATION_CHANGED"
         or event == "UNIT_LEVEL" then
@@ -407,7 +496,11 @@ local function OnEvent(self, event, unit, ...)
         or event == "GROUP_ROSTER_UPDATE"
         or event == "PLAYER_TALENT_UPDATE"
         or event == "PLAYER_SPECIALIZATION_CHANGED" then
-        Minimizer.Core.ApplyToAll()
+        if event == "PLAYER_ROLES_ASSIGNED" or event == "GROUP_ROSTER_UPDATE"
+            or event == "PLAYER_TALENT_UPDATE" or event == "PLAYER_SPECIALIZATION_CHANGED" then
+            Minimizer.Threat.RefreshTankTokens()
+        end
+        Minimizer.Core.RequestApplyToAll()
     elseif event == "UNIT_SPELLCAST_START"
         or event == "UNIT_SPELLCAST_STOP"
         or event == "UNIT_SPELLCAST_FAILED"
@@ -420,12 +513,24 @@ local function OnEvent(self, event, unit, ...)
         or event == "UNIT_SPELLCAST_EMPOWER_START"
         or event == "UNIT_SPELLCAST_EMPOWER_STOP"
         or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
+        Minimizer.Cast.InvalidateState(unit)
         if event == "UNIT_SPELLCAST_START"
             or event == "UNIT_SPELLCAST_CHANNEL_START"
             or event == "UNIT_SPELLCAST_EMPOWER_START" then
             Minimizer.Core.MarkNeverSimplify(unit)
         else
             Minimizer.Core.ApplyToUnit(unit)
+        end
+    elseif event == "SPELL_UPDATE_COOLDOWN" then
+        local interrupt = Minimizer.Interrupt
+        local ready = interrupt and interrupt.IsReady and interrupt.IsReady()
+        -- Secret booleans cannot be compared in Lua. In that case the native
+        -- status-bar hook remains authoritative; ordinary booleans refresh
+        -- only when the interrupt actually changes state.
+        if ready ~= nil and not Minimizer.Utils.IsSecretValue(ready)
+            and ready ~= lastInterruptReady then
+            lastInterruptReady = ready
+            Minimizer.Core.RequestApplyToAll()
         end
     elseif event == "ADDON_LOADED" and unit == ADDON_NAME then
         MinimizerDB = MinimizerDB or {
@@ -466,6 +571,7 @@ EventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_UPDATE")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_START")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_STOP")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_UPDATE")
+EventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 EventFrame:SetScript("OnEvent", OnEvent)
 
 -- Secure Hooks canónicos según especificación de Platynator[cite: 3]
@@ -483,6 +589,30 @@ end
 -------------------------------------------------------------------------------
 SLASH_MINIMIZER1 = "/simp"
 SlashCmdList["MINIMIZER"] = function(msg)
+    msg = (msg or ""):lower():match("^%s*(.-)%s*$")
+    if msg == "bench" or msg == "bench start" then
+        Minimizer.Bench.enabled = true
+        Minimizer.Bench.Reset()
+        print("|cff33ff99Minimizer|r: benchmark iniciado. Usa /simp bench stop para ver el informe.")
+        return
+    end
+    if msg == "bench reset" then
+        Minimizer.Bench.Reset()
+        print("|cff33ff99Minimizer|r: benchmark reiniciado.")
+        return
+    end
+    if msg == "bench stop" then
+        Minimizer.Bench.enabled = false
+        if UpdateAddOnMemoryUsage then UpdateAddOnMemoryUsage() end
+        local memory = GetAddOnMemoryUsage and GetAddOnMemoryUsage(ADDON_NAME) or 0
+        print(string.format("|cff33ff99Minimizer|r: ApplyToAll %d veces, %.3f ms total, memoria %.1f KB.",
+            Minimizer.Bench.applyAll, Minimizer.Bench.applyAllTime * 1000, memory))
+        for _, stats in pairs(Minimizer.Bench.modules) do
+            print(string.format("|cff33ff99Minimizer|r: %s: %d llamadas, %.3f ms.",
+                stats.name, stats.calls, stats.time * 1000))
+        end
+        return
+    end
     if msg == "arrows" or msg == "face" then
         if Minimizer.Focus then
             Minimizer.Focus:SetMode(msg)
@@ -492,7 +622,7 @@ SlashCmdList["MINIMIZER"] = function(msg)
     end
     local value = tonumber(msg)
     if not value then
-        print("|cff33ff99Minimizer|r: uso /simp <0-100>, /simp arrows o /simp face")
+        print("|cff33ff99Minimizer|r: uso /simp <0-100>, /simp arrows, /simp face o /simp bench")
         return
     end
 

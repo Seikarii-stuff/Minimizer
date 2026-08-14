@@ -14,10 +14,6 @@ local COLORS = {
     channel = { 1.00, 0.55, 0.75 }, -- Canalización: rosa claro
 }
 
-local function IsSecretValue(value)
-    return issecretvalue and issecretvalue(value)
-end
-
 local function IsSpellTargetingPlayer(unit)
     if UnitIsSpellTarget then
         local targeted = UnitIsSpellTarget(unit, "player")
@@ -28,7 +24,7 @@ local function IsSpellTargetingPlayer(unit)
 end
 
 local function IsImportantSpell(spellID)
-    if not spellID or IsSecretValue(spellID) then return false end
+    if not spellID or Minimizer.Utils.IsSecretValue(spellID) then return false end
     return C_Spell and C_Spell.IsSpellImportant
         and C_Spell.IsSpellImportant(spellID) == true
 end
@@ -85,23 +81,24 @@ function CastingBar:GetCastBar(nameplate)
     local unitFrame = nameplate and (nameplate.UnitFrame or nameplate)
     if not unitFrame or type(unitFrame.GetChildren) ~= "function" then return nil end
 
-    local healthBar = unitFrame.healthBar
-    local childResults = { pcall(unitFrame.GetChildren, unitFrame) }
-    if not childResults[1] then return nil end
+    local cached = nameplate.MinimizerCastBar
+    if cached and type(cached.SetStatusBarColor) == "function"
+        and type(cached.GetValue) == "function" then
+        return cached
+    end
 
-    for i = 2, #childResults do
-        local child = childResults[i]
+    local healthBar = unitFrame.healthBar
+    local children = { unitFrame:GetChildren() }
+    for _, child in ipairs(children) do
         if type(child) == "table" and type(child.GetChildren) == "function" then
-            local grandchildResults = { pcall(child.GetChildren, child) }
-            if grandchildResults[1] then
-                for j = 2, #grandchildResults do
-                    local grandchild = grandchildResults[j]
-                    if type(grandchild) == "table"
-                        and grandchild ~= healthBar
-                        and type(grandchild.SetStatusBarColor) == "function"
-                        and type(grandchild.GetValue) == "function" then
-                        return grandchild
-                    end
+            local grandchildren = { child:GetChildren() }
+            for _, grandchild in ipairs(grandchildren) do
+                if type(grandchild) == "table"
+                    and grandchild ~= healthBar
+                    and type(grandchild.SetStatusBarColor) == "function"
+                    and type(grandchild.GetValue) == "function" then
+                    nameplate.MinimizerCastBar = grandchild
+                    return grandchild
                 end
             end
         end
@@ -228,34 +225,15 @@ function CastingBar:UpdateNamePlate(unit, nameplate)
     nameplate.MinimizerImportantCast = important
 end
 
-function CastingBar:OnCastEvent(unit, event)
-    local nameplate = Minimizer.Utils.GetNamePlateForUnit(unit)
-    if not nameplate then return end
-    Minimizer.Core.ApplyToUnit(unit)
-end
-
-local EventFrame = CreateFrame("Frame", "MinimizerCastingBarEventFrame")
-local CAST_EVENTS = {
-    UNIT_SPELLCAST_START = true, UNIT_SPELLCAST_STOP = true,
-    UNIT_SPELLCAST_FAILED = true, UNIT_SPELLCAST_INTERRUPTED = true,
-    UNIT_SPELLCAST_INTERRUPTIBLE = true, UNIT_SPELLCAST_NOT_INTERRUPTIBLE = true,
-    UNIT_SPELLCAST_CHANNEL_START = true, UNIT_SPELLCAST_CHANNEL_STOP = true,
-    UNIT_SPELLCAST_CHANNEL_UPDATE = true,
-    UNIT_SPELLCAST_EMPOWER_START = true, UNIT_SPELLCAST_EMPOWER_STOP = true,
-    UNIT_SPELLCAST_EMPOWER_UPDATE = true,
-}
-for event in pairs(CAST_EVENTS) do EventFrame:RegisterEvent(event) end
-EventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-EventFrame:SetScript("OnEvent", function(_, event, unit)
-    if event == "SPELL_UPDATE_COOLDOWN" then
-        Minimizer.Core.ApplyToAll()
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, Minimizer.Core.ApplyToAll)
-            C_Timer.After(0.05, Minimizer.Core.ApplyToAll)
-        end
-    elseif unit and CAST_EVENTS[event] then
-        CastingBar:OnCastEvent(unit, event)
+function CastingBar:OnNamePlateRemoved(_, nameplate)
+    local castBar = nameplate and nameplate.MinimizerCastBar
+    if not castBar then return end
+    local visuals = castBar.MinimizerCastVisuals
+    if visuals then
+        visuals.targetPulse:Stop()
+        visuals.targetContainer:Hide()
     end
-end)
+    castBar.MinimizerCastUnit = nil
+end
 
 Minimizer.Core.RegisterModule("CastingBar", CastingBar)

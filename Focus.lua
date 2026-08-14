@@ -68,13 +68,20 @@ function Focus:SetMode(mode)
 end
 
 local driver = CreateFrame("Frame")
-local elapsed = 0
-driver:SetScript("OnUpdate", function(_, delta)
-    elapsed = elapsed + delta
-    if elapsed >= 0.05 then elapsed = 0; Focus:UpdateFace() end
-end)
+local cooldownUpdatePending = false
 driver:RegisterEvent("PLAYER_FOCUS_CHANGED")
 driver:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 driver:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 driver:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-driver:SetScript("OnEvent", function() Focus:UpdateFace() end)
+driver:SetScript("OnEvent", function(_, event)
+    if event ~= "SPELL_UPDATE_COOLDOWN" then
+        Focus:UpdateFace()
+        return
+    end
+    if cooldownUpdatePending then return end
+    cooldownUpdatePending = true
+    C_Timer.After(0, function()
+        cooldownUpdatePending = false
+        Focus:UpdateFace()
+    end)
+end)
