@@ -39,16 +39,6 @@ function Minimizer.Core.ApplyToUnit(unit)
 
     local npToken = Minimizer.Utils.GetValidNamePlateToken(unit, nameplate)
     if not npToken then return end
-    
-    -- Ignorar unidades amistosas (party, pets, etc)
-    if not UnitCanAttack("player", npToken) then 
-        if Minimizer.Utils.IsSimplifiedAvailable() and nameplate.MinimizerState ~= false then
-            C_NamePlateManager.SetNamePlateSimplified(npToken, false)
-            nameplate.MinimizerState = false
-        end
-        return 
-    end
-
     Minimizer.ActiveNameplates[npToken] = nameplate
 
     local shouldSimplify = false
@@ -59,7 +49,7 @@ function Minimizer.Core.ApplyToUnit(unit)
         reason = "no simp (fast-path)"
     else
         shouldSimplify, reason = Minimizer.Decision.ShouldSimplifyUnit(npToken, nameplate)
-        if reason == "no simp" or reason == "persistent" then
+        if reason == "no simp" then
             nameplate.MinimizerDesimplifiedPersistent = true
         end
     end

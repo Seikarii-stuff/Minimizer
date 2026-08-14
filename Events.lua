@@ -104,46 +104,64 @@ EventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 EventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
 EventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 EventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-EventFrame:SetScript("OnEvent", OnEvent)
+-- NAME_PLATE_UNIT_ADDED garantiza que el token ya está asignado al frame,
+-- a diferencia de OnNamePlateAdded que puede disparar antes de que el frame pool
+-- haya terminado de inicializar el token. Es el momento canónico para simplificar.
+EventFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+EventFrame:SetScript("OnEvent", function(self, event, unit, ...)
+    if event == "NAME_PLATE_UNIT_ADDED" then
+        -- El token ya está garantizado en este punto. Intentar aplicar directamente
+        -- y luego solicitar un pase completo que recoja a los que puedan haber fallado.
+        if unit then
+            Minimizer.Core.ApplyToUnit(unit)
+        end
+        UpdateNameplates()
+        return
+    end
+    OnEvent(self, event, unit, ...)
+end)
 
 -- Secure Hooks canónicos
 if NamePlateDriverFrame then
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit)
-        if unit then 
-            C_Timer.After(0.01, function() Minimizer.Core.ApplyToUnit(unit) end) 
-            
-            local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
-            if nameplate then
-                if not nameplate.MinimizerEventFrame then
-                    nameplate.MinimizerEventFrame = CreateFrame("Frame", nil, nameplate)
-                    nameplate.MinimizerEventFrame:SetScript("OnEvent", function(self, event, evUnit, ...)
-                        OnEvent(EventFrame, event, evUnit, ...)
-                    end)
-                end
-                local ef = nameplate.MinimizerEventFrame
-                ef:RegisterUnitEvent("UNIT_DISPLAYPOWER", unit)
-                ef:RegisterUnitEvent("UNIT_CLASSIFICATION_CHANGED", unit)
-                ef:RegisterUnitEvent("UNIT_LEVEL", unit)
-                ef:RegisterUnitEvent("UNIT_THREAT_SITUATION_UPDATE", unit)
-                ef:RegisterUnitEvent("UNIT_THREAT_LIST_UPDATE", unit)
-                ef:RegisterUnitEvent("UNIT_SPELLCAST_START", unit)
-                ef:RegisterUnitEvent("UNIT_SPELLCAST_STOP", unit)
-                ef:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", unit)
-                ef:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", unit)
-                ef:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", unit)
-                ef:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit)
-                ef:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", unit)
-                ef:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", unit)
-                ef:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", unit)
-                ef:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", unit)
-                ef:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP", unit)
-                ef:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", unit)
+        if not unit then return end
+
+        -- Registrar eventos de unidad en el frame individual de la nameplate.
+        -- Se intenta inmediatamente; si el frame no está listo aún, el evento
+        -- NAME_PLATE_UNIT_ADDED se encargará de aplicar la simplificación.
+        local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
+        if nameplate then
+            if not nameplate.MinimizerEventFrame then
+                nameplate.MinimizerEventFrame = CreateFrame("Frame", nil, nameplate)
+                nameplate.MinimizerEventFrame:SetScript("OnEvent", function(_, event, evUnit, ...)
+                    OnEvent(EventFrame, event, evUnit, ...)
+                end)
             end
+            local ef = nameplate.MinimizerEventFrame
+            ef:RegisterUnitEvent("UNIT_DISPLAYPOWER", unit)
+            ef:RegisterUnitEvent("UNIT_CLASSIFICATION_CHANGED", unit)
+            ef:RegisterUnitEvent("UNIT_LEVEL", unit)
+            ef:RegisterUnitEvent("UNIT_THREAT_SITUATION_UPDATE", unit)
+            ef:RegisterUnitEvent("UNIT_THREAT_LIST_UPDATE", unit)
+            ef:RegisterUnitEvent("UNIT_SPELLCAST_START", unit)
+            ef:RegisterUnitEvent("UNIT_SPELLCAST_STOP", unit)
+            ef:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", unit)
+            ef:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", unit)
+            ef:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", unit)
+            ef:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit)
+            ef:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", unit)
+            ef:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+            ef:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", unit)
+            ef:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", unit)
+            ef:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP", unit)
+            ef:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", unit)
         end
     end)
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit)
         if unit then 
             Minimizer.Core.ClearNeverSimplify(unit)
+            -- Al eliminar la nameplate el frame de eventos se destruye con su parent,
+            -- pero desregistramos explícitamente para no dejar eventos huérfanos.
             local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
             if nameplate and nameplate.MinimizerEventFrame then
                 nameplate.MinimizerEventFrame:UnregisterAllEvents()
@@ -158,3 +176,4 @@ if CompactUnitFrame_UpdateHealthColor then
         if unit then Minimizer.Core.ApplyToUnit(unit) end
     end)
 end
+
