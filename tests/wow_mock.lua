@@ -273,9 +273,17 @@ function _G.UnitIsUnit(unit1, unit2)
     return false
 end
 
-function _G.UnitThreatSituation(unit, otherUnit)
-    local u = getUnit(unit)
-    return u and u.threatSituation or 0
+function _G.UnitThreatSituation(source, target)
+    -- WoW API: UnitThreatSituation("player", "nameplate1")
+    -- returns the threat SITUATION of `source` on `target`.
+    -- In our mock, the threat is stored on the TARGET unit.
+    local u = getUnit(target)
+    if not u then return nil end
+    -- Only return the threat if the source is the player
+    if source == "player" then
+        return u.threatSituation
+    end
+    return 0
 end
 
 function _G.UnitCastingInfo(unit)

@@ -52,9 +52,11 @@ function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
         isCasting, isUninterruptible = Minimizer.Cast.GetState(unit)
     end
     if isCasting then
-        if isUninterruptible == false then
+        if isUninterruptible == true then
+            -- Cast imposible de interrumpir: la unidad siempre esta "activa" mientras castea
             return false, "persistent"
         else
+            -- Cast interrumpible: temporal, solo mientras dure el cast
             return false, "temporal"
         end
     end
