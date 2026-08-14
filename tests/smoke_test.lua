@@ -255,16 +255,16 @@ do
     addonTable.Core.ApplyToUnit("nameplate13")
     local hbCaster = addonTable.Utils.GetHealthBar(npCaster)
     r, g, b = hbCaster:GetStatusBarColor()
-    check(math.abs(r - 0.10) < 0.01 and math.abs(g - 1.00) < 0.01 and math.abs(b - 0.10) < 0.01,
-        "HealthBarColor: inferior (caster/azul) castea interrumpible -> verde")
+    check(math.abs(r - 0.20) < 0.01 and math.abs(g - 0.55) < 0.01 and math.abs(b - 1.00) < 0.01,
+        "HealthBarColor: inferior (caster/azul) castea interrumpible -> NO cambia (permanece azul)")
 
     -- 2b. Caster termina cast -> persiste verde
     Mocks.units["nameplate13"].cast = nil
     addonTable.Cast.InvalidateState("nameplate13")
     addonTable.Core.ApplyToUnit("nameplate13")
     r, g, b = hbCaster:GetStatusBarColor()
-    check(math.abs(r - 0.10) < 0.01 and math.abs(g - 1.00) < 0.01 and math.abs(b - 0.10) < 0.01,
-        "HealthBarColor: inferior (caster/azul) termina cast -> PERSISTE verde (flag)")
+    check(math.abs(r - 0.20) < 0.01 and math.abs(g - 0.55) < 0.01 and math.abs(b - 1.00) < 0.01,
+        "HealthBarColor: inferior (caster/azul) termina cast -> NO cambia (permanece azul)")
 
     -- 3. Inferior casteando ininterrumpible -> gris TEMPORAL
     Mocks.CreateTestUnit("nameplate14", {
