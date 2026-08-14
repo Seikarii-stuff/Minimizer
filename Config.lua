@@ -1,6 +1,6 @@
 -- Saved variables and defaults.
--- Bootstrap.lua crea la tabla Minimizer; Config solo la amplía.
--- Config.Initialize() es invocada por Bootstrap tras ADDON_LOADED.
+-- Se carga después de Bootstrap.lua. Las SavedVariables de WoW ya están
+-- disponibles en este punto, así que Initialize() es segura aquí.
 local _, Minimizer = ...
 if not Minimizer then return end
 
@@ -29,5 +29,8 @@ function Minimizer.Config.Initialize()
     end
     return MinimizerDB
 end
--- (No se llama aquí; Bootstrap.lua lo hace tras ADDON_LOADED para que
---  MinimizerDB ya esté disponible cuando se ejecute Initialize.)
+
+-- Llamar aquí es correcto: WoW hace disponibles las SavedVariables antes de
+-- ejecutar los archivos del addon. Bootstrap.lua también lo invocará en
+-- ADDON_LOADED como fallback defensivo.
+Minimizer.Config.Initialize()
