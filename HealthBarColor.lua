@@ -49,9 +49,10 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     local color = COLORS[baseKind] or COLORS.melee
     local r, g, b = color[1], color[2], color[3]
 
-    local isCasting, uninterruptible, rawUninterruptible
+    local isCasting, uninterruptible, rawUninterruptible, isChanneling
     if snapshot then
         isCasting = snapshot.isCasting
+        isChanneling = snapshot.isChanneling
         rawUninterruptible = snapshot.rawUninterruptible
         if rawUninterruptible == nil then rawUninterruptible = snapshot.isUninterruptible end
         if rawUninterruptible == nil then
@@ -64,10 +65,12 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
             end
         end
     else
-        isCasting, uninterruptible, rawUninterruptible = Minimizer.Cast.GetState(unit)
+        isCasting, uninterruptible, rawUninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
     end
     if rawUninterruptible == nil then rawUninterruptible = false end
     if uninterruptible == nil then uninterruptible = false end
+
+    local isActiveCastOrChannel = isCasting == true or isChanneling == true
 
     --[[
         LEYENDA M+ (NO MODIFICAR SIN PERMISO):
@@ -90,27 +93,27 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
 
     if not isSpecial then
         if isSuperior then
-            -- Regla 4: superior casteando ininterrumpible -> gris TEMPORAL.
-            -- Si el cast es interrumpible, el superior conserva su color base (morado).
-            if isCasting and uninterruptible then
+            -- Regla 4: superior casteando/canalizando ininterrumpible -> gris TEMPORAL.
+            -- Si la accion es interrumpible, el superior conserva su color base (morado).
+            if isActiveCastOrChannel and uninterruptible then
                 local c = COLORS.superiorUninterruptible
                 r, g, b = c[1], c[2], c[3]
             end
         else
             -- Reglas 5 & 6: CUALQUIER inferior (melee, caster, trivial, etc.)
-            if isCasting then
+            if isActiveCastOrChannel then
                 if uninterruptible then
-                    -- Ininterrumpible -> gris TEMPORAL. No tocar el flag persistente.
+                    -- Channel/cast ininterrumpible -> gris TEMPORAL. No tocar el flag persistente.
                     local c = COLORS.superiorUninterruptible
                     r, g, b = c[1], c[2], c[3]
                 else
-                    -- Interrumpible o canal -> verde PERSISTENTE.
+                    -- Channel/cast interrumpible -> verde PERSISTENTE.
                     nameplate.MinimizerPersistentCastColorKind = "castInterruptible"
                     local c = COLORS.castInterruptible
                     r, g, b = c[1], c[2], c[3]
                 end
             elseif nameplate.MinimizerPersistentCastColorKind == "castInterruptible" then
-                -- Ya casteo algo interrumpible antes: mantener verde aunque ya no castee.
+                -- Ya casteo/canalizo algo interrumpible antes: mantener verde aunque ya no lo haga.
                 local c = COLORS.castInterruptible
                 r, g, b = c[1], c[2], c[3]
             end

@@ -164,6 +164,14 @@ do
     check(simplify == false and reason == "no simp",
         "Decision: cast interrumpible inferior = dessimp PERSISTENTE (wipe potencial en M+)")
 
+    Mocks.CreateTestUnit("d_channel_uninterr", {
+        level = 70, classification = "normal", faction = "Horde",
+        channel = { name = "Drain", startTime = 0, endTime = 2000, uninterruptible = true }
+    })
+    simplify, reason = addonTable.Decision.ShouldSimplifyUnit("d_channel_uninterr", nil)
+    check(simplify == false and reason == "temporal",
+        "Decision: channel ininterrumpible inferior = temporal dessimp mientras dure el channel")
+
     Mocks.CreateTestUnit("d_aggro", {
         level = 70, classification = "normal", faction = "Horde", threatSituation = 3
     })
@@ -279,7 +287,20 @@ do
     check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01,
         "HealthBarColor: inferior casteando ininterrumpible -> gris TEMPORAL")
 
-    -- 3b. Inferior termina cast ininterrumpible -> vuelve a su color base (no persiste)
+    -- 3b. Inferior channeling ininterrumpible -> gris TEMPORAL mientras dure el channel
+    Mocks.CreateTestUnit("nameplate140", {
+        level = 70, classification = "normal", faction = "Horde", powerType = 1,
+        channel = { name = "Unint Channel", startTime = 0, endTime = 2000, uninterruptible = true }
+    })
+    local npMeleeChannelUnint = Mocks.CreateTestNameplate("nameplate140")
+    addonTable.Cast.InvalidateState("nameplate140")
+    addonTable.Core.ApplyToUnit("nameplate140")
+    local hbMeleeChannelUnint = addonTable.Utils.GetHealthBar(npMeleeChannelUnint)
+    r, g, b = hbMeleeChannelUnint:GetStatusBarColor()
+    check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01,
+        "HealthBarColor: inferior channeling ininterrumpible -> gris TEMPORAL")
+
+    -- 3c. Inferior termina cast ininterrumpible -> vuelve a su color base (no persiste)
     Mocks.units["nameplate14"].cast = nil
     addonTable.Cast.InvalidateState("nameplate14")
     addonTable.Core.ApplyToUnit("nameplate14")

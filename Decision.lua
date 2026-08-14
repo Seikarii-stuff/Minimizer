@@ -45,19 +45,22 @@ function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
         return false, "temporal"
     end
 
-    local isCasting, isUninterruptible
+    local isCasting, isUninterruptible, _, isChanneling
     if snapshot then
-        isCasting, isUninterruptible = snapshot.isCasting, snapshot.isUninterruptible
+        isCasting = snapshot.isCasting
+        isUninterruptible = snapshot.isUninterruptible
+        isChanneling = snapshot.isChanneling
     else
-        isCasting, isUninterruptible = Minimizer.Cast.GetState(unit)
+        isCasting, isUninterruptible, _, isChanneling = Minimizer.Cast.GetState(unit)
     end
-    if isCasting then
+
+    if isCasting or isChanneling then
         if isUninterruptible == true then
-            -- Cast ininterrumpible: desimplificar TEMPORALMENTE solo mientras dure el cast.
+            -- Cast/channel ininterrumpible: desimplificar TEMPORALMENTE solo mientras dure la accion.
             return false, "temporal"
         else
-            -- Cast interrumpible o canal: unidad peligrosa de forma PERSISTENTE
-            -- (en M+ cualquier inferior que castee es wipe potencial).
+            -- Cast/channel interrumpible: unidad peligrosa de forma PERSISTENTE
+            -- (en M+ cualquier inferior que castee o canalice es wipe potencial).
             return false, "no simp"
         end
     end
