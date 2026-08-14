@@ -333,3 +333,15 @@ mismas reglas a todo módulo nuevo del refactor:
   `and/or` en lugar de `if/elseif` explícito.
 - Cualquier llamada a `EvaluateColorValueFromBoolean` pasando una tabla de color en vez
   de tres escalares.
+
+---
+
+## 6. Sincronización de estado con la Interfaz Nativa (Target, Focus y Combate)
+
+Durante el desarrollo, se identificó un problema crítico de desincronización de estado entre `C_NamePlateManager.SetNamePlateSimplified` y el comportamiento forzado de Blizzard:
+1. **El Target y el Focus están forzados a maximizarse por Blizzard**. Si `Minimizer.Decision` no los detectaba, evaluaba `shouldSimplify = true` y lo aplicaba. Blizzard lo ignoraba silenciosamente, pero Minimizer guardaba en su caché (`nameplate.MinimizerState`) que la placa estaba simplificada. Al cambiar de target, la placa vieja evaluaba de nuevo a `true`, y al comparar con su caché (`true == true`), no aplicaba cambios, quedándose maximizada para siempre.
+2. **Las unidades fuera de combate** se evaluaban a `true` al aparecer, Minimizer las simplificaba en `NAME_PLATE_UNIT_ADDED`, pero Blizzard las repintaba maximizadas al final de ese mismo frame de inicialización. Como fuera de combate no generaban eventos posteriores (ni hechizos, ni amenaza), nunca se corregían.
+
+**Patrón canónico de solución:**
+- `Minimizer.Decision.ShouldSimplifyUnit` **debe** devolver `false, "target"` y `false, "focus"` explícitamente para alienar su respuesta con lo que Blizzard impone a la fuerza. Esto asegura que la caché de Minimizer sea fiel a la realidad.
+- `Minimizer.Core.ApplyToUnit` **debe** aceptar un parámetro `forceUpdate` para ignorar la comprobación de caché. Este parámetro se envía a `true` mediante el `RequestApplyToAll` retardado (`UpdateNameplates`) que se dispara justo después de `NAME_PLATE_UNIT_ADDED`. De esta forma, el frame nativo de Blizzard hace su configuración inicial y, en el frame inmediatamente posterior, Minimizer aplica autoritativamente el estado correcto saltándose la caché.
