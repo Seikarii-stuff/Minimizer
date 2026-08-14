@@ -65,12 +65,19 @@ function HealthBarColor:GetHealthBar(nameplate)
 end
 
 local HookHealthBar
+local HookIndicator
 
 function HealthBarColor:UpdateNamePlate(unit, nameplate)
     if not unit or not UnitExists(unit) then return end
     local healthBar = self:GetHealthBar(nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
     HookHealthBar(healthBar)
+    
+    local indicator = healthBar.totalAbsorbOverlay or healthBar.totalAbsorb
+    if indicator then
+        HookIndicator(indicator, healthBar)
+    end
+
     local baseKind = self:GetKind(unit, nameplate)
     nameplate.MinimizerHasAbsorb = baseKind == "absorb"
     local color = COLORS[baseKind] or COLORS.melee
@@ -111,6 +118,25 @@ HookHealthBar = function(healthBar)
                 HealthBarColor:UpdateNamePlate(unit, nameplate)
             end
         end)
+    end
+end
+
+HookIndicator = function(indicator, healthBar)
+    if not indicator or indicator.MinimizerAbsorbHooked then return end
+    indicator.MinimizerAbsorbHooked = true
+    if hooksecurefunc then
+        local function triggerUpdate()
+            if healthBar.MinimizerHealthColorApplying then return end
+            local parent = healthBar:GetParent()
+            local nameplate = parent and (parent.UnitFrame and parent or parent:GetParent())
+            local unit = nameplate and (nameplate.namePlateUnitToken
+                or (nameplate.UnitFrame and nameplate.UnitFrame.unit))
+            if unit then
+                HealthBarColor:UpdateNamePlate(unit, nameplate)
+            end
+        end
+        hooksecurefunc(indicator, "Show", triggerUpdate)
+        hooksecurefunc(indicator, "Hide", triggerUpdate)
     end
 end
 
