@@ -9,6 +9,9 @@ local UnitCanAttack = UnitCanAttack
 function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate)
     if not unit or not UnitExists(unit) then return false, "invalid" end
 
+    if UnitIsUnit(unit, "target") then return false, "target" end
+    if UnitIsUnit(unit, "focus") then return false, "focus" end
+
     if not UnitCanAttack("player", unit) then return false, "friendly" end
 
     local pct = MinimizerDB and MinimizerDB.simplifyPercent or 0

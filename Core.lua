@@ -31,7 +31,7 @@ function Minimizer.Core.UpdateModules(unit, nameplate)
     end
 end
 
-function Minimizer.Core.ApplyToUnit(unit)
+function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
     if not unit then return end
 
     local nameplate = Minimizer.Utils.GetNamePlateForUnit(unit)
@@ -55,7 +55,7 @@ function Minimizer.Core.ApplyToUnit(unit)
     end
 
     if Minimizer.Utils.IsSimplifiedAvailable() then
-        if nameplate.MinimizerState ~= shouldSimplify then
+        if forceUpdate or nameplate.MinimizerState ~= shouldSimplify then
             C_NamePlateManager.SetNamePlateSimplified(npToken, shouldSimplify)
             nameplate.MinimizerState = shouldSimplify
         end
@@ -67,17 +67,17 @@ function Minimizer.Core.ApplyToUnit(unit)
     Minimizer.Core.UpdateModules(npToken, nameplate)
 end
 
-function Minimizer.Core.ApplyToAll()
+function Minimizer.Core.ApplyToAll(forceUpdate)
     if not C_NamePlate or not C_NamePlate.GetNamePlates then return end
     for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
         local token = Minimizer.Utils.GetValidNamePlateToken(nil, nameplate)
         if token then
-            Minimizer.Core.ApplyToUnit(token)
+            Minimizer.Core.ApplyToUnit(token, forceUpdate)
         end
     end
 end
 
-Minimizer.Core.RequestApplyToAll = Minimizer.Utils.Debounce(Minimizer.Core.ApplyToAll)
+Minimizer.Core.RequestApplyToAll = Minimizer.Utils.Debounce(function() Minimizer.Core.ApplyToAll(true) end)
 
 function Minimizer.Core.ClearNeverSimplify(unit)
     if not unit then return end
