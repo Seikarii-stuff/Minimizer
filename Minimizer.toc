@@ -5,6 +5,7 @@
 ## Version: 0.1-core
 ## SavedVariables: MinimizerDB
 
+Bootstrap.lua
 Config.lua
 Constants.lua
 Cache.lua

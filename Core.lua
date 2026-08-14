@@ -1,16 +1,5 @@
--- ============================================================================
--- Minimizer - Core.lua (WoW 12.1 Midnight Canonical & Taint-Free)
--- ============================================================================
-
+-- Bootstrap.lua ya expone _G.Minimizer y gestiona ADDON_LOADED.
 local ADDON_NAME, Minimizer = ...
-_G.Minimizer = Minimizer
-
--------------------------------------------------------------------------------
--- 1. DATABASE & CONFIGURATION
--------------------------------------------------------------------------------
-if Minimizer.Config and Minimizer.Config.Initialize then
-    Minimizer.Config.Initialize()
-end
 
 -------------------------------------------------------------------------------
 -- 2. UTILITY HELPERS (Taint, Token & API Validation)
@@ -275,20 +264,24 @@ function Minimizer.Cache.ShouldSimplifyUnit(unit, nameplate)
         end
     end
 
-    -- Temporal: Absorb, Aggro, Cast ininterrumpible
+    -- Temporal: Absorb, Aggro
     if Minimizer.Threat.ShouldUnsimplify(unit) then
         return false, "temporal"
     end
     if Minimizer.Absorb.HasAbsorb(unit, nameplate) then
         return false, "temporal"
     end
-    if Minimizer.Cast.IsUnitCastUninterruptible(unit) then
-        return false, "temporal"
-    end
 
-    -- Persistent: Cast interrumpible/channel
-    if Minimizer.Cache.IsUnitCasting(unit) then
-        return false, "persistent"
+    -- Casteos:
+    -- Ininterrumpible o estado secreto -> temporal
+    -- Interrumpible -> persistent
+    local isCasting, isUninterruptible = Minimizer.Cast.GetState(unit)
+    if isCasting then
+        if isUninterruptible == false then
+            return false, "persistent"
+        else
+            return false, "temporal"
+        end
     end
 
     return true, "simplify"
@@ -582,14 +575,9 @@ local function OnEvent(self, event, unit, ...)
             lastInterruptReady = ready
             Minimizer.Core.RequestApplyToAll()
         end
-    elseif event == "ADDON_LOADED" and unit == ADDON_NAME then
-        if Minimizer.Config and Minimizer.Config.Initialize then
-            Minimizer.Config.Initialize()
-        end
     end
 end
 
-EventFrame:RegisterEvent("ADDON_LOADED")
 EventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 EventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 EventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")

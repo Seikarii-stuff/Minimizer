@@ -1,9 +1,6 @@
 local _, Minimizer = ...
 if not Minimizer then return end
-
-if Minimizer.Config and Minimizer.Config.Initialize then
-    Minimizer.Config.Initialize()
-end
+-- Config.Initialize() ya fue invocada por Bootstrap.lua tras ADDON_LOADED.
 
 local Focus = {}
 Minimizer.Focus = Focus

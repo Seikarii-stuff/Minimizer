@@ -1,4 +1,6 @@
--- Saved variables and defaults. Loaded before the runtime modules.
+-- Saved variables and defaults.
+-- Bootstrap.lua crea la tabla Minimizer; Config solo la amplía.
+-- Config.Initialize() es invocada por Bootstrap tras ADDON_LOADED.
 local _, Minimizer = ...
 if not Minimizer then return end
 
@@ -27,5 +29,5 @@ function Minimizer.Config.Initialize()
     end
     return MinimizerDB
 end
-
-Minimizer.Config.Initialize()
+-- (No se llama aquí; Bootstrap.lua lo hace tras ADDON_LOADED para que
+--  MinimizerDB ya esté disponible cuando se ejecute Initialize.)
