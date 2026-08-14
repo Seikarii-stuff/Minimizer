@@ -21,14 +21,30 @@ local function IsSpellTargetingPlayer(unit)
 end
 
 
--- El proyecto deja el proveedor de cooldown desacoplado para que pueda
--- sustituirse por el sistema de interrupciones de cada clase/spec.
--- Duck-typing: en este cliente los widgets de nameplate son anónimos
--- (GetName() vacío) y no cuelgan de campos nombrados como .castBar/.CastBar.
--- Se localiza recorriendo los nietos de UnitFrame y descartando la healthbar
--- (confirmado por diagnóstico: la barra de cast es la única, aparte de la
--- healthbar, con SetStatusBarColor+GetValue, y su IsShown() solo es true
--- mientras la unidad está casteando).
+local function FindCastBarInGrandchildren(healthBar, ...)
+    for i = 1, select("#", ...) do
+        local grandchild = select(i, ...)
+        if type(grandchild) == "table"
+            and grandchild ~= healthBar
+            and type(grandchild.SetStatusBarColor) == "function"
+            and type(grandchild.GetValue) == "function" then
+            return grandchild
+        end
+    end
+    return nil
+end
+
+local function FindCastBarInChildren(healthBar, ...)
+    for i = 1, select("#", ...) do
+        local child = select(i, ...)
+        if type(child) == "table" and type(child.GetChildren) == "function" then
+            local grandchild = FindCastBarInGrandchildren(healthBar, child:GetChildren())
+            if grandchild then return grandchild end
+        end
+    end
+    return nil
+end
+
 function CastingBar:GetCastBar(nameplate)
     local unitFrame = nameplate and (nameplate.UnitFrame or nameplate)
     if not unitFrame or type(unitFrame.GetChildren) ~= "function" then return nil end
@@ -39,21 +55,11 @@ function CastingBar:GetCastBar(nameplate)
         return cached
     end
 
-    local healthBar = unitFrame.healthBar
-    local children = { unitFrame:GetChildren() }
-    for _, child in ipairs(children) do
-        if type(child) == "table" and type(child.GetChildren) == "function" then
-            local grandchildren = { child:GetChildren() }
-            for _, grandchild in ipairs(grandchildren) do
-                if type(grandchild) == "table"
-                    and grandchild ~= healthBar
-                    and type(grandchild.SetStatusBarColor) == "function"
-                    and type(grandchild.GetValue) == "function" then
-                    nameplate.MinimizerCastBar = grandchild
-                    return grandchild
-                end
-            end
-        end
+    local healthBar = Minimizer.Utils.GetHealthBar(nameplate)
+    local grandchild = FindCastBarInChildren(healthBar, unitFrame:GetChildren())
+    if grandchild then
+        nameplate.MinimizerCastBar = grandchild
+        return grandchild
     end
     return nil
 end
@@ -90,8 +96,6 @@ function CastingBar:EnsureVisuals(castBar)
         targetPulse = pulse,
     }
 
-    -- Blizzard repinta la barra después de los eventos. Reaplicar aquí
-    -- garantiza que el color se evalúa después del color nativo.
     if hooksecurefunc and not castBar.MinimizerColorHooked then
         castBar.MinimizerColorHooked = true
         hooksecurefunc(castBar, "SetStatusBarColor", function()
@@ -114,32 +118,17 @@ function CastingBar:ApplyGreenColor(castBar, unit, isCasting, isChanneling, read
     if castBar.GetStatusBarColor then
         r, g, b, a = castBar:GetStatusBarColor()
     end
-    if isChanneling and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
-        -- Channel interrumpible con corte disponible: verde; con corte abajo
-        -- o no interrumpible: rosa claro.
-        local channelR = C_CurveUtil.EvaluateColorValueFromBoolean(ready, COLORS.ready[1], COLORS.channel[1])
-        local channelG = C_CurveUtil.EvaluateColorValueFromBoolean(ready, COLORS.ready[2], COLORS.channel[2])
-        local channelB = C_CurveUtil.EvaluateColorValueFromBoolean(ready, COLORS.ready[3], COLORS.channel[3])
-        r = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, COLORS.channel[1], channelR)
-        g = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, COLORS.channel[2], channelG)
-        b = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, COLORS.channel[3], channelB)
+    if isChanneling then
+        local cR, cG, cB = Minimizer.Utils.EvaluateColorRGB(ready, COLORS.ready, COLORS.channel)
+        r, g, b = Minimizer.Utils.EvaluateColorRGB(uninterruptible, COLORS.channel, {cR, cG, cB})
         a = 1
-    elseif isChanneling then
-        r, g, b = COLORS.channel[1], COLORS.channel[2], COLORS.channel[3]
-        a = 1
-    elseif isCasting and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
-        -- La firma selecciona el primer valor cuando state=true (patrón de
-        -- Platynator: EvaluateColorValueFromBoolean(notInterruptible, 0, 1)).
-        local greenR = C_CurveUtil.EvaluateColorValueFromBoolean(ready, COLORS.ready[1], r)
-        local greenG = C_CurveUtil.EvaluateColorValueFromBoolean(ready, COLORS.ready[2], g)
-        local greenB = C_CurveUtil.EvaluateColorValueFromBoolean(ready, COLORS.ready[3], b)
-        r = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, r, greenR)
-        g = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, g, greenG)
-        b = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, b, greenB)
+    elseif isCasting then
+        local greenR, greenG, greenB = Minimizer.Utils.EvaluateColorRGB(ready, COLORS.ready, {r, g, b})
+        r, g, b = Minimizer.Utils.EvaluateColorRGB(uninterruptible, {r, g, b}, {greenR, greenG, greenB})
     end
-    castBar.MinimizerApplyingColor = true
-    castBar:SetStatusBarColor(r, g, b, a or 1)
-    castBar.MinimizerApplyingColor = nil
+    Minimizer.Utils.GuardedCall(castBar, "MinimizerApplyingColor", function()
+        castBar:SetStatusBarColor(r, g, b, a or 1)
+    end)
 end
 
 function CastingBar:UpdateNamePlate(unit, nameplate)

@@ -30,7 +30,4 @@ function Minimizer.Config.Initialize()
     return MinimizerDB
 end
 
--- Llamar aquí es correcto: WoW hace disponibles las SavedVariables antes de
--- ejecutar los archivos del addon. Bootstrap.lua también lo invocará en
--- ADDON_LOADED como fallback defensivo.
-Minimizer.Config.Initialize()
+

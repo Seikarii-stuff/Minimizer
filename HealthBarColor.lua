@@ -29,8 +29,7 @@ function HealthBarColor:GetKind(unit, nameplate)
 end
 
 function HealthBarColor:GetHealthBar(nameplate)
-    local unitFrame = nameplate and (nameplate.UnitFrame or nameplate)
-    return unitFrame and (unitFrame.healthBar or unitFrame.HealthBar)
+    return Minimizer.Utils.GetHealthBar(nameplate)
 end
 
 local HookHealthBar
@@ -55,24 +54,17 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate)
     if uninterruptible == nil then uninterruptible = false end
     local isSuperior = baseKind == "boss" or baseKind == "miniboss"
 
-    -- Direct StatusBar coloring only. Secret interruptibility is resolved
-    -- channel-by-channel in C-side, as documented by project.md.
-    if isCasting and isSuperior and baseKind ~= "focus" and baseKind ~= "absorb" and baseKind ~= "aggro"
-        and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
+    if isCasting and isSuperior and baseKind ~= "focus" and baseKind ~= "absorb" and baseKind ~= "aggro" then
         local castColor = COLORS.superiorUninterruptible
-        r = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, castColor[1], color[1])
-        g = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, castColor[2], color[2])
-        b = C_CurveUtil.EvaluateColorValueFromBoolean(uninterruptible, castColor[3], color[3])
+        r, g, b = Minimizer.Utils.EvaluateColorRGB(uninterruptible, castColor, color)
     end
 
-    healthBar.MinimizerHealthColorApplying = true
-    healthBar:SetStatusBarColor(r, g, b)
-    healthBar.MinimizerHealthColorApplying = nil
+    Minimizer.Utils.GuardedCall(healthBar, "MinimizerHealthColorApplying", function()
+        healthBar:SetStatusBarColor(r, g, b)
+    end)
     nameplate.MinimizerHealthBarColorKind = baseKind
 end
 
--- Blizzard puede volver a aplicar su color rojo al actualizar la unidad.
--- Reentrancia protegida: el hook solo reevalúa el color final del módulo.
 HookHealthBar = function(healthBar)
     if not healthBar or healthBar.MinimizerHealthColorHooked then return end
     healthBar.MinimizerHealthColorHooked = true
@@ -81,8 +73,7 @@ HookHealthBar = function(healthBar)
             if healthBar.MinimizerHealthColorApplying then return end
             local parent = healthBar:GetParent()
             local nameplate = parent and (parent.UnitFrame and parent or parent:GetParent())
-            local unit = nameplate and (nameplate.namePlateUnitToken
-                or (nameplate.UnitFrame and nameplate.UnitFrame.unit))
+            local unit = Minimizer.Utils.GetUnitFromNameplate(nameplate)
             if unit then
                 HealthBarColor:UpdateNamePlate(unit, nameplate)
             end
@@ -98,8 +89,7 @@ HookIndicator = function(indicator, healthBar)
             if healthBar.MinimizerHealthColorApplying then return end
             local parent = healthBar:GetParent()
             local nameplate = parent and (parent.UnitFrame and parent or parent:GetParent())
-            local unit = nameplate and (nameplate.namePlateUnitToken
-                or (nameplate.UnitFrame and nameplate.UnitFrame.unit))
+            local unit = Minimizer.Utils.GetUnitFromNameplate(nameplate)
             if unit then
                 if Minimizer and Minimizer.Core and Minimizer.Core.ApplyToUnit then
                     Minimizer.Core.ApplyToUnit(unit)

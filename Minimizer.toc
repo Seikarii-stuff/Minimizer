@@ -6,12 +6,21 @@
 ## SavedVariables: MinimizerDB
 
 Bootstrap.lua
+Utils.lua
 Config.lua
 Constants.lua
+data\SpellData.lua
 Cache.lua
-Core.lua
+Threat.lua
+Absorb.lua
+Cast.lua
 ClassificationUtils.lua
+Decision.lua
 Interrupt.lua
+Markers.lua
 HealthBarColor.lua
 CastingBar.lua
 Focus.lua
+Events.lua
+Core.lua
+SlashCommands.lua
