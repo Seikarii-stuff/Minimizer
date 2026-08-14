@@ -1,8 +1,9 @@
 local _, Minimizer = ...
 if not Minimizer then return end
 
-MinimizerDB = MinimizerDB or {}
-MinimizerDB.focusIndicator = MinimizerDB.focusIndicator or "face"
+if Minimizer.Config and Minimizer.Config.Initialize then
+    Minimizer.Config.Initialize()
+end
 
 local Focus = {}
 Minimizer.Focus = Focus

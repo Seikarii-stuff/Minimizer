@@ -5,7 +5,10 @@
 ## Version: 0.1-core
 ## SavedVariables: MinimizerDB
 
+Config.lua
+Constants.lua
 Core.lua
+Interrupt.lua
 HealthBarColor.lua
 CastingBar.lua
 Focus.lua

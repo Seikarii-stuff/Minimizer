@@ -9,10 +9,7 @@ if not Minimizer or not Minimizer.Core then return end
 local CastingBar = {}
 Minimizer.CastingBar = CastingBar
 
-local COLORS = {
-    ready = { 0.10, 1.00, 0.10 },
-    channel = { 1.00, 0.55, 0.75 }, -- Canalización: rosa claro
-}
+local COLORS = Minimizer.Constants.CastColors
 
 local function IsSpellTargetingPlayer(unit)
     if UnitIsSpellTarget then
@@ -31,46 +28,6 @@ end
 
 -- El proyecto deja el proveedor de cooldown desacoplado para que pueda
 -- sustituirse por el sistema de interrupciones de cada clase/spec.
-Minimizer.Interrupt = Minimizer.Interrupt or {}
-local INTERRUPT_SPELLS = {
-    WARRIOR = 6552, ROGUE = 1766, MAGE = 2139, SHAMAN = 57994,
-    HUNTER = 147362, PRIEST = 15487, WARLOCK = 19647, MONK = 116705,
-    DRUID = 106839, DEATHKNIGHT = 47528, PALADIN = 96231,
-    DEMONHUNTER = 183752, EVOKER = 351338,
-}
-
-function Minimizer.Interrupt.GetSpellID()
-    if MinimizerDB.interruptSpellID then return MinimizerDB.interruptSpellID end
-    local _, classToken = UnitClass("player")
-    local spellID = classToken and INTERRUPT_SPELLS[classToken]
-    if spellID and ((C_SpellBook and C_SpellBook.IsSpellKnownOrInSpellBook
-        and C_SpellBook.IsSpellKnownOrInSpellBook(spellID))
-        or (IsPlayerSpell and IsPlayerSpell(spellID))
-        or (C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(spellID))
-        or (IsSpellKnown and IsSpellKnown(spellID))) then
-        return spellID
-    end
-    return nil
-end
-
-function Minimizer.Interrupt.IsReady()
-    if type(MinimizerDB.interruptReady) == "boolean" then
-        return MinimizerDB.interruptReady
-    end
-    local spellID = Minimizer.Interrupt.GetSpellID()
-    if spellID and C_Spell and C_Spell.GetSpellCooldownDuration then
-        local duration = C_Spell.GetSpellCooldownDuration(spellID)
-        if duration then
-            -- IsZero() devuelve el booleano secreto directamente; no se
-            -- compara ni se usa en una condición Lua.
-            return duration:IsZero()
-        end
-    end
-    -- Sin un spellID configurado no se puede inferir el corte sin adivinar la
-    -- clase/spec; se conserva el estado disponible como "up".
-    return true
-end
-
 -- Duck-typing: en este cliente los widgets de nameplate son anónimos
 -- (GetName() vacío) y no cuelgan de campos nombrados como .castBar/.CastBar.
 -- Se localiza recorriendo los nietos de UnitFrame y descartando la healthbar

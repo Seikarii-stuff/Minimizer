@@ -8,11 +8,9 @@ _G.Minimizer = Minimizer
 -------------------------------------------------------------------------------
 -- 1. DATABASE & CONFIGURATION
 -------------------------------------------------------------------------------
-MinimizerDB = MinimizerDB or {
-    simplifyPercent = 0,
-    enableTargetMarkers = true,
-    enableFocusMarkers = true,
-}
+if Minimizer.Config and Minimizer.Config.Initialize then
+    Minimizer.Config.Initialize()
+end
 
 -------------------------------------------------------------------------------
 -- 2. UTILITY HELPERS (Taint, Token & API Validation)
@@ -533,11 +531,9 @@ local function OnEvent(self, event, unit, ...)
             Minimizer.Core.RequestApplyToAll()
         end
     elseif event == "ADDON_LOADED" and unit == ADDON_NAME then
-        MinimizerDB = MinimizerDB or {
-            simplifyPercent = 0,
-            enableTargetMarkers = true,
-            enableFocusMarkers = true,
-        }
+        if Minimizer.Config and Minimizer.Config.Initialize then
+            Minimizer.Config.Initialize()
+        end
     end
 end
 
