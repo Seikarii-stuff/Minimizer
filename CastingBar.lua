@@ -77,8 +77,7 @@ function CastingBar:EnsureVisuals(castBar)
             if bar.MinimizerApplyingColor then return end
             local unit = bar.MinimizerCastUnit
             if unit and UnitExists(unit) then
-                local isCasting, _, uninterruptible = Minimizer.Cast.GetState(unit)
-                local isChanneling = UnitChannelInfo(unit) ~= nil
+                local isCasting, _, uninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
                 CastingBar:ApplyGreenColor(bar, unit, isCasting, isChanneling, Minimizer.Interrupt.IsReady(), uninterruptible)
             end
         end)
@@ -112,8 +111,7 @@ function CastingBar:UpdateNamePlate(unit, nameplate)
 
     local visuals = self:EnsureVisuals(castBar)
     castBar.MinimizerCastUnit = unit
-    local isCasting, _, uninterruptible = Minimizer.Cast.GetState(unit)
-    local isChanneling = UnitChannelInfo(unit) ~= nil
+    local isCasting, _, uninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
     local ready = Minimizer.Interrupt.IsReady()
 
     self:ApplyGreenColor(castBar, unit, isCasting, isChanneling, ready, uninterruptible)

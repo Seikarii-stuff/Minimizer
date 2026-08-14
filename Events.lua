@@ -75,6 +75,9 @@ local function OnEvent(self, event, unit, ...)
             if Minimizer.Threat and Minimizer.Threat.RefreshTankTokens then
                 Minimizer.Threat.RefreshTankTokens()
             end
+            if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then
+                Minimizer.Widgets.InvalidateCDSpellCache()
+            end
             UpdateNameplates()
         end
 

@@ -60,6 +60,13 @@ function Minimizer.Utils.GetUnitFromNameplate(nameplate)
     return nameplate and (nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit))
 end
 
+-- Reconstruye la nameplate a partir de un healthBar (usado por los hooks de
+-- SetStatusBarColor/Show/Hide que solo reciben el widget, no la nameplate).
+function Minimizer.Utils.GetNameplateFromHealthBar(healthBar)
+    local parent = healthBar:GetParent()
+    return parent and (parent.UnitFrame and parent or parent:GetParent())
+end
+
 function Minimizer.Utils.GetHealthBar(nameplate)
     local unitFrame = nameplate and (nameplate.UnitFrame or nameplate)
     return unitFrame and (unitFrame.healthBar or unitFrame.HealthBar)
@@ -93,4 +100,25 @@ function Minimizer.Utils.Debounce(fn)
             fn(unpack(args))
         end)
     end
+end
+
+-- Busca el primer spellID de una lista que el jugador conozca.
+-- spellList puede ser un numero suelto o una tabla de numeros.
+-- Si ninguno esta "conocido" segun las APIs, devuelve el primero de la lista
+-- como fallback (asumimos que aun no se ha aprendido pero existe).
+function Minimizer.Utils.FindKnownSpell(spellList)
+    if not spellList then return nil end
+    if type(spellList) == "number" then
+        spellList = {spellList}
+    end
+    for _, spellID in ipairs(spellList) do
+        if ((C_SpellBook and C_SpellBook.IsSpellKnownOrInSpellBook
+            and C_SpellBook.IsSpellKnownOrInSpellBook(spellID))
+            or (IsPlayerSpell and IsPlayerSpell(spellID))
+            or (C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(spellID))
+            or (IsSpellKnown and IsSpellKnown(spellID))) then
+            return spellID
+        end
+    end
+    return spellList[1]
 end

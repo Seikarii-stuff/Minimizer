@@ -38,25 +38,27 @@ function Minimizer.Widgets.FindCastBar(nameplate)
     return FindCastBarInChildren(healthBar, unitFrame:GetChildren())
 end
 
+local cdSpellCache = setmetatable({}, { __mode = "k" }) -- weak keys, una entrada por dbTable
+
 function Minimizer.Widgets.GetCDSpellID(dbTable)
+    if not dbTable then return nil end
+    local cached = cdSpellCache[dbTable]
+    if cached ~= nil then
+        if cached == false then return nil end
+        return cached
+    end
     local _, classToken = UnitClass("player")
-    local spellList = classToken and dbTable and dbTable[classToken]
-    if not spellList then return nil end
+    local spellList = classToken and dbTable[classToken]
+    local result = Minimizer.Utils.FindKnownSpell(spellList)
+    cdSpellCache[dbTable] = result or false -- false = "ya se calculo, no hay resultado"
+    return result
+end
 
-    if type(spellList) == "number" then
-        spellList = {spellList}
-    end
-
-    for _, spellID in ipairs(spellList) do
-        if ((C_SpellBook and C_SpellBook.IsSpellKnownOrInSpellBook and C_SpellBook.IsSpellKnownOrInSpellBook(spellID))
-            or (IsPlayerSpell and IsPlayerSpell(spellID))
-            or (C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(spellID))
-            or (IsSpellKnown and IsSpellKnown(spellID))) then
-            return spellID
-        end
-    end
-    if spellList[1] then return spellList[1] end
-    return nil
+-- Llamar en PLAYER_TALENT_UPDATE / PLAYER_SPECIALIZATION_CHANGED para que si
+-- el jugador cambia de spec y eso afecta que spell tiene disponible, se
+-- recalculen los CDs mostrados.
+function Minimizer.Widgets.InvalidateCDSpellCache()
+    cdSpellCache = setmetatable({}, { __mode = "k" })
 end
 
 function Minimizer.Widgets.CreateCDWidget(name, size)

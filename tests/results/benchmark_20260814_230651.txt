@@ -1,0 +1,16 @@
+
+=== Minimizer Benchmark Results ===
+Date       : 2026-08-14 23:06:51
+Iterations : 1000 frames
+Nameplates : 50 units
+Total Time : 1.7510 s
+Avg/Frame  : 1.748000 ms  (ApplyToAll)
+
+--- Module Breakdown (sorted by total cost) ---
+Module                 Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+HealthBarColor         0.7120       0.014240       50000      40.66%
+CastingBar             0.2790       0.005580       50000      15.93%
+Markers                0.1930       0.003860       50000      11.02%
+
+========================================================================

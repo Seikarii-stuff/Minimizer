@@ -9,25 +9,6 @@ Minimizer.HealthBarColor = HealthBarColor
 
 local COLORS = Minimizer.Constants.HealthColors
 
-function HealthBarColor:GetEliteType(unit)
-    return Minimizer.Classification.GetEliteType(unit)
-end
-
-function HealthBarColor:GetKind(unit, nameplate)
-    if UnitIsUnit(unit, "focus") then return "focus" end
-    -- El aggro total conserva prioridad sobre el rosa del absorb.
-    -- La excepción de aggro se basa en la situación del jugador; la rama de
-    -- tanque se decide en Threat.IsPlayerTank(), no por el color de Blizzard.
-    -- Ser tanque sólo cambia la regla de simplificación. El rojo se reserva
-    -- estrictamente para aggro sólido del jugador (situación 3).
-    if Minimizer.Threat and Minimizer.Threat.PlayerHasAggro
-        and Minimizer.Threat.PlayerHasAggro(unit) then
-        return "aggro"
-    end
-    if Minimizer.Absorb and Minimizer.Absorb.HasAbsorb(unit, nameplate) then return "absorb" end
-    return self:GetEliteType(unit)
-end
-
 function HealthBarColor:GetHealthBar(nameplate)
     return Minimizer.Utils.GetHealthBar(nameplate)
 end
@@ -35,7 +16,7 @@ end
 local HookHealthBar
 local HookIndicator
 
-function HealthBarColor:UpdateNamePlate(unit, nameplate)
+function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     if not unit or not UnitExists(unit) then return end
     local healthBar = self:GetHealthBar(nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
@@ -46,11 +27,26 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate)
         HookIndicator(indicator, healthBar)
     end
 
-    local baseKind = self:GetKind(unit, nameplate)
+    -- Fallback defensivo: si por alguna razon se llama sin snapshot (no
+    -- deberia pasar tras la Fase 3, pero por si acaso algun caller viejo
+    -- queda suelto), recalcula localmente en vez de crashear.
+    local baseKind
+    if snapshot then
+        baseKind = snapshot.displayKind
+    else
+        baseKind = Minimizer.Classification.GetEliteType(unit)
+    end
+
     nameplate.MinimizerHasAbsorb = baseKind == "absorb"
     local color = COLORS[baseKind] or COLORS.melee
     local r, g, b = color[1], color[2], color[3]
-    local isCasting, _, uninterruptible = Minimizer.Cast.GetState(unit)
+
+    local isCasting, uninterruptible
+    if snapshot then
+        isCasting, uninterruptible = snapshot.isCasting, snapshot.isUninterruptible
+    else
+        isCasting, _, uninterruptible = Minimizer.Cast.GetState(unit)
+    end
     if uninterruptible == nil then uninterruptible = false end
     local isSuperior = baseKind == "boss" or baseKind == "miniboss"
 
@@ -71,11 +67,13 @@ HookHealthBar = function(healthBar)
     if hooksecurefunc then
         hooksecurefunc(healthBar, "SetStatusBarColor", function()
             if healthBar.MinimizerHealthColorApplying then return end
-            local parent = healthBar:GetParent()
-            local nameplate = parent and (parent.UnitFrame and parent or parent:GetParent())
+            local nameplate = Minimizer.Utils.GetNameplateFromHealthBar(healthBar)
             local unit = Minimizer.Utils.GetUnitFromNameplate(nameplate)
             if unit then
-                HealthBarColor:UpdateNamePlate(unit, nameplate)
+                -- Sin snapshot disponible aqui (este hook se dispara fuera del pase
+                -- normal de ApplyToUnit, p.ej. cuando Blizzard repinta la barra por
+                -- su cuenta). UpdateNamePlate ya tiene fallback para snapshot=nil.
+                HealthBarColor:UpdateNamePlate(unit, nameplate, nil)
             end
         end)
     end
@@ -87,14 +85,13 @@ HookIndicator = function(indicator, healthBar)
     if hooksecurefunc then
         local function triggerUpdate()
             if healthBar.MinimizerHealthColorApplying then return end
-            local parent = healthBar:GetParent()
-            local nameplate = parent and (parent.UnitFrame and parent or parent:GetParent())
+            local nameplate = Minimizer.Utils.GetNameplateFromHealthBar(healthBar)
             local unit = Minimizer.Utils.GetUnitFromNameplate(nameplate)
             if unit then
                 if Minimizer and Minimizer.Core and Minimizer.Core.ApplyToUnit then
                     Minimizer.Core.ApplyToUnit(unit)
                 else
-                    HealthBarColor:UpdateNamePlate(unit, nameplate)
+                    HealthBarColor:UpdateNamePlate(unit, nameplate, nil)
                 end
             end
         end

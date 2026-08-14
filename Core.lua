@@ -10,6 +10,12 @@ local C_NamePlateManager = C_NamePlateManager
 local type = type
 local pcall = pcall
 
+-- Table reutilizado para el snapshot de cada unidad. Se sobreescribe en cada
+-- llamada a ApplyToUnit; NUNCA guardes una referencia a este table mas alla
+-- de la duracion de esa llamada (no lo metas en nameplate.algo, no lo pases
+-- a codigo asincrono).
+local scratchSnapshot = {}
+
 function Minimizer.Core.RegisterModule(name, module)
     if type(name) ~= "string" or type(module) ~= "table" then return end
 
@@ -18,17 +24,39 @@ function Minimizer.Core.RegisterModule(name, module)
     Minimizer.Core.ApplyToAll()
 end
 
-function Minimizer.Core.UpdateModules(unit, nameplate)
+function Minimizer.Core.UpdateModules(unit, nameplate, snapshot)
     for name, module in pairs(Minimizer.Modules) do
         if type(module.UpdateNamePlate) == "function" then
             local ok, err = pcall(function()
-                module:UpdateNamePlate(unit, nameplate)
+                module:UpdateNamePlate(unit, nameplate, snapshot)
             end)
             if not ok then
                 print("|cffff4444Minimizer|r: Error in module " .. name .. ": " .. tostring(err))
             end
         end
     end
+end
+
+-- Rellena scratchSnapshot con los datos calculados UNA sola vez para esta
+-- unidad. Se llama siempre, con o sin fast-path.
+local function BuildSnapshot(unit, nameplate)
+    local s = scratchSnapshot
+    s.eliteType = Minimizer.Classification.GetEliteType(unit)
+    s.hasAbsorb = Minimizer.Absorb.HasAbsorb(unit, nameplate)
+    s.hasAggro = Minimizer.Threat.PlayerHasAggro(unit)
+    s.isCasting, s.isUninterruptible, s.rawUninterruptible, s.isChanneling = Minimizer.Cast.GetState(unit)
+    -- displayKind: prioridad aggro > absorb > eliteType. Logica identica a la
+    -- que antes vivia en HealthBarColor:GetKind, ahora centralizada aqui.
+    if UnitIsUnit(unit, "focus") then
+        s.displayKind = "focus"
+    elseif s.hasAggro then
+        s.displayKind = "aggro"
+    elseif s.hasAbsorb then
+        s.displayKind = "absorb"
+    else
+        s.displayKind = s.eliteType
+    end
+    return s
 end
 
 function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
@@ -41,6 +69,9 @@ function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
     if not npToken then return end
     Minimizer.ActiveNameplates[npToken] = nameplate
 
+    -- El snapshot se calcula SIEMPRE, fast-path o no.
+    local snapshot = BuildSnapshot(npToken, nameplate)
+
     local shouldSimplify = false
     local reason = ""
 
@@ -48,7 +79,7 @@ function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
         shouldSimplify = false
         reason = "no simp (fast-path)"
     else
-        shouldSimplify, reason = Minimizer.Decision.ShouldSimplifyUnit(npToken, nameplate)
+        shouldSimplify, reason = Minimizer.Decision.ShouldSimplifyUnit(npToken, nameplate, snapshot)
         if reason == "no simp" then
             nameplate.MinimizerDesimplifiedPersistent = true
         end
@@ -64,11 +95,16 @@ function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
     if Minimizer.Markers and Minimizer.Markers.Update then
         Minimizer.Markers.Update(npToken, nameplate)
     end
-    Minimizer.Core.UpdateModules(npToken, nameplate)
+    Minimizer.Core.UpdateModules(npToken, nameplate, snapshot)
 end
 
 function Minimizer.Core.ApplyToAll(forceUpdate)
     if not C_NamePlate or not C_NamePlate.GetNamePlates then return end
+    -- Refrescar el estado global "interrupcion lista" UNA vez por pase,
+    -- nunca dentro del loop de nameplates.
+    if Minimizer.Interrupt and Minimizer.Interrupt.RefreshReadyCache then
+        Minimizer.Interrupt.RefreshReadyCache()
+    end
     for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
         local token = Minimizer.Utils.GetValidNamePlateToken(nil, nameplate)
         if token then
