@@ -30,30 +30,28 @@ local function ReadCastState(unit)
     return true, safeValue, safeValue, isChanneling
 end
 
-local cachedCastUnit
-local cachedIsCasting, cachedUninterruptible, cachedRawUninterruptible, cachedIsChanneling
-local cachedCastValid = false
-
-function Minimizer.Cast.InvalidateState(unit)
-    if not unit or cachedCastUnit == unit then
-        cachedCastUnit = nil
-        cachedIsCasting, cachedUninterruptible, cachedRawUninterruptible, cachedIsChanneling = nil, nil, nil, nil
-        cachedCastValid = false
-    end
+-- NO CACHE. Habia un slot unico (scalar, no tabla por unidad) que dependia
+-- de que Cast.InvalidateState() se disparase SIEMPRE antes de que un token
+-- de nameplate reciclado (ej. "nameplate3" pasando de un mob muerto a uno
+-- nuevo) fuera vuelto a leer. Esa invalidacion vive en un hook distinto
+-- (NamePlateDriverFrame.OnNamePlateRemoved) del que lee el estado nuevo
+-- (NAME_PLATE_UNIT_ADDED / hooks de SetStatusBarColor), sin garantia dura de
+-- orden entre ambos. Si esa carrera se perdia una sola vez, una unidad podia
+-- heredar el rawUninterruptible de la unidad ANTERIOR que ocupo el mismo
+-- token -- dos mobs con estados reales opuestos mostrando el mismo color.
+-- UnitCastingInfo/UnitChannelInfo son baratas: no vale la pena el riesgo por
+-- un cache que en la practica casi nunca se reutilizaba (BuildSnapshot solo
+-- llama una vez por unidad por pase; las llamadas fuera de pase vienen de
+-- hooks de Blizzard repintando barras, casi siempre para unidades distintas
+-- de todos modos). Leer siempre fresco elimina la clase de bug entera, no
+-- solo el sintoma.
+function Minimizer.Cast.InvalidateState(_unit)
+    -- No-op: se mantiene como funcion valida porque Core.lua y Events.lua
+    -- la llaman en varios sitios. Sin cache no hay nada que invalidar.
 end
 
 function Minimizer.Cast.GetState(unit)
-    if cachedCastValid and cachedCastUnit == unit then
-        return cachedIsCasting, cachedUninterruptible, cachedRawUninterruptible, cachedIsChanneling
-    end
-    local isCasting, uninterruptible, rawUninterruptible, isChanneling = ReadCastState(unit)
-    cachedCastUnit = unit
-    cachedIsCasting = isCasting
-    cachedUninterruptible = uninterruptible
-    cachedRawUninterruptible = rawUninterruptible
-    cachedIsChanneling = isChanneling
-    cachedCastValid = true
-    return isCasting, uninterruptible, rawUninterruptible, isChanneling
+    return ReadCastState(unit)
 end
 
 function Minimizer.Cast.IsUnitCasting(unit)
