@@ -93,5 +93,5 @@ end
 -- Throttle a 30 FPS (0.033s): visuales de focus no necesitan repintarse más rápido.
 Focus.DebouncedUpdate = Minimizer.Utils.Throttle(function()
     Focus:UpdateFace()
-end, 0.01)
+end, 0.03)
 
