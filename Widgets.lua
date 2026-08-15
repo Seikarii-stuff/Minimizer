@@ -151,8 +151,13 @@ Minimizer.Widgets.PIP_SIZE = 5
 -- xOff, yOff: offset extra opcional (por si en el futuro hace falta apilar
 --   más de un pip en la misma esquina). Por defecto 0, 0.
 function Minimizer.Widgets.CreatePip(name, parentFrame, colorKind, anchorCorner, xOff, yOff)
-    local colors = Minimizer.Constants.PipColors and Minimizer.Constants.PipColors[colorKind]
-    if not parentFrame or not colors then return nil end
+    local colors = Minimizer.Constants.PipColors
+        and Minimizer.Constants.PipColors[colorKind]
+
+    if not parentFrame or not colors then
+        return nil
+    end
+
     anchorCorner = anchorCorner or "TOPRIGHT"
     xOff = xOff or 0
     yOff = yOff or 0
@@ -161,59 +166,128 @@ function Minimizer.Widgets.CreatePip(name, parentFrame, colorKind, anchorCorner,
     pip:SetSize(Minimizer.Widgets.PIP_SIZE, Minimizer.Widgets.PIP_SIZE)
     pip:SetFrameStrata("HIGH")
     pip:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 5)
+
     pip:ClearAllPoints()
     pip:SetPoint("CENTER", parentFrame, anchorCorner, xOff, yOff)
     pip:Hide()
 
+    -- ============================================================
+    -- CIRCULAR BACKGROUND
+    --
+    -- No usar Texture:SetMask().
+    -- CreateMaskTexture + AddMaskTexture es la API de máscara
+    -- soportada para este tipo de geometría.
+    -- ============================================================
+
     local bg = pip:CreateTexture(nil, "ARTWORK")
     bg:SetAllPoints()
-    bg:SetColorTexture(1, 1, 1, 1)
-    bg:SetVertexColor(colors.on[1], colors.on[2], colors.on[3], 1)
-    if bg.SetMask then
-        -- Máscara circular. Usamos esta en vez de "Interface\Masks\CircleMaskScalable"
-        -- porque esa puede no resolver como textura válida en SetMask según
-        -- versión de cliente (falla en silencio y deja el pip cuadrado).
-        -- Esta es la máscara circular que usa el propio Blizzard para
-        -- retratos redondos, disponible desde hace muchas versiones.
-        bg:SetMask("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
+    bg:SetColorTexture(
+        colors.on[1],
+        colors.on[2],
+        colors.on[3],
+        1
+    )
+
+    local mask = pip:CreateMaskTexture()
+    mask:SetAllPoints(bg)
+    mask:SetTexture(
+        "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask",
+        "CLAMPTOBLACKADDITIVE",
+        "CLAMPTOBLACKADDITIVE"
+    )
+
+    bg:AddMaskTexture(mask)
+
+    -- ============================================================
+    -- COOLDOWN
+    -- ============================================================
+
+    local cooldown = CreateFrame(
+        "Cooldown",
+        name .. "Cooldown",
+        pip,
+        "CooldownFrameTemplate"
+    )
+
+    cooldown:SetAllPoints()
+
+    cooldown:SetDrawEdge(false)
+
+    if cooldown.SetUseCircularEdge then
+        cooldown:SetUseCircularEdge(true)
     end
 
-    local cooldown = CreateFrame("Cooldown", name .. "Cooldown", pip, "CooldownFrameTemplate")
-    cooldown:SetAllPoints()
-    cooldown:SetDrawEdge(false)
-    if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
-    if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
-    -- IMPORTANTE: false (no true). El brillo del pip depende ENTERAMENTE del
-    -- swipe (no hay un vertex color aparte como en los widgets de icono), así
-    -- que necesitamos el barrido "normal": cubierto al usar la habilidad,
-    -- descubriéndose gradualmente hasta quedar brillante cuando está listo.
-    -- Con true queda al revés (se cubre durante el CD y se destapa de golpe
-    -- al terminar).
-    if cooldown.SetReverse then cooldown:SetReverse(false) end
-    if cooldown.SetHideCountdownNumbers then cooldown:SetHideCountdownNumbers(true) end
+    if cooldown.SetDrawSwipe then
+        cooldown:SetDrawSwipe(true)
+    end
+
+    if cooldown.SetDrawBling then
+        cooldown:SetDrawBling(false)
+    end
+
+    if cooldown.SetReverse then
+        cooldown:SetReverse(false)
+    end
+
+    if cooldown.SetHideCountdownNumbers then
+        cooldown:SetHideCountdownNumbers(true)
+    end
+
+    -- Textura circular para el swipe.
+    if cooldown.SetSwipeTexture then
+        cooldown:SetSwipeTexture(
+            "Interface\\Masks\\CircleMaskScalable"
+        )
+    end
+
+    -- El velo durante cooldown conserva la familia cromática
+    -- del pip en lugar de convertirse en gris.
     if cooldown.SetSwipeColor then
-        cooldown:SetSwipeColor(colors.off[1], colors.off[2], colors.off[3], 0.9)
+        cooldown:SetSwipeColor(
+            colors.off[1],
+            colors.off[2],
+            colors.off[3],
+            0.9
+        )
     end
 
     pip.MinimizerPipBG = bg
+    pip.MinimizerPipMask = mask
     pip.MinimizerPipCooldown = cooldown
+    pip.MinimizerPipColorKind = colorKind
+
     return pip
 end
 
 -- Actualiza (o esconde) un pip creado con CreatePip. Igual que UpdateCDWidget
 -- pero sin icono ni cálculo de shade -- el barrido lo anima Blizzard solo.
 function Minimizer.Widgets.UpdatePip(pip, spellID)
-    if not pip then return false end
-    if not spellID then pip:Hide(); return false end
+    if not pip then
+        return false
+    end
+
+    if not spellID then
+        pip:Hide()
+        return false
+    end
 
     local cooldown = pip.MinimizerPipCooldown
+
+    if not cooldown then
+        pip:Hide()
+        return false
+    end
+
     if C_Spell and C_Spell.GetSpellCooldownDuration then
         local duration = C_Spell.GetSpellCooldownDuration(spellID)
+
         if duration and cooldown.SetCooldownFromDurationObject then
             cooldown:SetCooldownFromDurationObject(duration)
         end
+
     elseif C_Spell and C_Spell.GetSpellCooldown then
         local info = C_Spell.GetSpellCooldown(spellID)
+
         if info then
             if cooldown.SetCooldownFromExpression then
                 cooldown:SetCooldownFromExpression(spellID)
@@ -221,13 +295,16 @@ function Minimizer.Widgets.UpdatePip(pip, spellID)
                 cooldown:SetCooldownTable(info)
             end
         end
+
     elseif GetSpellCooldown then
         local start, duration = GetSpellCooldown(spellID)
+
         if start and duration then
             cooldown:SetCooldown(start, duration)
         end
     end
 
     pip:Show()
+
     return true
 end
