@@ -31,6 +31,15 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
 
     -- Las nameplates se reutilizan; resetear el color persistente si cambia la unidad
     if nameplate.MinimizerHealthBarColorUnit ~= unit then
+        if MinimizerDB and MinimizerDB.debugHealthColor then
+            print("Minimizer: HealthBarColor token change; clearing persistent flag; unit=", tostring(unit), "old=", tostring(nameplate.MinimizerHealthBarColorUnit))
+        end
+        if MinimizerDB and MinimizerDB.debugHealthColorStack then
+            if debugstack then
+                print("Minimizer: stacktrace for persistent-clear:")
+                print(debugstack())
+            end
+        end
         nameplate.MinimizerHealthBarColorUnit = unit
         nameplate.MinimizerPersistentCastColorKind = nil
     end
@@ -94,9 +103,11 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
             if isActiveCastOrChannel then
                 r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
 
-                -- Decisión de persistencia: SOLO con el valor ya-seguro
-                -- (`safeUninterruptible` es nil si el dato era secreto).
-                if safeUninterruptible == false then
+                -- Decisión de persistencia: evitar comparar valores secretos directamente.
+                -- Si `rawUninterruptible` es secreto, lo tratamos como "interruptible"
+                -- para propósitos de persistencia; en caso no secreto, usar el
+                -- valor ya-seguro `safeUninterruptible`.
+                if Minimizer.Utils.IsSecretValue(rawUninterruptible) or safeUninterruptible == false then
                     nameplate.MinimizerPersistentCastColorKind = "castInterruptible"
                 end
             elseif nameplate.MinimizerPersistentCastColorKind == "castInterruptible" then
@@ -154,6 +165,15 @@ end
 
 function HealthBarColor:OnNamePlateRemoved(_, nameplate)
     if nameplate then
+        if MinimizerDB and MinimizerDB.debugHealthColor then
+            print("Minimizer: OnNamePlateRemoved clearing healthbar color flags for nameplate")
+        end
+        if MinimizerDB and MinimizerDB.debugHealthColorStack then
+            if debugstack then
+                print("Minimizer: stacktrace for OnNamePlateRemoved clear:")
+                print(debugstack())
+            end
+        end
         nameplate.MinimizerHealthBarColorKind = nil
         nameplate.MinimizerHealthBarColorUnit = nil
         nameplate.MinimizerPersistentCastColorKind = nil
