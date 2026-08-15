@@ -31,15 +31,6 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
 
     -- Las nameplates se reutilizan; resetear el color persistente si cambia la unidad
     if nameplate.MinimizerHealthBarColorUnit ~= unit then
-        if MinimizerDB and MinimizerDB.debugHealthColor then
-            print("Minimizer: HealthBarColor token change; clearing persistent flag; unit=", tostring(unit), "old=", tostring(nameplate.MinimizerHealthBarColorUnit))
-        end
-        if MinimizerDB and MinimizerDB.debugHealthColorStack then
-            if debugstack then
-                print("Minimizer: stacktrace for persistent-clear:")
-                print(debugstack())
-            end
-        end
         nameplate.MinimizerHealthBarColorUnit = unit
         nameplate.MinimizerPersistentCastColorKind = nil
     end
@@ -165,15 +156,6 @@ end
 
 function HealthBarColor:OnNamePlateRemoved(_, nameplate)
     if nameplate then
-        if MinimizerDB and MinimizerDB.debugHealthColor then
-            print("Minimizer: OnNamePlateRemoved clearing healthbar color flags for nameplate")
-        end
-        if MinimizerDB and MinimizerDB.debugHealthColorStack then
-            if debugstack then
-                print("Minimizer: stacktrace for OnNamePlateRemoved clear:")
-                print(debugstack())
-            end
-        end
         nameplate.MinimizerHealthBarColorKind = nil
         nameplate.MinimizerHealthBarColorUnit = nil
         nameplate.MinimizerPersistentCastColorKind = nil

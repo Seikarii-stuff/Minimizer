@@ -361,3 +361,26 @@ hablar primero con el desarrollador principal.
 - **Implementación**: `Minimizer.Utils.Throttle(fn, 0.033)` en `Target.lua` y `Focus.lua`.
 - **Resultado del benchmark**: Ante 100 eventos `SPELL_UPDATE_COOLDOWN` simulados en ~1 segundo, las llamadas reales se reducen de 100 a **25 llamadas** (~25-30 FPS cap).
 - Se eliminó el 75% de los repintados redundantes sin perder fluidez visual ni respuesta inmediata al primer evento.
+
+**Persistent Green Fix**
+
+- **Root cause:** In certain runtime paths the interruptibility value used to decide persistence came from a C-side utility and could be a "secret" numeric value. Comparing or coercing that secret value caused taint or incorrect logic: the bar was painted green temporarily (EvaluateColorRGB resolved the color) but the persistence flag (`MinimizerPersistentCastColorKind`) was not set because code compared a safe boolean that was `nil` when the source was secret.
+- **Fix applied:** In `HealthBarColor.lua` we now decide persistence without directly comparing secret values. The rule used is: if the raw interruptibility value is secret (Minimizer.Utils.IsSecretValue) treat it as "interruptible" for persistence purposes, otherwise use the already-safe `safeUninterruptible` value. This avoids taint and ensures the green flag is set when appropriate.
+- **Files changed:** [HealthBarColor.lua](HealthBarColor.lua) (persistence decision and guarded debug traces).
+- **How to reproduce & debug in-game:** enable debug traces in your client before reproducing the scenario:
+
+```lua
+/run MinimizerDB = MinimizerDB or {}
+/run MinimizerDB.debugHealthColor = true
+/run MinimizerDB.debugHealthColorStack = true
+```
+
+Then reproduce the cast; look for chat lines prefixed with `Minimizer:`. The stacktrace output will show the caller that clears persistence if any.
+- **Why this prevents regressions:** Do not compare or coerce values that may be secret. Use `Minimizer.Utils.IsSecretValue` and the helpers in `Minimizer.Utils` (`EvaluateColorRGB`, `EvaluateBoolean`) as documented in the README. When deciding persistence, favour `IsSecretValue(raw)` OR the existing `safeUninterruptible` boolean instead of directly comparing curve-returned numbers.
+- **Testing:** run the smoke tests locally:
+
+```bash
+lua tests/smoke_test.lua
+```
+
+The smoke tests cover the persistence scenarios; after the fix they should pass (31/31).
