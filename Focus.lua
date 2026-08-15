@@ -14,6 +14,17 @@ local cooldown = CreateFrame("Cooldown", "MinimizerFocusCooldown", frame, "Coold
 cooldown:SetAllPoints()
 Minimizer.Widgets.StyleCooldown(cooldown)
 
+-- El retrato es redondo (SetPortraitTexture) pero el swipe por defecto
+-- de StyleCooldown ("UI-HUD-CoolDown-Swipe") es cuadrado y llega hasta
+-- las esquinas del frame de 40x40 -- justo donde, cuando focus == target,
+-- cae el anillo del Target por debajo. Lo confinamos a un circulo.
+if cooldown.SetSwipeTexture then
+    cooldown:SetSwipeTexture("Interface\\Masks\\CircleMaskScalable")
+end
+if cooldown.SetUseCircularEdge then
+    cooldown:SetUseCircularEdge(true)
+end
+
 local ccPip
 if Minimizer.Widgets and Minimizer.Widgets.CreatePip then
     ccPip = Minimizer.Widgets.CreatePip("MinimizerFocusCCPip", frame, "cc", "TOPRIGHT")

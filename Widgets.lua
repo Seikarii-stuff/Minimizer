@@ -111,10 +111,10 @@ function Minimizer.Widgets.CreateHalo(name, parentFrame, size)
     if cooldown.SetReverse then cooldown:SetReverse(false) end
     if cooldown.SetHideCountdownNumbers then cooldown:SetHideCountdownNumbers(true) end
     if cooldown.SetSwipeTexture then
-        cooldown:SetSwipeTexture("Interface\\Masks\\CircleMaskScalable")
-    end
-    if cooldown.SetSwipeColor then
-        cooldown:SetSwipeColor(0, 0, 0, 0.75)
+        -- Usamos la MISMA textura del anillo como swipe: donde su alpha es 0
+        -- (el hueco central), el Cooldown no pinta nada ahi -- la forma de dona
+        -- la resuelve el motor C, cero calculo Lua.
+        cooldown:SetSwipeTexture("Interface\\AddOns\\Minimizer\\assets\\halo_ring", 0, 0, 0, 0.75)
     end
     frame.MinimizerHaloCooldown = cooldown
 
