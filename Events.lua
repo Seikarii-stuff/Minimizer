@@ -101,6 +101,9 @@ local function HandleRosterOrSpecChange(self, event)
     if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then
         Minimizer.Widgets.InvalidateCDSpellCache()
     end
+    if Minimizer.Menu and Minimizer.Menu.Refresh and Minimizer.Menu.IsOpen and Minimizer.Menu.IsOpen() then
+        Minimizer.Menu.Refresh()
+    end
     UpdateNameplates()
 end
 handlers["PLAYER_ROLES_ASSIGNED"] = HandleRosterOrSpecChange

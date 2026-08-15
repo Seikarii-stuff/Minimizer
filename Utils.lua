@@ -100,6 +100,25 @@ function Minimizer.Utils.GuardedCall(obj, flagName, fn)
     obj[flagName] = nil
 end
 
+function Minimizer.Utils.ApplyReadyShade(texture, ready)
+    if not texture or type(texture) ~= "table" then return false end
+
+    local shade = 1.0
+    if C_CurveUtil and type(C_CurveUtil.EvaluateColorValueFromBoolean) == "function" then
+        shade = C_CurveUtil.EvaluateColorValueFromBoolean(ready, 1.0, 0.38)
+    elseif Minimizer.Utils.IsSecretValue(ready) then
+        shade = 0.38
+    else
+        shade = ready and 1.0 or 0.38
+    end
+
+    if type(texture.SetVertexColor) == "function" then
+        texture:SetVertexColor(shade, shade, shade, 1)
+    end
+
+    return true
+end
+
 -- Devuelve true si la unidad es un jugador enemigo (PvP). En ese caso los
 -- modulos de color deben dejar las barras de Blizzard sin tocar.
 function Minimizer.Utils.IsPvPUnit(unit)
@@ -148,6 +167,27 @@ function Minimizer.Utils.Throttle(fn, interval)
     end
 end
 
+function Minimizer.Utils.IsSpellKnownByPlayer(spellID)
+    if type(spellID) ~= "number" then
+        return false
+    end
+
+    if C_SpellBook and C_SpellBook.IsSpellKnownOrInSpellBook
+        and C_SpellBook.IsSpellKnownOrInSpellBook(spellID) then
+        return true
+    end
+    if IsPlayerSpell and IsPlayerSpell(spellID) then
+        return true
+    end
+    if C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(spellID) then
+        return true
+    end
+    if IsSpellKnown and IsSpellKnown(spellID) then
+        return true
+    end
+    return false
+end
+
 -- Busca el primer spellID de una lista que el jugador conozca.
 -- spellList puede ser un numero suelto o una tabla de numeros.
 -- Si ninguno esta "conocido" segun las APIs, devuelve el primero de la lista
@@ -158,11 +198,7 @@ function Minimizer.Utils.FindKnownSpell(spellList)
         spellList = {spellList}
     end
     for _, spellID in ipairs(spellList) do
-        if ((C_SpellBook and C_SpellBook.IsSpellKnownOrInSpellBook
-            and C_SpellBook.IsSpellKnownOrInSpellBook(spellID))
-            or (IsPlayerSpell and IsPlayerSpell(spellID))
-            or (C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(spellID))
-            or (IsSpellKnown and IsSpellKnown(spellID))) then
+        if Minimizer.Utils.IsSpellKnownByPlayer(spellID) then
             return spellID
         end
     end

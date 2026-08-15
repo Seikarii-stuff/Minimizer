@@ -129,6 +129,14 @@ if rawUninterruptible == true then ... end -- MAL: podría taintar
 Seguir este patrón evita que el addon taint-e la UI alrededor de casts/channels
 y preserva la persistencia correcta del color verde para casts interrumpibles.
 
+### Nota verificada sobre `SetVertexColorFromBoolean`
+
+No se aplicó `Region:SetVertexColorFromBoolean` en este addon porque no se pudo validar
+`/dump portrait:HasSecretValues()` en cliente real desde este entorno de trabajo. El patrón
+actual sigue siendo `EvaluateColorRGB` / `EvaluateColorValueFromBoolean` para resolver valores
+secretos sin comparar el secreto en Lua. Queda como TODO explícito de validación en cliente real
+antes de sustituir este sink por una API alternativa.
+
 ### Rationale M+
 
 En Mythic+, cualquier inferior que castee algo interrumpible ES wipe potencial si no se para.
@@ -161,12 +169,15 @@ Markers.lua         -> Minimizer.Markers (gestión de marcas de objetivo)
 HealthBarColor.lua  -> Minimizer.HealthBarColor (módulo registrado: coloreo de healthbars nativas)
 CastingBar.lua      -> Minimizer.CastingBar (módulo registrado: coloreo de castbars nativas, visuales de objetivo)
 Focus.lua           -> Minimizer.Focus (retrato de focus, indicador de CD de interrupt y CC masivo)
-Target.lua          -> Minimizer.Target (widgets de CDs defensivos y ofensivos sobre el objetivo)
+Target.lua          -> Minimizer.Target (widgets de CDs defensivos y ofensivos sobre el objetivo; halo + pips)
+Menu.lua            -> Minimizer.Menu (frame propio, movible, con dropdowns/checkboxes en vivo para la UI)
 Events.lua          -> Minimizer (EventFrame centralizado con tabla de dispatch)
 SlashCommands.lua   -> Minimizer (comandos de consola /simp)
 ```
 
 `Core.lua` construye un `snapshot` por unidad una vez por pase (`BuildSnapshot`, dentro de `ApplyToUnit`) y lo pasa tanto a `Decision.ShouldSimplifyUnit` como a `Core.UpdateModules` → cada módulo visual registrado. Esto sustituye al patrón anterior donde `Decision` y `HealthBarColor` recalculaban `Classification.GetEliteType`/`Absorb.HasAbsorb` cada uno por su cuenta.
+
+`Target.lua` y `Focus.lua` siguen usando dos familias visuales intencionales: el halo/donut del target y los pips circulares pequeños para cooldowns, junto con el retrato del focus con color de estado listo/cooldown. El diseño no mezcla "anillo" con "círculo" porque el hueco central del halo es una parte del framing visual del retrato del focus en pulls grandes.
 
 `Minimizer.Core.RegisterModule(name, module)` es el único punto de entrada para que un
 módulo visual (`HealthBarColor`, `CastingBar`) se enganche al ciclo de vida de las

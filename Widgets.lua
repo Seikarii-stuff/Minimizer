@@ -38,19 +38,45 @@ function Minimizer.Widgets.FindCastBar(nameplate)
     return FindCastBarInChildren(healthBar, unitFrame:GetChildren())
 end
 
-local cdSpellCache = setmetatable({}, { __mode = "k" }) -- weak keys, una entrada por dbTable
+local cdSpellCache = setmetatable({}, { __mode = "k" }) -- weak keys, una entrada por dbTable+override
 
-function Minimizer.Widgets.GetCDSpellID(dbTable)
+local function GetCooldownCacheKey(dbTable, override)
+    if override == nil then
+        return dbTable
+    end
+    return { dbTable = dbTable, override = override }
+end
+
+function Minimizer.Widgets.GetCDSpellID(dbTable, override)
     if not dbTable then return nil end
-    local cached = cdSpellCache[dbTable]
+
+    local _, classToken = UnitClass("player")
+    local spellList = classToken and dbTable[classToken]
+    local cacheKey = GetCooldownCacheKey(dbTable, override)
+    local cached = cdSpellCache[cacheKey]
     if cached ~= nil then
         if cached == false then return nil end
         return cached
     end
-    local _, classToken = UnitClass("player")
-    local spellList = classToken and dbTable[classToken]
+
+    if override ~= nil then
+        local overrideAllowed = false
+        if type(spellList) == "table" then
+            for _, spellID in ipairs(spellList) do
+                if spellID == override then
+                    overrideAllowed = true
+                    break
+                end
+            end
+        end
+        if overrideAllowed and Minimizer.Utils and Minimizer.Utils.IsSpellKnownByPlayer and Minimizer.Utils.IsSpellKnownByPlayer(override) then
+            cdSpellCache[cacheKey] = override
+            return override
+        end
+    end
+
     local result = Minimizer.Utils.FindKnownSpell(spellList)
-    cdSpellCache[dbTable] = result or false -- false = "ya se calculo, no hay resultado"
+    cdSpellCache[cacheKey] = result or false
     return result
 end
 
@@ -61,25 +87,77 @@ function Minimizer.Widgets.InvalidateCDSpellCache()
     cdSpellCache = setmetatable({}, { __mode = "k" })
 end
 
-function Minimizer.Widgets.StyleCooldown(cooldown)
-    cooldown:SetDrawEdge(true)
-    if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
-    if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
-    if cooldown.SetReverse then cooldown:SetReverse(true) end
-    cooldown:SetSwipeTexture("Interface\\HUD\\UI-HUD-CoolDown-Swipe")
+function Minimizer.Widgets.ConfigureCooldownFrame(cooldown, opts)
+    if not cooldown then return end
+    opts = opts or {}
+
+    if cooldown.SetDrawEdge then
+        cooldown:SetDrawEdge(opts.drawEdge ~= nil and opts.drawEdge or false)
+    end
+    if cooldown.SetUseCircularEdge then
+        cooldown:SetUseCircularEdge(opts.useCircularEdge ~= nil and opts.useCircularEdge or false)
+    end
+    if cooldown.SetDrawSwipe then
+        cooldown:SetDrawSwipe(opts.drawSwipe ~= nil and opts.drawSwipe or true)
+    end
+    if cooldown.SetDrawBling then
+        cooldown:SetDrawBling(opts.drawBling ~= nil and opts.drawBling or false)
+    end
+    if cooldown.SetReverse then
+        cooldown:SetReverse(opts.reverse ~= nil and opts.reverse or false)
+    end
+    if cooldown.SetHideCountdownNumbers then
+        cooldown:SetHideCountdownNumbers(opts.hideCountdownNumbers ~= nil and opts.hideCountdownNumbers or true)
+    end
+    if cooldown.SetSwipeTexture and opts.swipeTexture then
+        cooldown:SetSwipeTexture(opts.swipeTexture)
+    end
+    if cooldown.SetSwipeColor and opts.swipeColor then
+        cooldown:SetSwipeColor(opts.swipeColor[1], opts.swipeColor[2], opts.swipeColor[3], opts.swipeColor[4] or 1)
+    end
 end
 
-function Minimizer.Widgets.CreateCDWidget(name, size)
-    local frame = CreateFrame("Frame", name, UIParent)
-    frame:SetSize(size, size)
-    frame:SetFrameStrata("HIGH")
-    frame:Hide()
-    local icon = frame:CreateTexture(nil, "ARTWORK")
-    icon:SetAllPoints()
-    local cooldown = CreateFrame("Cooldown", name.."Cooldown", frame, "CooldownFrameTemplate")
-    cooldown:SetAllPoints()
-    Minimizer.Widgets.StyleCooldown(cooldown)
-    return frame, icon, cooldown
+function Minimizer.Widgets.MakeCooldownCircular(cooldown)
+    if not cooldown then return end
+    Minimizer.Widgets.ConfigureCooldownFrame(cooldown, {
+        drawEdge = false,
+        useCircularEdge = true,
+        drawSwipe = true,
+        drawBling = false,
+        reverse = false,
+        hideCountdownNumbers = true,
+        swipeTexture = "Interface\\Masks\\CircleMaskScalable",
+    })
+end
+
+function Minimizer.Widgets.ApplyCooldownDuration(cooldown, spellID)
+    if not cooldown or not spellID then return false end
+
+    if C_Spell and C_Spell.GetSpellCooldownDuration then
+        local duration = C_Spell.GetSpellCooldownDuration(spellID)
+        if duration and cooldown.SetCooldownFromDurationObject then
+            cooldown:SetCooldownFromDurationObject(duration)
+            return true
+        end
+    elseif C_Spell and C_Spell.GetSpellCooldown then
+        local info = C_Spell.GetSpellCooldown(spellID)
+        if info then
+            if cooldown.SetCooldownFromExpression then
+                cooldown:SetCooldownFromExpression(spellID)
+            elseif cooldown.SetCooldownTable then
+                cooldown:SetCooldownTable(info)
+            end
+            return true
+        end
+    elseif GetSpellCooldown then
+        local start, duration = GetSpellCooldown(spellID)
+        if start and duration then
+            cooldown:SetCooldown(start, duration)
+            return true
+        end
+    end
+
+    return false
 end
 
 -- CreateHalo: un anillo (halo) con textura que tiene el centro transparente.
@@ -93,35 +171,28 @@ function Minimizer.Widgets.CreateHalo(name, parentFrame, size)
     frame:SetFrameStrata("HIGH")
     frame:Hide()
 
-    -- Textura original, sin tocar.
     local tex = frame:CreateTexture(nil, "ARTWORK")
     tex:SetAllPoints()
     tex:SetTexture("Interface\\AddOns\\Minimizer\\assets\\halo_ring")
     tex:SetBlendMode("BLEND")
     frame.MinimizerHaloTexture = tex
 
-    -- NUEVO: el relleno ya no se calcula en Lua (eso es lo que se quita).
-    -- Se delega al Cooldown frame nativo, igual que en CreatePip/Focus.
     local cooldown = CreateFrame("Cooldown", name .. "Cooldown", frame, "CooldownFrameTemplate")
     cooldown:SetAllPoints()
-    cooldown:SetDrawEdge(false)
-    if cooldown.SetUseCircularEdge then cooldown:SetUseCircularEdge(true) end
-    if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
-    if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
-    if cooldown.SetReverse then cooldown:SetReverse(false) end
-    if cooldown.SetHideCountdownNumbers then cooldown:SetHideCountdownNumbers(true) end
-    if cooldown.SetSwipeTexture then
-        -- Usamos la MISMA textura del anillo como swipe: donde su alpha es 0
-        -- (el hueco central), el Cooldown no pinta nada ahi -- la forma de dona
-        -- la resuelve el motor C, cero calculo Lua.
-        cooldown:SetSwipeTexture("Interface\\AddOns\\Minimizer\\assets\\halo_ring", 0, 0, 0, 0.75)
-    end
+    Minimizer.Widgets.ConfigureCooldownFrame(cooldown, {
+        drawEdge = false,
+        useCircularEdge = true,
+        drawSwipe = true,
+        drawBling = false,
+        reverse = false,
+        hideCountdownNumbers = true,
+        swipeTexture = "Interface\\AddOns\\Minimizer\\assets\\halo_ring",
+        swipeColor = { 0.00, 0.00, 0.00, 0.75 },
+    })
     frame.MinimizerHaloCooldown = cooldown
 
     return frame
 end
-
-
 
 function Minimizer.Widgets.UpdateHalo(frame, spellID)
     if not frame then return false end
@@ -136,70 +207,7 @@ function Minimizer.Widgets.UpdateHalo(frame, spellID)
         return false
     end
 
-    -- Mismo patron que Widgets.UpdatePip: Blizzard calcula el relleno,
-    -- cero comparaciones Lua sobre duration/start.
-    if C_Spell and C_Spell.GetSpellCooldownDuration then
-        local duration = C_Spell.GetSpellCooldownDuration(spellID)
-        if duration and cooldown.SetCooldownFromDurationObject then
-            cooldown:SetCooldownFromDurationObject(duration)
-        end
-    elseif C_Spell and C_Spell.GetSpellCooldown then
-        local info = C_Spell.GetSpellCooldown(spellID)
-        if info then
-            if cooldown.SetCooldownFromExpression then
-                cooldown:SetCooldownFromExpression(spellID)
-            elseif cooldown.SetCooldownTable then
-                cooldown:SetCooldownTable(info)
-            end
-        end
-    elseif GetSpellCooldown then
-        local start, duration = GetSpellCooldown(spellID)
-        if start and duration then
-            cooldown:SetCooldown(start, duration)
-        end
-    end
-
-    frame:Show()
-    return true
-end
-
-function Minimizer.Widgets.UpdateCDWidget(frame, icon, cooldown, spellID)
-    if not spellID then frame:Hide(); return false end
-
-    local tex = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(spellID)
-    if not tex and GetSpellTexture then tex = GetSpellTexture(spellID) end
-    if tex then icon:SetTexture(tex) end
-
-    local ready = true
-    if C_Spell and C_Spell.GetSpellCooldownDuration then
-        local duration = C_Spell.GetSpellCooldownDuration(spellID)
-        if duration then
-            cooldown:SetCooldownFromDurationObject(duration)
-            ready = duration:IsZero()
-        end
-    elseif C_Spell and C_Spell.GetSpellCooldown then
-        local info = C_Spell.GetSpellCooldown(spellID)
-        if info then
-            if cooldown.SetCooldownFromExpression then
-                cooldown:SetCooldownFromExpression(spellID)
-            elseif cooldown.SetCooldownTable then
-                cooldown:SetCooldownTable(info)
-            end
-            if info.duration and info.duration > 0 then ready = false end
-        end
-    elseif GetSpellCooldown then
-        local start, duration = GetSpellCooldown(spellID)
-        if start and duration and duration > 0 then
-            cooldown:SetCooldown(start, duration)
-            ready = false
-        else
-            cooldown:SetCooldown(0, 0)
-        end
-    end
-
-    local shade = C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean and C_CurveUtil.EvaluateColorValueFromBoolean(ready, 1.0, 0.38) or (ready and 1.0 or 0.38)
-    icon:SetVertexColor(shade, shade, shade, 1)
-
+    Minimizer.Widgets.ApplyCooldownDuration(cooldown, spellID)
     frame:Show()
     return true
 end
@@ -291,46 +299,16 @@ function Minimizer.Widgets.CreatePip(name, parentFrame, colorKind, anchorCorner,
     )
 
     cooldown:SetAllPoints()
-
-    cooldown:SetDrawEdge(false)
-
-    if cooldown.SetUseCircularEdge then
-        cooldown:SetUseCircularEdge(true)
-    end
-
-    if cooldown.SetDrawSwipe then
-        cooldown:SetDrawSwipe(true)
-    end
-
-    if cooldown.SetDrawBling then
-        cooldown:SetDrawBling(false)
-    end
-
-    if cooldown.SetReverse then
-        cooldown:SetReverse(false)
-    end
-
-    if cooldown.SetHideCountdownNumbers then
-        cooldown:SetHideCountdownNumbers(true)
-    end
-
-    -- Textura circular para el swipe.
-    if cooldown.SetSwipeTexture then
-        cooldown:SetSwipeTexture(
-            "Interface\\Masks\\CircleMaskScalable"
-        )
-    end
-
-    -- El velo durante cooldown conserva la familia cromática
-    -- del pip en lugar de convertirse en gris.
-    if cooldown.SetSwipeColor then
-        cooldown:SetSwipeColor(
-            colors.off[1],
-            colors.off[2],
-            colors.off[3],
-            0.9
-        )
-    end
+    Minimizer.Widgets.ConfigureCooldownFrame(cooldown, {
+        drawEdge = false,
+        useCircularEdge = true,
+        drawSwipe = true,
+        drawBling = false,
+        reverse = false,
+        hideCountdownNumbers = true,
+        swipeTexture = "Interface\\Masks\\CircleMaskScalable",
+        swipeColor = { colors.off[1], colors.off[2], colors.off[3], 0.9 },
+    })
 
     pip.MinimizerPipBG = bg
     pip.MinimizerPipMask = mask
@@ -359,31 +337,7 @@ function Minimizer.Widgets.UpdatePip(pip, spellID)
         return false
     end
 
-    if C_Spell and C_Spell.GetSpellCooldownDuration then
-        local duration = C_Spell.GetSpellCooldownDuration(spellID)
-
-        if duration and cooldown.SetCooldownFromDurationObject then
-            cooldown:SetCooldownFromDurationObject(duration)
-        end
-
-    elseif C_Spell and C_Spell.GetSpellCooldown then
-        local info = C_Spell.GetSpellCooldown(spellID)
-
-        if info then
-            if cooldown.SetCooldownFromExpression then
-                cooldown:SetCooldownFromExpression(spellID)
-            elseif cooldown.SetCooldownTable then
-                cooldown:SetCooldownTable(info)
-            end
-        end
-
-    elseif GetSpellCooldown then
-        local start, duration = GetSpellCooldown(spellID)
-
-        if start and duration then
-            cooldown:SetCooldown(start, duration)
-        end
-    end
+    Minimizer.Widgets.ApplyCooldownDuration(cooldown, spellID)
 
     pip:Show()
 

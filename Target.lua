@@ -22,8 +22,10 @@ function Target:UpdateTargetCDs()
         return 
     end
 
-    local offID = Minimizer.Widgets.GetCDSpellID(Minimizer.Data.OFFENSIVE_CDS)
-    local defID = Minimizer.Widgets.GetCDSpellID(Minimizer.Data.DEFENSIVE_CDS)
+    local offOverride = MinimizerCharDB and MinimizerCharDB.targetOffensive
+    local defOverride = MinimizerCharDB and MinimizerCharDB.targetDefensive
+    local offID = Minimizer.Widgets.GetCDSpellID(Minimizer.Data.OFFENSIVE_CDS, offOverride)
+    local defID = Minimizer.Widgets.GetCDSpellID(Minimizer.Data.DEFENSIVE_CDS, defOverride)
 
     Minimizer.Widgets.UpdatePip(defPip, defID)
 

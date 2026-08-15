@@ -5,6 +5,7 @@
 ## Version: 1.0
 ## IconTexture: 136006
 ## SavedVariables: MinimizerDB
+## SavedVariablesPerCharacter: MinimizerCharDB
 
 Bootstrap.lua
 Utils.lua
@@ -25,5 +26,6 @@ HealthBarColor.lua
 CastingBar.lua
 Focus.lua
 Target.lua
+Menu.lua
 Events.lua
 SlashCommands.lua

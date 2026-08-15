@@ -53,7 +53,7 @@ function Markers:UpdateNamePlate(unit, nameplate)
 
     markers.targetLeft:SetShown(isTarget == true)
     markers.targetRight:SetShown(isTarget == true)
-    local showFocusArrows = MinimizerDB.focusIndicator ~= "face"
+    local showFocusArrows = MinimizerDB.enableFocusArrows == true
     markers.focusLeft:SetShown(isFocus == true and showFocusArrows)
     markers.focusRight:SetShown(isFocus == true and showFocusArrows)
 end

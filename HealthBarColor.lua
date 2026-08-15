@@ -117,20 +117,27 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
         -- Regla 5 & 6: CUALQUIER inferior (melee, caster ya excluido arriba
         -- por isSpecial, trivial, etc.)
         if isActiveCastOrChannel then
-            r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
-
-            -- Persistir DIRECTAMENTE el color ya resuelto por EvaluateColorRGB
-            -- (el mismo sink que ya usa CastingBar.lua para pintar bien la
-            -- castbar). NO se compara rawUninterruptible ni safeUninterruptible
-            -- aqui -- solo se transporta el resultado ya renderizado de este
-            -- frame al siguiente. Esto es lo unico que evita volver a
-            -- reventar con "attempt to compare tainted".
-            nameplate.MinimizerPersistentCastColor = nameplate.MinimizerPersistentCastColor or {}
-            local p = nameplate.MinimizerPersistentCastColor
-            p[1], p[2], p[3] = r, g, b
+            if safeUninterruptible == true then
+                r, g, b = COLORS.superiorUninterruptible[1], COLORS.superiorUninterruptible[2], COLORS.superiorUninterruptible[3]
+                nameplate.MinimizerPersistentCastColor = nil
+                nameplate.MinimizerPersistentCastColorKind = nil
+            else
+                r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
+                if safeUninterruptible == false then
+                    nameplate.MinimizerPersistentCastColor = nameplate.MinimizerPersistentCastColor or {}
+                    local p = nameplate.MinimizerPersistentCastColor
+                    p[1], p[2], p[3] = r, g, b
+                    nameplate.MinimizerPersistentCastColorKind = "castInterruptible"
+                else
+                    nameplate.MinimizerPersistentCastColor = nil
+                    nameplate.MinimizerPersistentCastColorKind = nil
+                end
+            end
         elseif nameplate.MinimizerPersistentCastColor then
             local p = nameplate.MinimizerPersistentCastColor
             r, g, b = p[1], p[2], p[3]
+        else
+            nameplate.MinimizerPersistentCastColorKind = nil
         end
     end
     -- isSuperior: sin rama de color por cast/channel. Se queda con el color
@@ -188,6 +195,7 @@ function HealthBarColor:OnNamePlateRemoved(_, nameplate)
         nameplate.MinimizerHealthBarColorUnit = nil
         nameplate.MinimizerHealthBarColorGen = nil
         nameplate.MinimizerPersistentCastColor = nil
+        nameplate.MinimizerPersistentCastColorKind = nil
         nameplate.MinimizerHasAbsorb = nil
     end
 end
