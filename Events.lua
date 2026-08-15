@@ -34,10 +34,30 @@ end
 handlers["PLAYER_ENTERING_WORLD"] = HandleFullRefreshEvent
 handlers["ZONE_CHANGED_NEW_AREA"] = HandleFullRefreshEvent
 handlers["PLAYER_DIFFICULTY_CHANGED"] = HandleFullRefreshEvent
-handlers["PLAYER_TARGET_CHANGED"] = HandleFullRefreshEvent
-handlers["PLAYER_FOCUS_CHANGED"] = HandleFullRefreshEvent
 handlers["PLAYER_REGEN_DISABLED"] = HandleFullRefreshEvent
 handlers["PLAYER_REGEN_ENABLED"] = HandleFullRefreshEvent
+
+-- PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED necesitan ADEMÁS del refresco
+-- general de nameplates (HandleFullRefreshEvent) un refresco INMEDIATO de
+-- Target.lua / Focus.lua. Si cambias de target/focus entre unidades que YA
+-- tienen nameplate en pantalla, no se dispara NAME_PLATE_UNIT_ADDED (la
+-- nameplate ya existía), así que sin esta llamada directa Target/Focus no se
+-- repintan hasta que por casualidad llegue un SPELL_UPDATE_COOLDOWN -- de
+-- ahí el retraso de varios segundos. El throttle nunca fue el problema: no
+-- hay throttle que arregle una llamada que simplemente no se está haciendo.
+handlers["PLAYER_TARGET_CHANGED"] = function(self, event)
+    HandleFullRefreshEvent(self, event)
+    if Minimizer.Target and Minimizer.Target.UpdateTargetCDs then
+        Minimizer.Target:UpdateTargetCDs()
+    end
+end
+
+handlers["PLAYER_FOCUS_CHANGED"] = function(self, event)
+    HandleFullRefreshEvent(self, event)
+    if Minimizer.Focus and Minimizer.Focus.UpdateFace then
+        Minimizer.Focus:UpdateFace()
+    end
+end
 
 handlers["NAME_PLATE_UNIT_ADDED"] = function(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then

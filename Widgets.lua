@@ -170,10 +170,12 @@ function Minimizer.Widgets.CreatePip(name, parentFrame, colorKind, anchorCorner,
     bg:SetColorTexture(1, 1, 1, 1)
     bg:SetVertexColor(colors.on[1], colors.on[2], colors.on[3], 1)
     if bg.SetMask then
-        -- Máscara circular estándar de Blizzard. Puramente cosmética: si el
-        -- cliente no la tiene, el pip simplemente se ve cuadrado en vez de
-        -- redondo, no rompe nada.
-        bg:SetMask("Interface\\Masks\\CircleMaskScalable")
+        -- Máscara circular. Usamos esta en vez de "Interface\Masks\CircleMaskScalable"
+        -- porque esa puede no resolver como textura válida en SetMask según
+        -- versión de cliente (falla en silencio y deja el pip cuadrado).
+        -- Esta es la máscara circular que usa el propio Blizzard para
+        -- retratos redondos, disponible desde hace muchas versiones.
+        bg:SetMask("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
     end
 
     local cooldown = CreateFrame("Cooldown", name .. "Cooldown", pip, "CooldownFrameTemplate")
@@ -181,7 +183,13 @@ function Minimizer.Widgets.CreatePip(name, parentFrame, colorKind, anchorCorner,
     cooldown:SetDrawEdge(false)
     if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
     if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
-    if cooldown.SetReverse then cooldown:SetReverse(true) end
+    -- IMPORTANTE: false (no true). El brillo del pip depende ENTERAMENTE del
+    -- swipe (no hay un vertex color aparte como en los widgets de icono), así
+    -- que necesitamos el barrido "normal": cubierto al usar la habilidad,
+    -- descubriéndose gradualmente hasta quedar brillante cuando está listo.
+    -- Con true queda al revés (se cubre durante el CD y se destapa de golpe
+    -- al terminar).
+    if cooldown.SetReverse then cooldown:SetReverse(false) end
     if cooldown.SetHideCountdownNumbers then cooldown:SetHideCountdownNumbers(true) end
     if cooldown.SetSwipeColor then
         cooldown:SetSwipeColor(colors.off[1], colors.off[2], colors.off[3], 0.9)
