@@ -41,9 +41,22 @@ Mocks.time = 0
 Mocks.frames = {}
 Mocks.events = {}
 Mocks.timers = {}
+Mocks.cooldowns = {}
 
 function _G.GetTime()
     return Mocks.time
+end
+
+function _G.GetSpellCooldownDuration(spellID)
+    local cd = Mocks.cooldowns[spellID]
+    if not cd then return nil end
+    return cd.duration or nil
+end
+
+function _G.GetSpellCooldown(spellID)
+    local cd = Mocks.cooldowns[spellID]
+    if not cd then return nil, nil end
+    return cd.start or 0, cd.duration or 0
 end
 
 function Mocks.AdvanceTime(seconds)
@@ -144,6 +157,8 @@ setmetatable(FrameMixin, {
                 return function() return 1, 1, 1, 1 end
             elseif k:match("^Is") or k:match("^Can") then
                 return function() return true end
+            elseif k:match("^Add") then
+                return dummyMethod
             end
         end
         return nil -- Return nil for custom addon fields (like MinimizerHealthColorIndicator)

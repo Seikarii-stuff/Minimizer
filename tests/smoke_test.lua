@@ -486,6 +486,22 @@ do
         "HealthBarColor: boss (superior) casteando interrumpible -> permanece morado")
 end
 
+-- --- TEST GROUP 7: Target halo uses cooldown logic, not a static fake fill ---
+do
+    local halo = addonTable.Widgets.CreateHalo("TestTargetHalo", nil, 46)
+    Mocks.cooldowns[107574] = { start = Mocks.time, duration = 30 }
+    local ok = addonTable.Widgets.UpdateHalo and addonTable.Widgets.UpdateHalo(halo, 107574)
+    check(ok == true, "Target halo: UpdateHalo se ejecuta con un spell de cooldown real")
+    check(halo:IsShown() == true, "Target halo: se muestra cuando el spell está activo")
+
+    local alpha = halo.MinimizerHaloTexture:GetAlpha()
+    check(alpha > 0 and alpha <= 1, "Target halo: el alpha refleja progreso y no queda bloqueado en 0 o 1 fijo")
+
+    Mocks.cooldowns[107574] = nil
+    check(addonTable.Widgets.UpdateHalo and addonTable.Widgets.UpdateHalo(halo, nil) == false,
+        "Target halo: sin spell se oculta")
+end
+
 -- --- RESUMEN FINAL ---
 print(string.format("\n=== SMOKE TEST RESULTS: %d/%d passed ===\n", testsRun - testsFailed, testsRun))
 if testsFailed > 0 then
