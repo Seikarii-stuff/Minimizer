@@ -49,26 +49,20 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     local color = COLORS[baseKind] or COLORS.melee
     local r, g, b = color[1], color[2], color[3]
 
-    local isCasting, uninterruptible, rawUninterruptible, isChanneling
+    local isCasting, rawUninterruptible, isChanneling
     if snapshot then
         isCasting = snapshot.isCasting
         isChanneling = snapshot.isChanneling
         rawUninterruptible = snapshot.rawUninterruptible
         if rawUninterruptible == nil then rawUninterruptible = snapshot.isUninterruptible end
-        if rawUninterruptible == nil then
-            uninterruptible = false
-        else
-            if Minimizer and Minimizer.Utils and Minimizer.Utils.IsSecretValue and Minimizer.Utils.IsSecretValue(rawUninterruptible) then
-                uninterruptible = nil
-            else
-                uninterruptible = (rawUninterruptible == true)
-            end
-        end
     else
-        isCasting, uninterruptible, rawUninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
+        isCasting, _, rawUninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
     end
+    -- rawUninterruptible NUNCA se compara directamente (puede ser un valor
+    -- secreto en Midnight/Secrets). Solo se pasa a EvaluateColorRGB/
+    -- EvaluateBoolean, que lo resuelven vía C_CurveUtil (C-side) sin taintear
+    -- el addon. Compararlo con == o if lo tainteria y rompe el addon mid-combat.
     if rawUninterruptible == nil then rawUninterruptible = false end
-    if uninterruptible == nil then uninterruptible = false end
 
     local isActiveCastOrChannel = isCasting == true or isChanneling == true
 
@@ -93,24 +87,27 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
 
     if not isSpecial then
         if isSuperior then
-            -- Regla 4: superior casteando/canalizando ininterrumpible -> gris TEMPORAL.
-            -- Si la accion es interrumpible, el superior conserva su color base (morado).
-            if isActiveCastOrChannel and uninterruptible then
-                local c = COLORS.superiorUninterruptible
-                r, g, b = c[1], c[2], c[3]
+            -- Regla 4: superior casteando/canalizando -> gris TEMPORAL si es
+            -- ininterrumpible, si no conserva su color base (morado). Nunca persiste.
+            if isActiveCastOrChannel then
+                r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, {r, g, b})
             end
         else
             -- Reglas 5 & 6: CUALQUIER inferior (melee, caster, trivial, etc.)
             if isActiveCastOrChannel then
-                if uninterruptible then
-                    -- Channel/cast ininterrumpible -> gris TEMPORAL. No tocar el flag persistente.
-                    local c = COLORS.superiorUninterruptible
-                    r, g, b = c[1], c[2], c[3]
-                else
-                    -- Channel/cast interrumpible -> verde PERSISTENTE.
+                r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
+
+                -- Decidir si el flag persistente (verde) debe quedar marcado.
+                -- NUNCA se compara rawUninterruptible directamente: se resuelve
+                -- primero a un numero plano (0/1) via el curve evaluator de
+                -- Blizzard (misma API C-side que EvaluateColorRGB, ver Utils.lua
+                -- EvaluateBoolean), y SOLO ese numero ya resuelto (no secreto)
+                -- se compara con ==. Esto es el mismo patron que usa Platynator
+                -- en Cache.lua (hasUninterruptableCasted) y Colors.lua
+                -- (PushCondition con el valor crudo, nunca un if directo).
+                local wasInterruptible = Minimizer.Utils.EvaluateBoolean(rawUninterruptible, 0, 1)
+                if wasInterruptible == 1 then
                     nameplate.MinimizerPersistentCastColorKind = "castInterruptible"
-                    local c = COLORS.castInterruptible
-                    r, g, b = c[1], c[2], c[3]
                 end
             elseif nameplate.MinimizerPersistentCastColorKind == "castInterruptible" then
                 -- Ya casteo/canalizo algo interrumpible antes: mantener verde aunque ya no lo haga.

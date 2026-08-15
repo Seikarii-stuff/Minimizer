@@ -40,6 +40,47 @@
 - **Persistente**: el flag/color permanece incluso después de que termine el cast o el escudo.
 - **Temporal**: el flag/color desaparece en cuanto desaparece la condición.
 
+---
+
+## TRATAMIENTO SEGURO DE CHANNELS Y VALORES SECRETOS
+
+Importante: los valores provenientes de APIs tipo Midnight/Secrets pueden ser "secretos".
+Nunca compararlos directamente con `if`, `==`, `~=` u operadores similares en Lua.
+En su lugar usar las utilidades de este proyecto:
+
+- `Minimizer.Utils.EvaluateColorRGB(state, colorTrue, colorFalse)` — resuelve un booleano
+  potencialmente secreto a un color RGB (cada componente vía `C_CurveUtil`).
+- `Minimizer.Utils.EvaluateBoolean(state, ifTrue, ifFalse)` — resuelve un booleano
+  potencialmente secreto a un valor plano (p.ej. `0`/`1`) seguro de comparar.
+
+Patrón recomendado (ejemplos):
+
+- Decidir color de cast/channel sin taint:
+
+```lua
+local r,g,b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
+-- aplicar color resuelto
+```
+
+- Decidir si marcar flag persistente tras resolver el secreto:
+
+```lua
+local wasInterruptible = Minimizer.Utils.EvaluateBoolean(rawUninterruptible, 0, 1)
+if wasInterruptible == 1 then
+    nameplate.MinimizerPersistentCastColorKind = "castInterruptible"
+end
+```
+
+No usar nunca:
+
+```lua
+if rawUninterruptible then ... end        -- MAL: podría taintar
+if rawUninterruptible == true then ... end -- MAL: podría taintar
+```
+
+Seguir este patrón evita que el addon taint-e la UI alrededor de casts/channels
+y preserva la persistencia correcta del color verde para casts interrumpibles.
+
 ### Rationale M+
 
 En Mythic+, cualquier inferior que castee algo interrumpible ES wipe potencial si no se para.

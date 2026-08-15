@@ -83,6 +83,14 @@ function Minimizer.Utils.EvaluateColorRGB(state, colorTrue, colorFalse)
            C_CurveUtil.EvaluateColorValueFromBoolean(state, colorTrue[3], colorFalse[3])
 end
 
+function Minimizer.Utils.EvaluateBoolean(state, ifTrue, ifFalse)
+    if state == nil then state = false end
+    if not C_CurveUtil or type(C_CurveUtil.EvaluateColorValueFromBoolean) ~= "function" then
+        return (state == true) and ifTrue or ifFalse
+    end
+    return C_CurveUtil.EvaluateColorValueFromBoolean(state, ifTrue, ifFalse)
+end
+
 function Minimizer.Utils.GuardedCall(obj, flagName, fn)
     if obj[flagName] then return end
     obj[flagName] = true

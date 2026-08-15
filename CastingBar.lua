@@ -91,14 +91,20 @@ function CastingBar:ApplyCastColor(castBar, unit, isCasting, isChanneling, ready
     if castBar.GetStatusBarColor then
         r, g, b, a = castBar:GetStatusBarColor()
     end
-    if isChanneling then
-        local cR, cG, cB = Minimizer.Utils.EvaluateColorRGB(ready, COLORS.ready, COLORS.channel)
-        r, g, b = Minimizer.Utils.EvaluateColorRGB(uninterruptible, COLORS.channel, {cR, cG, cB})
+
+    if isCasting or isChanneling then
+        -- Misma leyenda para cast Y channel:
+        --   interrumpible + corte listo -> verde
+        --   interrumpible + corte en CD -> rosa (peligro)
+        --   ininterrumpible             -> NO tocar (Blizzard ya pinta gris por defecto)
+        -- 'uninterruptible' puede ser un valor secreto en Midnight/Secrets:
+        -- nunca se compara con if/==, solo se pasa a EvaluateColorRGB (curve
+        -- C-side de Blizzard).
+        local dangerR, dangerG, dangerB = Minimizer.Utils.EvaluateColorRGB(ready, COLORS.ready, COLORS.channel)
+        r, g, b = Minimizer.Utils.EvaluateColorRGB(uninterruptible, {r, g, b}, {dangerR, dangerG, dangerB})
         a = 1
-    elseif isCasting then
-        local greenR, greenG, greenB = Minimizer.Utils.EvaluateColorRGB(ready, COLORS.ready, {r, g, b})
-        r, g, b = Minimizer.Utils.EvaluateColorRGB(uninterruptible, {r, g, b}, {greenR, greenG, greenB})
     end
+
     Minimizer.Utils.GuardedCall(castBar, "MinimizerApplyingColor", function()
         castBar:SetStatusBarColor(r, g, b, a or 1)
     end)
