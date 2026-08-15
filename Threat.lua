@@ -58,19 +58,20 @@ end
 
 function Minimizer.Threat.GetSituation(unit, source)
     if not unit or not UnitExists(unit) then return nil end
-    local state = Minimizer.Cache.GetUnitState and Minimizer.Cache.GetUnitState(unit)
-    
     source = source or "player"
-    if state then
-        state.threat = state.threat or {}
-        if state.threat[source] ~= nil then return state.threat[source] end
+    local cached
+    if Minimizer.Cache and Minimizer.Cache.GetUnitKeyWithGeneration then
+        cached = Minimizer.Cache.GetUnitKeyWithGeneration(unit, "threat:" .. source)
+        if cached ~= nil then return cached end
     end
-    
+
     local situation = UnitThreatSituation(source, unit)
     if Minimizer.Utils.IsSecretValue(situation) then return nil end
     if type(situation) ~= "number" then return nil end
-    
-    if state then state.threat[source] = situation end
+
+    if Minimizer.Cache and Minimizer.Cache.SetUnitKeyWithGeneration then
+        Minimizer.Cache.SetUnitKeyWithGeneration(unit, "threat:" .. source, situation)
+    end
     return situation
 end
 

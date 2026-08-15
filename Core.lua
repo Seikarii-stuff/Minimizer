@@ -4,6 +4,22 @@ if not Minimizer then return end
 Minimizer.Core = {}
 Minimizer.Modules = Minimizer.Modules or {}
 Minimizer.ActiveNameplates = Minimizer.ActiveNameplates or {}
+-- Monotonic generation counter por token de nameplate. Se incrementa cuando
+-- una unidad LLEGA al token (NAME_PLATE_UNIT_ADDED / OnNamePlateAdded hook).
+-- Las entradas no se limpian: el espacio es bounded por el pool fijo de tokens.
+Minimizer.Core.plateGeneration = Minimizer.Core.plateGeneration or {}
+
+function Minimizer.Core.GetPlateGeneration(token)
+    if not token then return 0 end
+    return Minimizer.Core.plateGeneration[token] or 0
+end
+
+function Minimizer.Core.IncrementPlateGeneration(token)
+    if not token then return end
+    local g = Minimizer.Core.plateGeneration
+    g[token] = (g[token] or 0) + 1
+    return g[token]
+end
 
 local C_NamePlate = C_NamePlate
 local C_NamePlateManager = C_NamePlateManager

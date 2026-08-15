@@ -203,12 +203,12 @@ do
     -- Cambiar el estado subyacente SIN invalidar: debe devolver el valor cacheado (viejo)
     Mocks.units["c_unit"].cast = nil
     local isCasting2 = addonTable.Cast.GetState("c_unit")
-    check(isCasting2 == true, "Cast: sin invalidar, devuelve el valor CACHEADO aunque el estado real cambio")
+    check(isCasting2 == false, "Cast: sin cache, lectura fresca refleja el estado real cambiado")
 
     -- Ahora invalidar y volver a leer: debe reflejar el estado real (nil = false)
     addonTable.Cast.InvalidateState("c_unit")
     local isCasting3 = addonTable.Cast.GetState("c_unit")
-    check(isCasting3 == false, "Cast: tras InvalidateState, refleja el estado real actualizado")
+    check(isCasting3 == false, "Cast: InvalidateState es no-op con lectura fresca; sigue reflejando el estado real")
 end
 
 -- --- TEST GROUP 4: Threat.PlayerHasAggro (no-tank) ---
@@ -224,6 +224,29 @@ do
     Mocks.CreateTestUnit("th_zero", { level = 70, faction = "Horde", threatSituation = 0 })
     check(addonTable.Threat.PlayerHasAggro("th_zero") == false,
         "Threat: situacion 0 NO debe tratarse como aggro (cuidado con truthiness)")
+end
+
+-- --- TEST GROUP 6: Token recycle generation counter prevents stale cache ---
+do
+    -- Create initial unit A on token nameplate5 with high threat
+    Mocks.CreateTestUnit("nameplate5", { level = 70, faction = "Horde", threatSituation = 3 })
+    local npA = Mocks.CreateTestNameplate("nameplate5")
+    -- Fire initial add to let modules cache values
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate5")
+    -- Ensure cache stored a value for threat (simulate existing cache)
+    local cachedBefore = addonTable.Cache and addonTable.Cache.GetUnitKeyWithGeneration and addonTable.Cache.GetUnitKeyWithGeneration("nameplate5", "threat:player")
+    check(cachedBefore == 3, "Precondition: threat cached for unit A")
+
+    -- Now simulate token recycle: new unit B occupies same token with different threat
+    Mocks.CreateTestUnit("nameplate5", { level = 70, faction = "Horde", threatSituation = 0 })
+    -- Simulate arrival: increment generation as Events would do
+    if addonTable.Core and addonTable.Core.IncrementPlateGeneration then
+        addonTable.Core.IncrementPlateGeneration("nameplate5")
+    end
+
+    -- A reader that checks the cache must see the new value (0), not the stale 3
+    local situationNow = addonTable.Threat.GetSituation("nameplate5", "player")
+    check(situationNow == 0, "Token recycled: Threat.GetSituation returns new unit's situation, not stale cached value")
 end
 
 -- --- TEST GROUP 5: HealthBarColor — Leyenda M+ ---

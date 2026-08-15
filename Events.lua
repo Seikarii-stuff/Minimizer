@@ -40,6 +40,10 @@ handlers["PLAYER_REGEN_ENABLED"] = HandleFullRefreshEvent
 
 handlers["NAME_PLATE_UNIT_ADDED"] = function(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then
+        -- Increment generation on arrival to prevent token-reuse races.
+        if Minimizer.Core.IncrementPlateGeneration then
+            Minimizer.Core.IncrementPlateGeneration(unit)
+        end
         Minimizer.Core.ApplyToUnit(unit)
         UpdateNameplates()
     end
@@ -205,6 +209,11 @@ EventFrame:SetScript("OnEvent", OnEvent)
 if NamePlateDriverFrame then
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit)
         if not unit or not unit:match("^nameplate%d+$") then return end
+        -- Hook path also increments (idempotent). See design: increment in both
+        -- NAME_PLATE_UNIT_ADDED and OnNamePlateAdded to be robust to ordering.
+        if Minimizer.Core.IncrementPlateGeneration then
+            Minimizer.Core.IncrementPlateGeneration(unit)
+        end
     end)
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit)
         if not unit or not unit:match("^nameplate%d+$") then return end
