@@ -73,8 +73,10 @@ function Minimizer.Utils.GetHealthBar(nameplate)
 end
 
 function Minimizer.Utils.EvaluateColorRGB(state, colorTrue, colorFalse)
-    if state == nil then state = false end
     if not C_CurveUtil or type(C_CurveUtil.EvaluateColorValueFromBoolean) ~= "function" then
+        if Minimizer.Utils.IsSecretValue(state) then
+            return colorFalse[1], colorFalse[2], colorFalse[3]
+        end
         local c = (state == true) and colorTrue or colorFalse
         return c[1], c[2], c[3]
     end
@@ -84,8 +86,8 @@ function Minimizer.Utils.EvaluateColorRGB(state, colorTrue, colorFalse)
 end
 
 function Minimizer.Utils.EvaluateBoolean(state, ifTrue, ifFalse)
-    if state == nil then state = false end
     if not C_CurveUtil or type(C_CurveUtil.EvaluateColorValueFromBoolean) ~= "function" then
+        if Minimizer.Utils.IsSecretValue(state) then return ifFalse end
         return (state == true) and ifTrue or ifFalse
     end
     return C_CurveUtil.EvaluateColorValueFromBoolean(state, ifTrue, ifFalse)

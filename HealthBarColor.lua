@@ -54,15 +54,16 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
         isCasting = snapshot.isCasting
         isChanneling = snapshot.isChanneling
         rawUninterruptible = snapshot.rawUninterruptible
-        if rawUninterruptible == nil then rawUninterruptible = snapshot.isUninterruptible end
+        if not Minimizer.Utils.IsSecretValue(rawUninterruptible) and rawUninterruptible == nil then
+            rawUninterruptible = snapshot.isUninterruptible
+        end
     else
         isCasting, _, rawUninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
     end
     -- rawUninterruptible NUNCA se compara directamente (puede ser un valor
     -- secreto en Midnight/Secrets). Solo se pasa a EvaluateColorRGB/
     -- EvaluateBoolean, que lo resuelven vía C_CurveUtil (C-side) sin taintear
-    -- el addon. Compararlo con == o if lo tainteria y rompe el addon mid-combat.
-    if rawUninterruptible == nil then rawUninterruptible = false end
+    -- el addon. No forzamos un default aquí: los helpers manejan nil/secret.
 
     local isActiveCastOrChannel = isCasting == true or isChanneling == true
 
