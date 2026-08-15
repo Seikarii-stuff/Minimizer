@@ -553,6 +553,11 @@ do
     check(pip ~= nil and pip.MinimizerPipRadius == 23,
         "Pips: se acepta un radio compartido explícito para centrar el pip sobre el halo")
 
+    local portraitCooldown = CreateFrame("Cooldown", "TestPortraitCooldown", nil, "CooldownFrameTemplate")
+    addonTable.Widgets.MakeCooldownCircular(portraitCooldown, true)
+    check(portraitCooldown:GetHideCountdownNumbers() == false,
+        "Portrait cooldown: la cuenta atrás no se esconde cuando se pide mantener los números")
+
     Mocks.cooldowns[107574] = nil
     check(addonTable.Widgets.UpdateHalo and addonTable.Widgets.UpdateHalo(halo, nil) == false,
         "Target halo: sin spell se oculta")

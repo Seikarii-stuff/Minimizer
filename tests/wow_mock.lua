@@ -134,6 +134,8 @@ function FrameMixin:GetStatusBarColor()
     end
     return 1, 1, 1, 1
 end
+function FrameMixin:SetHideCountdownNumbers(value) self.hideCountdownNumbers = value == true end
+function FrameMixin:GetHideCountdownNumbers() return self.hideCountdownNumbers == true end
 
 -- Explicit dummy methods instead of catch-all __index
 local function dummyMethod() end

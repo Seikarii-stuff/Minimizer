@@ -19,7 +19,7 @@ portrait:SetAllPoints()
 
 local cooldown = CreateFrame("Cooldown", "MinimizerFocusCooldown", frame, "CooldownFrameTemplate")
 cooldown:SetAllPoints()
-Minimizer.Widgets.MakeCooldownCircular(cooldown)
+Minimizer.Widgets.MakeCooldownCircular(cooldown, true)
 
 local ccPip
 if Minimizer.Widgets and Minimizer.Widgets.CreatePip then

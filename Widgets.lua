@@ -92,23 +92,29 @@ function Minimizer.Widgets.ConfigureCooldownFrame(cooldown, opts)
     if not cooldown then return end
     opts = opts or {}
 
+    local function boolOption(key, default)
+        local value = opts[key]
+        if value == nil then return default end
+        return value == true
+    end
+
     if cooldown.SetDrawEdge then
-        cooldown:SetDrawEdge(opts.drawEdge ~= nil and opts.drawEdge or false)
+        cooldown:SetDrawEdge(boolOption("drawEdge", false))
     end
     if cooldown.SetUseCircularEdge then
-        cooldown:SetUseCircularEdge(opts.useCircularEdge ~= nil and opts.useCircularEdge or false)
+        cooldown:SetUseCircularEdge(boolOption("useCircularEdge", false))
     end
     if cooldown.SetDrawSwipe then
-        cooldown:SetDrawSwipe(opts.drawSwipe ~= nil and opts.drawSwipe or true)
+        cooldown:SetDrawSwipe(boolOption("drawSwipe", true))
     end
     if cooldown.SetDrawBling then
-        cooldown:SetDrawBling(opts.drawBling ~= nil and opts.drawBling or false)
+        cooldown:SetDrawBling(boolOption("drawBling", false))
     end
     if cooldown.SetReverse then
-        cooldown:SetReverse(opts.reverse ~= nil and opts.reverse or false)
+        cooldown:SetReverse(boolOption("reverse", false))
     end
     if cooldown.SetHideCountdownNumbers then
-        cooldown:SetHideCountdownNumbers(opts.hideCountdownNumbers ~= nil and opts.hideCountdownNumbers or true)
+        cooldown:SetHideCountdownNumbers(boolOption("hideCountdownNumbers", true))
     end
     if cooldown.SetSwipeTexture and opts.swipeTexture then
         cooldown:SetSwipeTexture(opts.swipeTexture)
@@ -118,7 +124,7 @@ function Minimizer.Widgets.ConfigureCooldownFrame(cooldown, opts)
     end
 end
 
-function Minimizer.Widgets.MakeCooldownCircular(cooldown)
+function Minimizer.Widgets.MakeCooldownCircular(cooldown, showCountdownNumbers)
     if not cooldown then return end
     Minimizer.Widgets.ConfigureCooldownFrame(cooldown, {
         drawEdge = false,
@@ -126,7 +132,7 @@ function Minimizer.Widgets.MakeCooldownCircular(cooldown)
         drawSwipe = true,
         drawBling = false,
         reverse = false,
-        hideCountdownNumbers = true,
+        hideCountdownNumbers = not (showCountdownNumbers == true),
         swipeTexture = "Interface\\Masks\\CircleMaskScalable",
     })
 end
