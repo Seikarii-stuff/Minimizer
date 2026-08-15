@@ -49,21 +49,17 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     local color = COLORS[baseKind] or COLORS.melee
     local r, g, b = color[1], color[2], color[3]
 
-    local isCasting, rawUninterruptible, isChanneling
+    local isCasting, isChanneling, safeUninterruptible, rawUninterruptible
     if snapshot then
         isCasting = snapshot.isCasting
         isChanneling = snapshot.isChanneling
-        rawUninterruptible = snapshot.rawUninterruptible
-        if not Minimizer.Utils.IsSecretValue(rawUninterruptible) and rawUninterruptible == nil then
-            rawUninterruptible = snapshot.isUninterruptible
-        end
+        safeUninterruptible = snapshot.isUninterruptible -- nil | bool (NUNCA secreto)
+        rawUninterruptible = snapshot.rawUninterruptible   -- posible secreto: SOLO para pasar a Evaluate*
     else
-        isCasting, _, rawUninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
+        isCasting, safeUninterruptible, rawUninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
     end
-    -- rawUninterruptible NUNCA se compara directamente (puede ser un valor
-    -- secreto en Midnight/Secrets). Solo se pasa a EvaluateColorRGB/
-    -- EvaluateBoolean, que lo resuelven vía C_CurveUtil (C-side) sin taintear
-    -- el addon. No forzamos un default aquí: los helpers manejan nil/secret.
+    -- rawUninterruptible SOLO se pasa a EvaluateColorRGB (sink directo).
+    -- Para decisiones persistentes usamos `safeUninterruptible` (seguro: nil|bool).
 
     local isActiveCastOrChannel = isCasting == true or isChanneling == true
 
@@ -98,16 +94,9 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
             if isActiveCastOrChannel then
                 r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
 
-                -- Decidir si el flag persistente (verde) debe quedar marcado.
-                -- NUNCA se compara rawUninterruptible directamente: se resuelve
-                -- primero a un numero plano (0/1) via el curve evaluator de
-                -- Blizzard (misma API C-side que EvaluateColorRGB, ver Utils.lua
-                -- EvaluateBoolean), y SOLO ese numero ya resuelto (no secreto)
-                -- se compara con ==. Esto es el mismo patron que usa Platynator
-                -- en Cache.lua (hasUninterruptableCasted) y Colors.lua
-                -- (PushCondition con el valor crudo, nunca un if directo).
-                local wasInterruptible = Minimizer.Utils.EvaluateBoolean(rawUninterruptible, 0, 1)
-                if wasInterruptible == 1 then
+                -- Decisión de persistencia: SOLO con el valor ya-seguro
+                -- (`safeUninterruptible` es nil si el dato era secreto).
+                if safeUninterruptible == false then
                     nameplate.MinimizerPersistentCastColorKind = "castInterruptible"
                 end
             elseif nameplate.MinimizerPersistentCastColorKind == "castInterruptible" then
