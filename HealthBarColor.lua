@@ -23,7 +23,7 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     local healthBar = self:GetHealthBar(nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
     HookHealthBar(healthBar)
-    
+
     local indicator = healthBar.totalAbsorbOverlay or healthBar.totalAbsorb
     if indicator then
         HookIndicator(indicator, healthBar)
@@ -35,7 +35,7 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     if nameplate.MinimizerHealthBarColorGen ~= currentGen or nameplate.MinimizerHealthBarColorUnit ~= unit then
         nameplate.MinimizerHealthBarColorUnit = unit
         nameplate.MinimizerHealthBarColorGen = currentGen
-        nameplate.MinimizerPersistentCastColorKind = nil
+        nameplate.MinimizerPersistentCastColor = nil
     end
 
     -- Fallback defensivo: si por alguna razon se llama sin snapshot (no
@@ -62,21 +62,49 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
         isCasting, safeUninterruptible, rawUninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
     end
     -- rawUninterruptible SOLO se pasa a EvaluateColorRGB (sink directo).
-    -- Para decisiones persistentes usamos `safeUninterruptible` (seguro: nil|bool).
+    -- NUNCA se compara ni se le aplica EvaluateBoolean()==N: ambas formas de
+    -- "leer" un secreto siguen devolviendo un valor tainted y Lua revienta
+    -- (attempt to compare ... tainted) en cuanto se intenta un if/== sobre
+    -- ese resultado. Ver seccion "Persistent Green Fix (v2)" en el README.
 
     local isActiveCastOrChannel = isCasting == true or isChanneling == true
 
     --[[
-        LEYENDA M+ (NO MODIFICAR SIN PERMISO):
+        LEYENDA M+ (v2 -- ver README para el porque del cambio):
         Prioridad descendente — la primera regla que aplica gana:
           1. Focus    → amarillo, sin cambio de simplificacion.
           2. Aggro    → rojo gestionado por Blizzard, dessimp TEMPORAL.
           3. Shield   → rosa (absorb), dessimp TEMPORAL.
-          4. Superior (boss/miniboss) casteando ininterrumpible → gris TEMPORAL.
+          4. Superior (boss/miniboss) → SIEMPRE morado, NUNCA cambia de color
+                      por cast/channel (DEPRECATED desde v2: antes se ponia
+                      gris temporal si el cast era ininterrumpible; se quito
+                      porque forzaba a comparar un booleano potencialmente
+                      secreto y ademas ya es obvio en pantalla cuando un
+                      superior esta casteando). La desimplificacion SIGUE
+                      siendo "no simp" persistente para superiores, eso no
+                      cambia -- solo se toca el color.
           5. Inferior (cualquier no-superior) casteando interrumpible o canalizando
-                      → verde PERSISTENTE (flag permanece tras el cast).
-          6. Inferior casteando ininterrumpible → gris TEMPORAL (solo mientras castea).
+                      → verde PERSISTENTE (el color persiste tal y como salio
+                      del ultimo EvaluateColorRGB, ver Utils mas abajo).
+          6. Inferior casteando ininterrumpible → gris, TAMBIEN PERSISTENTE
+                      en color (ver nota "Cambio de contrato" mas abajo);
+                      la DESIMPLIFICACION sigue siendo TEMPORAL para este caso
+                      (vuelve a poder simplificarse en cuanto termina el cast).
         Los azules (caster/hasmana) NO siguen estas mismas reglas de cast, SOLO CAMBIA DE COLOR CON AGRO,FOCUS O SHIELD.
+
+        NOTA -- Cambio de contrato de "persistente" para el COLOR (v2):
+        Antes solo el verde persistia (via un flag "kind"); el gris volvia al
+        color base del bicho al terminar el cast. Eso obligaba a decidir en
+        Lua "¿el ultimo cast fue interrumpible o no?" comparando un valor que
+        casi siempre llega como secreto -> de ahi el bug historico donde un
+        bicho que SOLO casteaba gris terminaba pintado de verde persistente.
+        Ahora el color que se persiste es EXACTAMENTE el que ya se renderizo
+        (gris o verde, lo que haya calculado EvaluateColorRGB), sin comparar
+        nada. Consecuencia aceptada: el gris tambien queda persistente en el
+        COLOR de la barra (antes era temporal). La DESIMPLIFICACION del gris
+        sigue siendo temporal (eso vive en Decision.lua, sin cambios) -- solo
+        el color de la barra se queda pegado hasta que el bicho vuelva a
+        castear algo o desaparezca la nameplate.
     ]]
 
     -- displayKind ya resuelve la prioridad focus > aggro > absorb > eliteType
@@ -85,32 +113,29 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     -- 'Azules' (caster) no siguen las reglas de casteo; solo cambian por focus/aggro/absorb
     local isSpecial  = baseKind == "focus" or baseKind == "absorb" or baseKind == "aggro" or baseKind == "caster"
 
-    if not isSpecial then
-        if isSuperior then
-            -- Regla 4: superior casteando/canalizando -> gris TEMPORAL si es
-            -- ininterrumpible, si no conserva su color base (morado). Nunca persiste.
-            if isActiveCastOrChannel then
-                r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, {r, g, b})
-            end
-        else
-            -- Reglas 5 & 6: CUALQUIER inferior (melee, caster, trivial, etc.)
-            if isActiveCastOrChannel then
-                r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
+    if not isSpecial and not isSuperior then
+        -- Regla 5 & 6: CUALQUIER inferior (melee, caster ya excluido arriba
+        -- por isSpecial, trivial, etc.)
+        if isActiveCastOrChannel then
+            r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
 
-                -- Decisión de persistencia: evitar comparar valores secretos directamente.
-                -- Si `rawUninterruptible` es secreto, lo tratamos como "interruptible"
-                -- para propósitos de persistencia; en caso no secreto, usar el
-                -- valor ya-seguro `safeUninterruptible`.
-                if Minimizer.Utils.IsSecretValue(rawUninterruptible) or safeUninterruptible == false then
-                    nameplate.MinimizerPersistentCastColorKind = "castInterruptible"
-                end
-            elseif nameplate.MinimizerPersistentCastColorKind == "castInterruptible" then
-                -- Ya casteo/canalizo algo interrumpible antes: mantener verde aunque ya no lo haga.
-                local c = COLORS.castInterruptible
-                r, g, b = c[1], c[2], c[3]
-            end
+            -- Persistir DIRECTAMENTE el color ya resuelto por EvaluateColorRGB
+            -- (el mismo sink que ya usa CastingBar.lua para pintar bien la
+            -- castbar). NO se compara rawUninterruptible ni safeUninterruptible
+            -- aqui -- solo se transporta el resultado ya renderizado de este
+            -- frame al siguiente. Esto es lo unico que evita volver a
+            -- reventar con "attempt to compare tainted".
+            nameplate.MinimizerPersistentCastColor = nameplate.MinimizerPersistentCastColor or {}
+            local p = nameplate.MinimizerPersistentCastColor
+            p[1], p[2], p[3] = r, g, b
+        elseif nameplate.MinimizerPersistentCastColor then
+            local p = nameplate.MinimizerPersistentCastColor
+            r, g, b = p[1], p[2], p[3]
         end
     end
+    -- isSuperior: sin rama de color por cast/channel. Se queda con el color
+    -- base (COLORS.boss / COLORS.miniboss) siempre, cast o no. Ver nota
+    -- "DEPRECATED desde v2" arriba.
 
     Minimizer.Utils.GuardedCall(healthBar, "MinimizerHealthColorApplying", function()
         healthBar:SetStatusBarColor(r, g, b)
@@ -162,7 +187,7 @@ function HealthBarColor:OnNamePlateRemoved(_, nameplate)
         nameplate.MinimizerHealthBarColorKind = nil
         nameplate.MinimizerHealthBarColorUnit = nil
         nameplate.MinimizerHealthBarColorGen = nil
-        nameplate.MinimizerPersistentCastColorKind = nil
+        nameplate.MinimizerPersistentCastColor = nil
         nameplate.MinimizerHasAbsorb = nil
     end
 end

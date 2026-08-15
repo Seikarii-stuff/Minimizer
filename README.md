@@ -16,10 +16,16 @@
 
 ---
 
-## LEYENDA M+ — CONVENCIÓN DE COLORES Y SIMPLIFICACIÓN (NO MODIFICAR SIN PERMISO)
+## LEYENDA M+ — CONVENCIÓN DE COLORES Y SIMPLIFICACIÓN (v2, parche 12.1)
 
 > Esta es la leyenda de Mythic+ estándar que sigue TODO el mundo.
 > **No cambiar nada de esta sección ni la lógica que la implementa sin permiso explícito.**
+> v1 (la tabla de abajo antes del parche 12.1) queda **DEPRECATED — NO FUNCIONA**: obligaba a
+> comparar en Lua un booleano de interrumpibilidad que en cliente real llega prácticamente
+> siempre como valor secreto (Secrets/Midnight), y cualquier comparación sobre ese valor
+> (directa o vía `EvaluateBoolean(...)==N`) revienta con `attempt to compare ... tainted`, o
+> en el mejor de los casos degeneraba en el bug real reportado: bichos que SOLO casteaban gris
+> terminaban pintados de verde persistente. v2 elimina esa comparación de raíz.
 
 ### Prioridad de color (descendente — la primera regla que aplica gana)
 
@@ -28,17 +34,59 @@
 | 1 | **Focus** | Amarillo | Sin cambio (focus no altera simplificación) |
 | 2 | **Aggro** (situación 3) | Rojo gestionado por Blizzard | TEMPORAL (mientras dura) |
 | 3 | **Shield/Absorb** activo | Rosa (`absorb`) | TEMPORAL (mientras dura) |
-| 4 | **Superior** (boss/miniboss) + cast **ininterrumpible** | Gris | TEMPORAL (solo mientras castea) |
-| 5 | **Inferior** (cualquier no-superior) + cast **interrumpible** o canalización | Verde **PERSISTENTE** | **PERSISTENTE** (flag permanente) |
-| 6 | **Inferior** + cast **ininterrumpible** | Gris | TEMPORAL (solo mientras castea) |
+| 4 | **Superior** (boss/miniboss) | Morado, SIEMPRE, cast o no | "no simp" **PERSISTENTE** (sin cambios, ver Decision.lua — los superiores nunca fueron simplificables) |
+| 5 | **Inferior** (cualquier no-superior) + cast **interrumpible** o canalización | Verde, **PERSISTENTE** (color) | **PERSISTENTE** ("no simp") |
+| 6 | **Inferior** + cast **ininterrumpible** | Gris, **PERSISTENTE** (color, ver nota abajo) | **TEMPORAL** (vuelve a poder simplificarse al terminar el cast) |
 
 ### Definiciones
 
 - **Superior**: `boss` o `miniboss` (morado). Determinado por nivel skull / worldboss / elite+2 niveles.
-- **Inferior**: CUALQUIER unidad que no sea superior — melee (blanco), caster/hasmana (azul), trivial (negro), esbirros, menores.  Los azules (caster/hasmana) NO siguen estas mismas reglas de cast, SOLO CAMBIA DE COLOR CON AGRO,FOCUS O SHIELD.
+- **Inferior**: CUALQUIER unidad que no sea superior — melee (blanco), caster/hasmana (azul), trivial (negro), esbirros, menores. Los azules (caster/hasmana) NO siguen estas mismas reglas de cast, SOLO CAMBIA DE COLOR CON AGRO,FOCUS O SHIELD.
 
 - **Persistente**: el flag/color permanece incluso después de que termine el cast o el escudo.
 - **Temporal**: el flag/color desaparece en cuanto desaparece la condición.
+
+### DEPRECATED — regla 4 de v1 (NO FUNCIONA, no reintroducir)
+
+Antes de v2, un **superior** casteando algo **ininterrumpible** se pintaba gris TEMPORAL
+(volvía a morado al terminar el cast). Se retiró en el parche 12.1: forzaba a decidir en
+Lua si el cast del superior era o no interrumpible, y esa decisión es la misma clase de
+comparación-sobre-secreto que causaba el bug de los inferiores. Dado que un superior
+siempre desimplifica de forma persistente igualmente (nunca dependió del color para eso),
+y que ya resulta obvio en pantalla cuando un superior está casteando, se sacrificó el
+cambio de color a cambio de eliminar esa comparación. Los superiores ahora se quedan
+**siempre morados**, casteen o no. No reintroducir esta regla sin una forma de leerlo que
+no compare el valor secreto ni nada derivado de él en Lua.
+
+### DEPRECATED — persistencia por "kind" (v1, NO FUNCIONA, no reintroducir)
+
+v1 guardaba `nameplate.MinimizerPersistentCastColorKind = "castInterruptible"` decidido con:
+
+```lua
+-- NO FUNCIONA -- no reintroducir bajo ningun concepto:
+if Minimizer.Utils.IsSecretValue(rawUninterruptible) or safeUninterruptible == false then
+    nameplate.MinimizerPersistentCastColorKind = "castInterruptible"
+end
+```
+
+Esto tiene dos fallos independientes, ambos confirmados en cliente real:
+
+1. `IsSecretValue(rawUninterruptible) or ...`: como el valor case-práctica **siempre** llega
+   secreto, esta condición entra casi siempre incondicionalmente — sin mirar si el cast era
+   realmente interrumpible o no. Un bicho que solo castea gris terminaba con el flag fijado
+   a `"castInterruptible"` y, por tanto, pintado de verde persistente al terminar. Este era
+   el bug reportado.
+2. Intentar "arreglarlo" resolviendo el secreto explícitamente
+   (`Minimizer.Utils.EvaluateBoolean(rawUninterruptible, 1, 0) == 1`) **tampoco funciona**:
+   `EvaluateBoolean`/`EvaluateColorRGB` son sinks de un solo sentido hacia APIs C-side de
+   Blizzard (`SetStatusBarColor`, etc.) — el valor que devuelven sigue tainted. Compararlo
+   con `==` revienta el cliente con `attempt to compare (secret number value) tainted`.
+
+**No existe ninguna forma soportada de leer/comparar en Lua si un cast es interrumpible
+cuando el valor llega secreto.** v2 evita el problema de raíz: no decide un "kind", persiste
+directamente el `r,g,b` que ya salió de `EvaluateColorRGB` (que sí es válido como sink hacia
+`SetStatusBarColor`, exactamente igual que hace `CastingBar.lua` para la castbar nativa).
+Ver `Minimizer.HealthBarColor.MinimizerPersistentCastColor` en el código actual.
 
 ---
 
@@ -362,25 +410,47 @@ hablar primero con el desarrollador principal.
 - **Resultado del benchmark**: Ante 100 eventos `SPELL_UPDATE_COOLDOWN` simulados en ~1 segundo, las llamadas reales se reducen de 100 a **25 llamadas** (~25-30 FPS cap).
 - Se eliminó el 75% de los repintados redundantes sin perder fluidez visual ni respuesta inmediata al primer evento.
 
-**Persistent Green Fix**
+**Persistent Green Fix (v1) — DEPRECATED, NO FUNCIONA, ver v2 abajo**
+
+> Todo este bloque describe el fix de v1, que en cliente real NO evita el bug (bichos que
+> solo castean gris terminan pintados de verde persistente) y en algunos caminos incluso
+> revienta el cliente (`attempt to compare ... tainted`) si se "mejora" resolviendo el
+> secreto con `EvaluateBoolean(...)==N` antes de compararlo. Se deja el texto original
+> tal cual para referencia histórica de qué NO volver a intentar. El fix real está en la
+> sección "Persistent Color Fix (v2)" justo debajo.
 
 - **Root cause:** In certain runtime paths the interruptibility value used to decide persistence came from a C-side utility and could be a "secret" numeric value. Comparing or coercing that secret value caused taint or incorrect logic: the bar was painted green temporarily (EvaluateColorRGB resolved the color) but the persistence flag (`MinimizerPersistentCastColorKind`) was not set because code compared a safe boolean that was `nil` when the source was secret.
-- **Fix applied:** In `HealthBarColor.lua` we now decide persistence without directly comparing secret values. The rule used is: if the raw interruptibility value is secret (Minimizer.Utils.IsSecretValue) treat it as "interruptible" for persistence purposes, otherwise use the already-safe `safeUninterruptible` value. This avoids taint and ensures the green flag is set when appropriate.
+- **Fix applied (NO FUNCIONA):** In `HealthBarColor.lua` we now decide persistence without directly comparing secret values. The rule used is: if the raw interruptibility value is secret (Minimizer.Utils.IsSecretValue) treat it as "interruptible" for persistence purposes, otherwise use the already-safe `safeUninterruptible` value. This avoids taint and ensures the green flag is set when appropriate.
 - **Files changed:** [HealthBarColor.lua](HealthBarColor.lua) (persistence decision and guarded debug traces).
-- **How to reproduce & debug in-game:** enable debug traces in your client before reproducing the scenario:
+- **Why this fue insuficiente:** dado que el valor llega secreto casi siempre, la condición `IsSecretValue(raw) or ...` entra casi incondicionalmente, marcando persistencia verde para bichos que en realidad solo castean gris. Un intento posterior de "arreglarlo" comparando `EvaluateBoolean(raw,1,0)==1` tampoco sirve: ese resultado sigue tainted y la comparación revienta el cliente.
 
-```lua
-/run MinimizerDB = MinimizerDB or {}
-/run MinimizerDB.debugHealthColor = true
-/run MinimizerDB.debugHealthColorStack = true
-```
+---
 
-Then reproduce the cast; look for chat lines prefixed with `Minimizer:`. The stacktrace output will show the caller that clears persistence if any.
-- **Why this prevents regressions:** Do not compare or coerce values that may be secret. Use `Minimizer.Utils.IsSecretValue` and the helpers in `Minimizer.Utils` (`EvaluateColorRGB`, `EvaluateBoolean`) as documented in the README. When deciding persistence, favour `IsSecretValue(raw)` OR the existing `safeUninterruptible` boolean instead of directly comparing curve-returned numbers.
-- **Testing:** run the smoke tests locally:
+**Persistent Color Fix (v2, parche 12.1) — FIX REAL, VIGENTE**
+
+- **Root cause real:** no hay forma soportada de comparar en Lua un valor de interrumpibilidad
+  que llega como secreto, ni directamente ni "resuelto" vía `EvaluateBoolean`/`EvaluateColorRGB`
+  (ambos son sinks de un solo sentido hacia APIs C-side, el resultado sigue tainted). Cualquier
+  intento de decidir un flag booleano (`MinimizerPersistentCastColorKind`) a partir de ese valor
+  está condenado a fallar de una forma u otra.
+- **Fix aplicado:** se deja de decidir un "kind" por completo. En su lugar se persiste
+  directamente el `r,g,b` ya resuelto por `EvaluateColorRGB` (el mismo sink válido que usa
+  `CastingBar.lua` para pintar bien la castbar nativa) en `nameplate.MinimizerPersistentCastColor`.
+  No hay ninguna comparación sobre `rawUninterruptible` ni sobre nada derivado de él.
+- **Consecuencia aceptada:** el color gris (cast ininterrumpible) ahora TAMBIÉN persiste
+  visualmente tras terminar el cast, cuando en v1 (teóricamente) debía volver al color base.
+  La simplificación NO cambia: `Decision.lua` sigue devolviendo `"temporal"` para el caso
+  ininterrumpible, así que el bicho vuelve a ser simplificable en cuanto termina el cast aunque
+  la barra se quede en gris hasta el próximo repintado (nuevo cast, cambio de generación de
+  plate, o `nameplate.MinimizerPersistentCastColor = nil` en `OnNamePlateRemoved`).
+- **Cambio adicional del mismo parche:** los superiores (`boss`/`miniboss`) dejan de cambiar
+  de color al castear — ver sección "DEPRECATED — regla 4 de v1" más arriba. Se mantienen
+  siempre morados; su desimplificación persistente no depende del color y no cambia.
+- **Files changed:** [HealthBarColor.lua](HealthBarColor.lua).
+- **Testing:** los tests de `tests/smoke_test.lua` que referencian `MinimizerPersistentCastColorKind`
+  (GAP1, Test A, Test B) están **desactualizados tras este parche** y hay que reescribirlos
+  contra `MinimizerPersistentCastColor` (objeto `{r,g,b}`) en vez del `kind` de string. Pendiente.
 
 ```bash
 lua tests/smoke_test.lua
 ```
-
-The smoke tests cover the persistence scenarios; after the fix they should pass (31/31).
