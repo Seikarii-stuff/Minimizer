@@ -122,3 +122,104 @@ function Minimizer.Widgets.UpdateCDWidget(frame, icon, cooldown, spellID)
     frame:Show()
     return true
 end
+
+-- ============================================================================
+-- "Pips": indicadores circulares pequeños de cooldown (estilo "ultimate" de
+-- LoL). Se anclan en la esquina de otro frame (retrato del focus, insignia
+-- del target, etc). Sin icono de spell, sin números de cuenta atrás -- solo
+-- un círculo de color que queda cubierto por un velo oscuro mientras el
+-- spell está en cooldown, y se ve completamente brillante cuando está listo.
+-- El propio Cooldown frame de Blizzard anima el barrido; el addon no
+-- recalcula nada por frame, solo llama a UpdatePip cuando el spellID puede
+-- haber cambiado (una vez por pase, igual que el resto de widgets).
+--
+-- Para añadir un pip de un color nuevo en el futuro:
+--   1. Agregar la entrada on/off en Minimizer.Constants.PipColors (Constants.lua).
+--   2. Llamar a Minimizer.Widgets.CreatePip(nombre, frame, "tuColorKind", esquina)
+--      una vez al cargar el módulo.
+--   3. Llamar a Minimizer.Widgets.UpdatePip(pip, spellID) en cada pase de update.
+-- No hace falta tocar nada más.
+-- ============================================================================
+
+Minimizer.Widgets.PIP_SIZE = 5
+
+-- name: nombre único del frame (string).
+-- parentFrame: frame de Blizzard al que se ancla y del que hereda visibilidad.
+-- colorKind: clave en Minimizer.Constants.PipColors (ej. "cc", "defensive").
+-- anchorCorner: esquina de parentFrame donde centrar el pip (ej. "TOPRIGHT",
+--   "TOPLEFT", "BOTTOMRIGHT", "BOTTOMLEFT"). Por defecto "TOPRIGHT".
+-- xOff, yOff: offset extra opcional (por si en el futuro hace falta apilar
+--   más de un pip en la misma esquina). Por defecto 0, 0.
+function Minimizer.Widgets.CreatePip(name, parentFrame, colorKind, anchorCorner, xOff, yOff)
+    local colors = Minimizer.Constants.PipColors and Minimizer.Constants.PipColors[colorKind]
+    if not parentFrame or not colors then return nil end
+    anchorCorner = anchorCorner or "TOPRIGHT"
+    xOff = xOff or 0
+    yOff = yOff or 0
+
+    local pip = CreateFrame("Frame", name, parentFrame)
+    pip:SetSize(Minimizer.Widgets.PIP_SIZE, Minimizer.Widgets.PIP_SIZE)
+    pip:SetFrameStrata("HIGH")
+    pip:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 5)
+    pip:ClearAllPoints()
+    pip:SetPoint("CENTER", parentFrame, anchorCorner, xOff, yOff)
+    pip:Hide()
+
+    local bg = pip:CreateTexture(nil, "ARTWORK")
+    bg:SetAllPoints()
+    bg:SetColorTexture(1, 1, 1, 1)
+    bg:SetVertexColor(colors.on[1], colors.on[2], colors.on[3], 1)
+    if bg.SetMask then
+        -- Máscara circular estándar de Blizzard. Puramente cosmética: si el
+        -- cliente no la tiene, el pip simplemente se ve cuadrado en vez de
+        -- redondo, no rompe nada.
+        bg:SetMask("Interface\\Masks\\CircleMaskScalable")
+    end
+
+    local cooldown = CreateFrame("Cooldown", name .. "Cooldown", pip, "CooldownFrameTemplate")
+    cooldown:SetAllPoints()
+    cooldown:SetDrawEdge(false)
+    if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
+    if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
+    if cooldown.SetReverse then cooldown:SetReverse(true) end
+    if cooldown.SetHideCountdownNumbers then cooldown:SetHideCountdownNumbers(true) end
+    if cooldown.SetSwipeColor then
+        cooldown:SetSwipeColor(colors.off[1], colors.off[2], colors.off[3], 0.9)
+    end
+
+    pip.MinimizerPipBG = bg
+    pip.MinimizerPipCooldown = cooldown
+    return pip
+end
+
+-- Actualiza (o esconde) un pip creado con CreatePip. Igual que UpdateCDWidget
+-- pero sin icono ni cálculo de shade -- el barrido lo anima Blizzard solo.
+function Minimizer.Widgets.UpdatePip(pip, spellID)
+    if not pip then return false end
+    if not spellID then pip:Hide(); return false end
+
+    local cooldown = pip.MinimizerPipCooldown
+    if C_Spell and C_Spell.GetSpellCooldownDuration then
+        local duration = C_Spell.GetSpellCooldownDuration(spellID)
+        if duration and cooldown.SetCooldownFromDurationObject then
+            cooldown:SetCooldownFromDurationObject(duration)
+        end
+    elseif C_Spell and C_Spell.GetSpellCooldown then
+        local info = C_Spell.GetSpellCooldown(spellID)
+        if info then
+            if cooldown.SetCooldownFromExpression then
+                cooldown:SetCooldownFromExpression(spellID)
+            elseif cooldown.SetCooldownTable then
+                cooldown:SetCooldownTable(info)
+            end
+        end
+    elseif GetSpellCooldown then
+        local start, duration = GetSpellCooldown(spellID)
+        if start and duration then
+            cooldown:SetCooldown(start, duration)
+        end
+    end
+
+    pip:Show()
+    return true
+end

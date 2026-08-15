@@ -14,9 +14,9 @@ local cooldown = CreateFrame("Cooldown", "MinimizerFocusCooldown", frame, "Coold
 cooldown:SetAllPoints()
 Minimizer.Widgets.StyleCooldown(cooldown)
 
-local ccFrame, ccIcon, ccCooldown
-if Minimizer.Widgets and Minimizer.Widgets.CreateCDWidget then
-    ccFrame, ccIcon, ccCooldown = Minimizer.Widgets.CreateCDWidget("MinimizerFocusMassCC", 30)
+local ccPip
+if Minimizer.Widgets and Minimizer.Widgets.CreatePip then
+    ccPip = Minimizer.Widgets.CreatePip("MinimizerFocusCCPip", frame, "cc", "TOPRIGHT")
 end
 
 local function UpdateCooldown()
@@ -53,19 +53,19 @@ end
 function Focus:UpdateFace()
     if MinimizerDB.focusIndicator ~= "face" then 
         frame:Hide()
-        if ccFrame then ccFrame:Hide() end
+        if ccPip then ccPip:Hide() end
         return 
     end
     if not UnitExists("focus") or UnitIsDead("focus") then 
         frame:Hide()
-        if ccFrame then ccFrame:Hide() end
+        if ccPip then ccPip:Hide() end
         return 
     end
     local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit
         and C_NamePlate.GetNamePlateForUnit("focus")
     if not plate then 
         frame:Hide()
-        if ccFrame then ccFrame:Hide() end
+        if ccPip then ccPip:Hide() end
         return 
     end
     SetPortraitTexture(portrait, "player")
@@ -74,15 +74,9 @@ function Focus:UpdateFace()
     frame:Show()
     UpdateCooldown()
 
-    if ccFrame and Minimizer.Widgets and Minimizer.Widgets.GetCDSpellID then
+    if ccPip and Minimizer.Widgets and Minimizer.Widgets.GetCDSpellID then
         local ccID = Minimizer.Widgets.GetCDSpellID(Minimizer.Data.MASS_CC_SPELLS)
-        local showCC = Minimizer.Widgets.UpdateCDWidget(ccFrame, ccIcon, ccCooldown, ccID)
-        if showCC then
-            ccFrame:ClearAllPoints()
-            ccFrame:SetPoint("LEFT", frame, "RIGHT", 5, 0)
-        else
-            ccFrame:Hide()
-        end
+        Minimizer.Widgets.UpdatePip(ccPip, ccID)
     end
 end
 
@@ -91,7 +85,7 @@ function Focus:SetMode(mode)
     MinimizerDB.focusIndicator = mode
     if mode ~= "face" then 
         frame:Hide() 
-        if ccFrame then ccFrame:Hide() end
+        if ccPip then ccPip:Hide() end
     end
     if Minimizer.Core then Minimizer.Core.ApplyToAll() end
 end
@@ -99,5 +93,5 @@ end
 -- Throttle a 30 FPS (0.033s): visuales de focus no necesitan repintarse más rápido.
 Focus.DebouncedUpdate = Minimizer.Utils.Throttle(function()
     Focus:UpdateFace()
-end, 0.033)
+end, 0.01)
 

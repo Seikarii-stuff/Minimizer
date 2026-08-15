@@ -4,20 +4,20 @@ if not Minimizer then return end
 local Target = {}
 Minimizer.Target = Target
 
-local offFrame, offIcon, offCooldown = Minimizer.Widgets.CreateCDWidget("MinimizerTargetOffensiveCD", 30)
-local defFrame, defIcon, defCooldown = Minimizer.Widgets.CreateCDWidget("MinimizerTargetDefensiveCD", 30)
+-- "Insignia": el widget grande de siempre, ahora es el único widget grande
+-- del target (el defensivo pasa a ser un pip anclado a esta misma insignia).
+local offFrame, offIcon, offCooldown = Minimizer.Widgets.CreateCDWidget("MinimizerTargetInsignia", 30)
+local defPip = Minimizer.Widgets.CreatePip("MinimizerTargetDefensivePip", offFrame, "defensive", "TOPLEFT")
 
 function Target:UpdateTargetCDs()
     if not UnitExists("target") or UnitIsDead("target") then 
         offFrame:Hide()
-        defFrame:Hide()
         return 
     end
     
     local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit("target")
     if not plate then 
         offFrame:Hide()
-        defFrame:Hide()
         return 
     end
 
@@ -25,20 +25,15 @@ function Target:UpdateTargetCDs()
     local defID = Minimizer.Widgets.GetCDSpellID(Minimizer.Data.DEFENSIVE_CDS)
 
     local showOff = Minimizer.Widgets.UpdateCDWidget(offFrame, offIcon, offCooldown, offID)
-    local showDef = Minimizer.Widgets.UpdateCDWidget(defFrame, defIcon, defCooldown, defID)
+    -- El pip defensivo es hijo de offFrame (ver 4.1): se mueve solo con la
+    -- insignia, no necesita posicionamiento propio relativo a la plate.
+    Minimizer.Widgets.UpdatePip(defPip, defID)
 
-    -- Positioning relative to target plate's top
-    -- We can put them side by side
-    offFrame:ClearAllPoints()
-    defFrame:ClearAllPoints()
-
-    if showOff and showDef then
-        offFrame:SetPoint("BOTTOMRIGHT", plate, "TOP", -5, 10)
-        defFrame:SetPoint("BOTTOMLEFT", plate, "TOP", 5, 10)
-    elseif showOff then
+    if showOff then
+        offFrame:ClearAllPoints()
         offFrame:SetPoint("BOTTOM", plate, "TOP", 0, 10)
-    elseif showDef then
-        defFrame:SetPoint("BOTTOM", plate, "TOP", 0, 10)
+    else
+        offFrame:Hide()
     end
 end
 
