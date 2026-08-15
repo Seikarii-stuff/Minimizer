@@ -16,7 +16,31 @@
 
 ---
 
-## LEYENDA M+ — CONVENCIÓN DE COLORES Y SIMPLIFICACIÓN (v2, parche 12.1)
+## SpellData: formato y uso
+
+Minimizer centraliza las listas de spells usadas por widgets en `data/SpellData.lua`.
+El archivo ahora admite dos formatos de entrada en cada lista por compatibilidad:
+
+- Entrada legacy (número): `12345` — sigue funcionando tal cual.
+- Entrada enriquecida (recomendada): `{ id = 12345, name = "Avatar" }`.
+
+Reglas y recomendaciones:
+
+- El campo `name` (cuando está presente) **es el que se muestra en los dropdowns** del menú.
+- El orden de las entradas en cada tabla es significativo: el sistema elegirá el primer
+  `spellID` conocido por el jugador en el orden listado para esa clase/token.
+- Para mantener compatibilidad con clientes multilenguaje, en cliente real se recomienda
+  usar `name = GetSpellInfo(id)` o validar que `name` esté localizado; en el entorno
+  de desarrollo local puede incluirse un nombre legible en castellano para pruebas.
+- Las utilidades internas (`Minimizer.Utils.FindKnownSpell`, `Minimizer.Widgets.GetCDSpellID`)
+  aceptan ambos formatos y devuelven siempre el `spellID` numérico que resulte conocido.
+
+Si necesitas añadir o corregir spells por clase, edita `data/SpellData.lua` respetando
+el orden y preferiblemente usando la forma `{ id = <num>, name = "<Spell Name>" }`.
+
+---
+
+## 1. APIs verificadas en producción (confirmadas contra Platynator)
 
 > Esta es la leyenda de Mythic+ estándar que sigue TODO el mundo.
 > **No cambiar nada de esta sección ni la lógica que la implementa sin permiso explícito.**
