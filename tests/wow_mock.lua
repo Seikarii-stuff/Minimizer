@@ -207,6 +207,32 @@ _G.C_CurveUtil = {
     end
 }
 
+Mocks.playerSpells = {
+    [107574] = true,
+    [1719] = true,
+    [171138] = true,
+    [8122] = true,
+    [642] = true,
+    [118000] = true,
+}
+
+_G.C_SpellBook = {
+    IsSpellKnownOrInSpellBook = function(spellID)
+        return Mocks.playerSpells[spellID] == true
+    end,
+    IsSpellKnown = function(spellID)
+        return Mocks.playerSpells[spellID] == true
+    end,
+}
+
+_G.IsPlayerSpell = function(spellID)
+    return Mocks.playerSpells[spellID] == true
+end
+
+_G.IsSpellKnown = function(spellID)
+    return Mocks.playerSpells[spellID] == true
+end
+
 -- Mock secret helper used by tests to simulate Midnight/Secrets values.
 function Mocks.Secret(value)
     return { __minimizerMockSecret = true, __value = value }

@@ -134,6 +134,34 @@ do
         "Classification: sin mana y sin elite/trivial = melee")
 end
 
+-- --- TEST GROUP 2A: Utils.IsSpellKnownByPlayer / Widgets.GetCDSpellID override ---
+do
+    Mocks.playerSpells = {
+        [1719] = true,
+        [167105] = true,
+        [107574] = true,
+        [642] = true,
+        [8122] = true,
+    }
+
+    check(addonTable.Utils.IsSpellKnownByPlayer(1719) == true,
+        "Utils: IsSpellKnownByPlayer detecta un spell conocido")
+    check(addonTable.Utils.IsSpellKnownByPlayer(999999) == false,
+        "Utils: IsSpellKnownByPlayer devuelve false para un spell desconocido")
+
+    local validOverride = addonTable.Widgets.GetCDSpellID(addonTable.Data.OFFENSIVE_CDS, 1719)
+    check(validOverride == 1719,
+        "Widgets: GetCDSpellID usa override conocido cuando es válido")
+
+    local invalidOverride = addonTable.Widgets.GetCDSpellID(addonTable.Data.OFFENSIVE_CDS, 999999)
+    check(invalidOverride ~= 999999 and invalidOverride ~= nil,
+        "Widgets: GetCDSpellID cae a auto si override no es conocido")
+
+    local wrongClassOverride = addonTable.Widgets.GetCDSpellID(addonTable.Data.DEFENSIVE_CDS, 1719)
+    check(wrongClassOverride ~= 1719,
+        "Widgets: GetCDSpellID cae a auto si override no pertenece a la lista de la clase")
+end
+
 -- --- TEST GROUP 2: Decision.ShouldSimplifyUnit ---
 do
     MinimizerDB.simplifyPercent = 50 -- necesario o Decision devuelve "disabled" siempre
@@ -224,6 +252,28 @@ do
     Mocks.CreateTestUnit("th_zero", { level = 70, faction = "Horde", threatSituation = 0 })
     check(addonTable.Threat.PlayerHasAggro("th_zero") == false,
         "Threat: situacion 0 NO debe tratarse como aggro (cuidado con truthiness)")
+end
+
+-- --- TEST GROUP 5A: Config migration from legacy focusIndicator ---
+do
+    MinimizerDB = {
+        version = 1,
+        focusIndicator = "face",
+        simplifyPercent = 25,
+    }
+    addonTable.Config.Initialize()
+    check(MinimizerDB.enableFocusFace == true and MinimizerDB.enableFocusArrows == false,
+        "Config: migracion old focusIndicator=face crea los booleans separados")
+    check(MinimizerDB.focusIndicator == nil,
+        "Config: migracion limpia la clave vieja focusIndicator")
+
+    MinimizerDB = {
+        version = 1,
+        focusIndicator = "arrows",
+    }
+    addonTable.Config.Initialize()
+    check(MinimizerDB.enableFocusFace == false and MinimizerDB.enableFocusArrows == true,
+        "Config: migracion old focusIndicator=arrows crea los booleans separados")
 end
 
 -- --- TEST GROUP 6: Token recycle generation counter prevents stale cache ---
