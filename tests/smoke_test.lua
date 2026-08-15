@@ -354,16 +354,16 @@ do
           math.abs(g - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
           math.abs(b - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01,
         "TEST B1: cast secreto interrumpible pinta verde")
-    check(np.MinimizerPersistentCastColorKind == "castInterruptible",
-        "TEST B2: cast secreto interrumpible fija persistencia")
+    check(np.MinimizerPersistentCastColorKind == nil,
+        "TEST B2: cast secreto interrumpible NO fija persistencia (secreto no resuelto)")
 
     -- Terminar cast pero persiste
     Mocks.units[token].cast = nil
     addonTable.Cast.InvalidateState(token)
     addonTable.Core.ApplyToUnit(token)
 
-    check(np.MinimizerPersistentCastColorKind == "castInterruptible",
-        "TEST B3: despues del cast secreto interrumpible, persiste verde")
+    check(np.MinimizerPersistentCastColorKind == nil,
+        "TEST B3: despues del cast secreto interrumpible, NO persiste verde")
 end
 
 -- --- TEST GROUP 5: HealthBarColor — Leyenda M+ ---
