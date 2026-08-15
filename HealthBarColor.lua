@@ -30,8 +30,11 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     end
 
     -- Las nameplates se reutilizan; resetear el color persistente si cambia la unidad
-    if nameplate.MinimizerHealthBarColorUnit ~= unit then
+    -- o si el token fue reciclado y la generacion del plate cambio.
+    local currentGen = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
+    if nameplate.MinimizerHealthBarColorGen ~= currentGen or nameplate.MinimizerHealthBarColorUnit ~= unit then
         nameplate.MinimizerHealthBarColorUnit = unit
+        nameplate.MinimizerHealthBarColorGen = currentGen
         nameplate.MinimizerPersistentCastColorKind = nil
     end
 
@@ -158,6 +161,7 @@ function HealthBarColor:OnNamePlateRemoved(_, nameplate)
     if nameplate then
         nameplate.MinimizerHealthBarColorKind = nil
         nameplate.MinimizerHealthBarColorUnit = nil
+        nameplate.MinimizerHealthBarColorGen = nil
         nameplate.MinimizerPersistentCastColorKind = nil
         nameplate.MinimizerHasAbsorb = nil
     end

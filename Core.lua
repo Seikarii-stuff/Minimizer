@@ -90,6 +90,12 @@ function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
 
     local shouldSimplify = false
     local reason = ""
+    local currentGen = Minimizer.Core.GetPlateGeneration(npToken)
+
+    if nameplate.MinimizerDesimplifiedPersistent and nameplate.MinimizerDesimplifiedPersistentGen ~= currentGen then
+        nameplate.MinimizerDesimplifiedPersistent = nil
+        nameplate.MinimizerDesimplifiedPersistentGen = nil
+    end
 
     if nameplate.MinimizerDesimplifiedPersistent then
         shouldSimplify = false
@@ -98,6 +104,7 @@ function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
         shouldSimplify, reason = Minimizer.Decision.ShouldSimplifyUnit(npToken, nameplate, snapshot)
         if reason == "no simp" then
             nameplate.MinimizerDesimplifiedPersistent = true
+            nameplate.MinimizerDesimplifiedPersistentGen = currentGen
         end
     end
 
@@ -155,6 +162,7 @@ function Minimizer.Core.ClearNeverSimplify(unit)
             Minimizer.Markers.Clear(nameplate)
         end
         nameplate.MinimizerDesimplifiedPersistent = nil
+        nameplate.MinimizerDesimplifiedPersistentGen = nil
         nameplate.MinimizerState = nil
         nameplate.MinimizerCastBar = nil
     end

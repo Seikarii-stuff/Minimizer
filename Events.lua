@@ -20,6 +20,7 @@ local function HandleFullRefreshEvent(self, event)
         if C_NamePlate and C_NamePlate.GetNamePlates then
             for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
                 nameplate.MinimizerDesimplifiedPersistent = nil
+                nameplate.MinimizerDesimplifiedPersistentGen = nil
             end
         end
     end

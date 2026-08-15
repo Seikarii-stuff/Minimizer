@@ -228,25 +228,81 @@ end
 
 -- --- TEST GROUP 6: Token recycle generation counter prevents stale cache ---
 do
-    -- Create initial unit A on token nameplate5 with high threat
     Mocks.CreateTestUnit("nameplate5", { level = 70, faction = "Horde", threatSituation = 3 })
-    local npA = Mocks.CreateTestNameplate("nameplate5")
-    -- Fire initial add to let modules cache values
+    Mocks.CreateTestNameplate("nameplate5")
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate5")
-    -- Ensure cache stored a value for threat (simulate existing cache)
+    addonTable.Core.ApplyToUnit("nameplate5")
+
     local cachedBefore = addonTable.Cache and addonTable.Cache.GetUnitKeyWithGeneration and addonTable.Cache.GetUnitKeyWithGeneration("nameplate5", "threat:player")
     check(cachedBefore == 3, "Precondition: threat cached for unit A")
 
-    -- Now simulate token recycle: new unit B occupies same token with different threat
     Mocks.CreateTestUnit("nameplate5", { level = 70, faction = "Horde", threatSituation = 0 })
-    -- Simulate arrival: increment generation as Events would do
-    if addonTable.Core and addonTable.Core.IncrementPlateGeneration then
-        addonTable.Core.IncrementPlateGeneration("nameplate5")
-    end
+    Mocks.CreateTestNameplate("nameplate5")
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate5")
+    addonTable.Core.ApplyToUnit("nameplate5")
 
-    -- A reader that checks the cache must see the new value (0), not the stale 3
     local situationNow = addonTable.Threat.GetSituation("nameplate5", "player")
     check(situationNow == 0, "Token recycled: Threat.GetSituation returns new unit's situation, not stale cached value")
+end
+
+-- --- GAP 1: HealthBarColor persistent cast flag invalidates on token recycle ---
+do
+    local token = "nameplate21"
+    Mocks.CreateTestUnit(token, {
+        level = 70, classification = "normal", faction = "Horde", powerType = 1,
+        cast = { name = "Interruptible Cast", startTime = 0, endTime = 2000, uninterruptible = false }
+    })
+    local np = Mocks.CreateTestNameplate(token)
+    addonTable.Core.ApplyToUnit(token)
+
+    local hb = addonTable.Utils.GetHealthBar(np)
+    local r, g, b = hb:GetStatusBarColor()
+    check(math.abs(r - addonTable.Constants.HealthColors.castInterruptible[1]) < 0.01 and
+          math.abs(g - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
+          math.abs(b - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01,
+        "GAP1: inferior en cast interrumpible pinta verde persistente")
+    check(np.MinimizerPersistentCastColorKind == "castInterruptible",
+        "GAP1: el flag persistente queda fijado tras el cast interrumpible")
+
+    Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
+    Mocks.CreateTestNameplate(token)
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
+    addonTable.Core.ApplyToUnit(token)
+
+    local np2 = Mocks.nameplates[token]
+    hb = addonTable.Utils.GetHealthBar(np2)
+    r, g, b = hb:GetStatusBarColor()
+    check(np2.MinimizerPersistentCastColorKind == nil,
+        "GAP1: reciclaje del token borra el flag persistente del cast anterior")
+    check(math.abs(r - addonTable.Constants.HealthColors.melee[1]) < 0.01 and
+          math.abs(g - addonTable.Constants.HealthColors.melee[2]) < 0.01 and
+          math.abs(b - addonTable.Constants.HealthColors.melee[3]) < 0.01,
+        "GAP1: una unidad nueva sin cast no hereda el verde persistente")
+end
+
+-- --- GAP 2: Core persistent fast-path invalidates on token recycle ---
+do
+    local token = "nameplate22"
+    MinimizerDB.simplifyPercent = 50
+
+    Mocks.CreateTestUnit(token, { level = -1, classification = "elite", faction = "Horde" })
+    local npBoss = Mocks.CreateTestNameplate(token)
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
+    addonTable.Core.ApplyToUnit(token)
+
+    check(npBoss.MinimizerDesimplifiedPersistent == true,
+        "GAP2: boss no simplificable queda marcado como persistente")
+
+    Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde" })
+    Mocks.CreateTestNameplate(token)
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
+    addonTable.Core.ApplyToUnit(token)
+
+    local simplify, reason = addonTable.Decision.ShouldSimplifyUnit(token, Mocks.nameplates[token])
+    check(simplify == true and reason == "simplify",
+        "GAP2: el token reciclado ya no hereda el no-simp del boss anterior")
+    check(Mocks.nameplates[token].MinimizerState == true,
+        "GAP2: el estado simplificado se recalcula para la nueva unidad")
 end
 
 -- --- TEST GROUP 5: HealthBarColor — Leyenda M+ ---
