@@ -93,99 +93,73 @@ function Minimizer.Widgets.CreateHalo(name, parentFrame, size)
     frame:SetFrameStrata("HIGH")
     frame:Hide()
 
+    -- Textura original, sin tocar.
     local tex = frame:CreateTexture(nil, "ARTWORK")
     tex:SetAllPoints()
-
-    -- Intentar usar un asset del addon. Reemplazar por un .tga/.blp real
-    -- con un aro transparente en el centro para pruebas visuales.
     tex:SetTexture("Interface\\AddOns\\Minimizer\\assets\\halo_ring")
     tex:SetBlendMode("BLEND")
-
-    -- Guardamos la referencia al texture para actualizar el progreso.
     frame.MinimizerHaloTexture = tex
+
+    -- NUEVO: el relleno ya no se calcula en Lua (eso es lo que se quita).
+    -- Se delega al Cooldown frame nativo, igual que en CreatePip/Focus.
+    local cooldown = CreateFrame("Cooldown", name .. "Cooldown", frame, "CooldownFrameTemplate")
+    cooldown:SetAllPoints()
+    cooldown:SetDrawEdge(false)
+    if cooldown.SetUseCircularEdge then cooldown:SetUseCircularEdge(true) end
+    if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
+    if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
+    if cooldown.SetReverse then cooldown:SetReverse(false) end
+    if cooldown.SetHideCountdownNumbers then cooldown:SetHideCountdownNumbers(true) end
+    if cooldown.SetSwipeTexture then
+        cooldown:SetSwipeTexture("Interface\\Masks\\CircleMaskScalable")
+    end
+    if cooldown.SetSwipeColor then
+        cooldown:SetSwipeColor(0, 0, 0, 0.75)
+    end
+    frame.MinimizerHaloCooldown = cooldown
 
     return frame
 end
 
-local function Clamp01(value)
-    if value == nil then return 0 end
-    if value < 0 then return 0 end
-    if value > 1 then return 1 end
-    return value
-end
 
-function Minimizer.Widgets.GetSpellCooldownProgress(spellID)
-    if not spellID then return nil end
-
-    local start, duration = nil, nil
-    if C_Spell and C_Spell.GetSpellCooldown then
-        local info = C_Spell.GetSpellCooldown(spellID)
-        if info then
-            start = info.startTime or info.start or nil
-            duration = info.duration or nil
-        end
-    elseif GetSpellCooldown then
-        start, duration = GetSpellCooldown(spellID)
-    end
-
-    if not duration and C_Spell and C_Spell.GetSpellCooldownDuration then
-        duration = C_Spell.GetSpellCooldownDuration(spellID)
-    elseif not duration and GetSpellCooldownDuration then
-        duration = GetSpellCooldownDuration(spellID)
-    end
-
-    if duration and duration > 0 then
-        if start and start > 0 then
-            local startSeconds = start
-            if startSeconds > 10000 then
-                startSeconds = startSeconds / 1000
-            end
-            local elapsed = math.max(0, GetTime() - startSeconds)
-            local remaining = math.max(0, duration - elapsed)
-            return Clamp01(remaining / duration)
-        end
-        return 1
-    end
-
-    return 1
-end
-
--- SetHaloPercent: aplica el progreso radial sobre la textura del halo.
--- percent: valor entre 0 y 1.
-function Minimizer.Widgets.SetHaloPercent(frame, percent)
-    if not frame or not frame.MinimizerHaloTexture then return end
-    local tex = frame.MinimizerHaloTexture
-    percent = Clamp01(percent or 0)
-
-    if tex.SetRadialProgressBarPercent then
-        tex:SetRadialProgressBarPercent(percent)
-    else
-        -- Fallback visual: ajustar alpha para evitar un círculo sólido.
-        tex:SetAlpha(percent)
-    end
-
-    if percent > 0 then
-        frame:Show()
-    else
-        frame:Hide()
-    end
-end
 
 function Minimizer.Widgets.UpdateHalo(frame, spellID)
     if not frame then return false end
-
     if not spellID then
         frame:Hide()
         return false
     end
 
-    local progress = Minimizer.Widgets.GetSpellCooldownProgress(spellID)
-    if progress == nil then
+    local cooldown = frame.MinimizerHaloCooldown
+    if not cooldown then
         frame:Hide()
         return false
     end
 
-    Minimizer.Widgets.SetHaloPercent(frame, progress)
+    -- Mismo patron que Widgets.UpdatePip: Blizzard calcula el relleno,
+    -- cero comparaciones Lua sobre duration/start.
+    if C_Spell and C_Spell.GetSpellCooldownDuration then
+        local duration = C_Spell.GetSpellCooldownDuration(spellID)
+        if duration and cooldown.SetCooldownFromDurationObject then
+            cooldown:SetCooldownFromDurationObject(duration)
+        end
+    elseif C_Spell and C_Spell.GetSpellCooldown then
+        local info = C_Spell.GetSpellCooldown(spellID)
+        if info then
+            if cooldown.SetCooldownFromExpression then
+                cooldown:SetCooldownFromExpression(spellID)
+            elseif cooldown.SetCooldownTable then
+                cooldown:SetCooldownTable(info)
+            end
+        end
+    elseif GetSpellCooldown then
+        local start, duration = GetSpellCooldown(spellID)
+        if start and duration then
+            cooldown:SetCooldown(start, duration)
+        end
+    end
+
+    frame:Show()
     return true
 end
 
