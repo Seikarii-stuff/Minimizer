@@ -454,3 +454,28 @@ hablar primero con el desarrollador principal.
 ```bash
 lua tests/smoke_test.lua
 ```
+
+
+
+Notas extra:
+Sobre "comparar valores secretos" — algo nuevo que vale la pena que sepas
+
+Encontré en la Widget API (ya vigente en este cliente Midnight) un método que no tenías documentado en tu README:
+
+Region:SetVertexColorFromBoolean(value, colorIfTrue, colorIfFalse)
+
+A diferencia de C_CurveUtil.EvaluateColorValueFromBoolean (que es escalar y obliga a las 3 llamadas por canal que ya documentasteis en el README), este acepta tablas de color completas de una sola vez, aplicado directamente sobre una Texture/Region. Es candidato directo para simplificar el shade del retrato en Focus.lua:
+
+lua
+-- Actual (Focus.lua UpdateCooldown):
+local shade = C_CurveUtil.EvaluateColorValueFromBoolean(ready, 1.0, 0.38)
+portrait:SetVertexColor(shade, shade, shade, 1)
+
+-- Con SetVertexColorFromBoolean (si portrait lo soporta en este cliente):
+if portrait.SetVertexColorFromBoolean then
+    portrait:SetVertexColorFromBoolean(ready, {1,1,1,1}, {0.38,0.38,0.38,1})
+end
+
+Todo el trabajo de "resolver el secreto" lo hace el motor C, en una sola llamada, sin el patrón de 3 llamadas por canal. No lo apliques a ciegas a HealthBarColor/CastingBar porque ahí el consumidor final es SetStatusBarColor (no un Texture genérico), pero para portrait/tex (que son Texture) sí encaja. Te recomiendo probarlo primero de forma aislada con un /dump portrait:HasSecretValues() antes de portar el patrón a producción, ya que no está en vuestro checklist de APIs verificadas todavía.
+
+También vi FrameScriptObject:HasSecretValues() / HasAnySecretAspect() / HasSecretAspect(aspect) — permiten preguntarle a un objeto "¿tienes algo secreto ahora mismo?" sin tocar el valor en sí. Podría ser útil como guard adicional antes de intentar cualquier lectura, pero no sustituye a issecretvalue() para valores sueltos (sirve para objetos/frames, no para el duration/uninterruptible que ya manejáis).
