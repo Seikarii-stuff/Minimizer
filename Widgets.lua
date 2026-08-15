@@ -231,7 +231,7 @@ end
 -- No hace falta tocar nada más.
 -- ============================================================================
 
-Minimizer.Widgets.PIP_SIZE = 5
+Minimizer.Widgets.PIP_SIZE = 6
 
 -- name: nombre único del frame (string).
 -- parentFrame: frame de Blizzard al que se ancla y del que hereda visibilidad.
