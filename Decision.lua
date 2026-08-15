@@ -14,7 +14,7 @@ function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
 
     if not UnitCanAttack("player", unit) then return false, "friendly" end
 
-    local pct = MinimizerDB and MinimizerDB.simplifyPercent or 0
+    local pct = MinimizerDB and MinimizerDB.simplifyPercent or 100
     if pct <= 0 then return false, "disabled" end
 
     -- snapshot es opcional por compatibilidad hacia atras (p.ej. en tests que

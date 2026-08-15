@@ -197,10 +197,20 @@ function Minimizer.Utils.FindKnownSpell(spellList)
     if type(spellList) == "number" then
         spellList = {spellList}
     end
-    for _, spellID in ipairs(spellList) do
-        if Minimizer.Utils.IsSpellKnownByPlayer(spellID) then
+    for _, entry in ipairs(spellList) do
+        local spellID = nil
+        if type(entry) == "number" then
+            spellID = entry
+        elseif type(entry) == "table" and type(entry.id) == "number" then
+            spellID = entry.id
+        end
+        if spellID and Minimizer.Utils.IsSpellKnownByPlayer(spellID) then
             return spellID
         end
     end
-    return spellList[1]
+    -- Fallback: return the first numeric id we can extract from the list
+    local first = spellList[1]
+    if type(first) == "number" then return first end
+    if type(first) == "table" and type(first.id) == "number" then return first.id end
+    return nil
 end

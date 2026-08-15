@@ -62,7 +62,8 @@ function Minimizer.Widgets.GetCDSpellID(dbTable, override)
     if override ~= nil then
         local overrideAllowed = false
         if type(spellList) == "table" then
-            for _, spellID in ipairs(spellList) do
+            for _, entry in ipairs(spellList) do
+                local spellID = (type(entry) == "number") and entry or (type(entry) == "table" and entry.id)
                 if spellID == override then
                     overrideAllowed = true
                     break

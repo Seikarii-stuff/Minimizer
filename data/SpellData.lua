@@ -1,68 +1,82 @@
 local _, Minimizer = ...
 if not Minimizer then return end
 
+-- Spell data format
+-- ============================================================================
+-- Each entry in these tables is an ordered list. Entries MUST be either a
+-- numeric spellID (legacy compatibility) or a table of the form:
+--   { id = <spellID>, name = "<Spell Name>" }
+--
+-- The `name` field is authoritative for display in UI dropdowns; the order of
+-- the entries is significant and must match the ordering used in the
+-- additional documentation shipped with this addon (see README or the
+-- SpellData documentation block). When possible, prefer the table form so
+-- the UI shows human-readable spell names while code still uses numeric IDs
+-- for API calls.
+-- ============================================================================
+
 Minimizer.Data = Minimizer.Data or {}
 
 Minimizer.Data.INTERRUPT_SPELLS = {
-    WARRIOR = {6552},
-    ROGUE = {1766},
-    MAGE = {2139},
-    SHAMAN = {57994},
-    HUNTER = {147362, 187707},
-    PRIEST = {15487},
-    WARLOCK = {19647, 119898, 171138},
-    MONK = {116705},
-    DRUID = {106839, 78675, 93985},
-    DEATHKNIGHT = {47528},
-    PALADIN = {96231},
-    DEMONHUNTER = {183752},
-    EVOKER = {351338},
+    WARRIOR = { { id = 6552, name = "Pummel" } },
+    ROGUE = { { id = 1766, name = "Kick" } },
+    MAGE = { { id = 2139, name = "Counterspell" } },
+    SHAMAN = { { id = 57994, name = "Wind Shear" } },
+    HUNTER = { { id = 147362, name = "Counter Shot" }, { id = 187707, name = "Muzzle" } },
+    PRIEST = { { id = 15487, name = "Silence" } },
+    WARLOCK = { { id = 19647, name = "Spell Lock" }, { id = 119898, name = "Command Demon" }, { id = 171138, name = "Mortal Coil" } },
+    MONK = { { id = 116705, name = "Spear Hand Strike" } },
+    DRUID = { { id = 106839, name = "Skull Bash" }, { id = 78675, name = "Solar Beam" }, { id = 93985, name = "Skull Bash (Feral)" } },
+    DEATHKNIGHT = { { id = 47528, name = "Mind Freeze" } },
+    PALADIN = { { id = 96231, name = "Rebuke" } },
+    DEMONHUNTER = { { id = 183752, name = "Consume Magic" } },
+    EVOKER = { { id = 351338, name = "Globe of Frost" } },
 }
 
 Minimizer.Data.OFFENSIVE_CDS = {
-    WARRIOR = {107574, 1719, 167105}, -- Avatar, Recklessness, Colossus Smash
-    PALADIN = {31884, 231895}, -- Avenging Wrath, Crusade
-    HUNTER = {193526, 19574, 266779}, -- Trueshot, Bestial Wrath, Coordinated Assault
-    ROGUE = {13750, 121471, 192759, 280719}, -- Adrenaline Rush, Shadow Blades, Kingsbane, Secret Technique
-    PRIEST = {10060, 228260, 200183}, -- Power Infusion, Void Eruption, Apotheosis
-    DEATHKNIGHT = {439843, 51271, 275699, 49028}, -- Reaper's Mark, Pillar of Frost, Apocalypse, Dancing Rune Weapon
-    SHAMAN = {114049, 204945, 191634}, -- Ascendance, Doom Winds, Stormkeeper
-    MAGE = {190319, 12472, 365350}, -- Combustion, Icy Veins, Arcane Surge
-    WARLOCK = {1122, 205180, 265187}, -- Infernal, Darkglare, Demonic Tyrant
-    MONK = {137639, 123904, 132578, 322118}, -- SEF, Xuen, Niuzao, Yu'lon
-    DRUID = {102558, 194223, 323764}, -- Incarnation, Celestial Alignment, Convoke
-    DEMONHUNTER = {191427, 200166}, -- Metamorphosis
-    EVOKER = {375087, 370960}, -- Dragonrage, Emerald Communion
+    WARRIOR = { { id = 107574, name = "Avatar" }, { id = 1719, name = "Recklessness" }, { id = 167105, name = "Colossus Smash" } },
+    PALADIN = { { id = 31884, name = "Avenging Wrath" }, { id = 231895, name = "Crusade" } },
+    HUNTER = { { id = 193526, name = "Trueshot" }, { id = 19574, name = "Bestial Wrath" }, { id = 266779, name = "Coordinated Assault" } },
+    ROGUE = { { id = 13750, name = "Adrenaline Rush" }, { id = 121471, name = "Shadow Blades" }, { id = 192759, name = "Kingsbane" }, { id = 280719, name = "Secret Technique" } },
+    PRIEST = { { id = 10060, name = "Power Infusion" }, { id = 228260, name = "Void Eruption" }, { id = 200183, name = "Apotheosis" } },
+    DEATHKNIGHT = { { id = 439843, name = "Reaper's Mark" }, { id = 51271, name = "Pillar of Frost" }, { id = 275699, name = "Apocalypse" }, { id = 49028, name = "Dancing Rune Weapon" } },
+    SHAMAN = { { id = 114049, name = "Ascendance" }, { id = 204945, name = "Doom Winds" }, { id = 191634, name = "Stormkeeper" } },
+    MAGE = { { id = 190319, name = "Combustion" }, { id = 12472, name = "Icy Veins" }, { id = 365350, name = "Arcane Surge" } },
+    WARLOCK = { { id = 1122, name = "Infernal" }, { id = 205180, name = "Darkglare" }, { id = 265187, name = "Demonic Tyrant" } },
+    MONK = { { id = 137639, name = "Storm, Earth, and Fire" }, { id = 123904, name = "Invoke Xuen" }, { id = 132578, name = "Niuzao" }, { id = 322118, name = "Yu'lon" } },
+    DRUID = { { id = 102558, name = "Incarnation" }, { id = 194223, name = "Celestial Alignment" }, { id = 323764, name = "Convoke" } },
+    DEMONHUNTER = { { id = 191427, name = "Metamorphosis" }, { id = 200166, name = "Nemesis" } },
+    EVOKER = { { id = 375087, name = "Dragonrage" }, { id = 370960, name = "Emerald Communion" } },
 }
 
 Minimizer.Data.DEFENSIVE_CDS = {
-    WARRIOR = {871, 118038, 184364}, -- Shield Wall, Die by the Sword, Enraged Regen
-    PALADIN = {642, 31224, 86659}, -- Divine Shield, Ardent Defender, Guardian of Ancient Kings
-    HUNTER = {186265, 264735}, -- Turtle, Survival of the Fittest
-    ROGUE = {31224, 5277, 1966}, -- Cloak of Shadows, Evasion, Feint
-    PRIEST = {47585, 33206, 19236}, -- Dispersion, Pain Suppression, Desperate Prayer
-    DEATHKNIGHT = {55233, 48792}, -- Vampiric Blood (Blood), Icebound Fortitude (Frost/Unholy)
-    SHAMAN = {108271}, -- Astral Shift
-    MAGE = {45438, 110959}, -- Ice Block, Greater Invis
-    WARLOCK = {104773}, -- Unending Resolve
-    MONK = {122470, 115203}, -- Touch of Karma, Fortifying Brew
-    DRUID = {61336, 22812}, -- Survival Instincts, Barkskin
-    DEMONHUNTER = {198589, 212800}, -- Blur, Netherwalk
-    EVOKER = {363916}, -- Obsidian Scales
+    WARRIOR = { { id = 871, name = "Shield Wall" }, { id = 118038, name = "Die by the Sword" }, { id = 184364, name = "Enraged Regeneration" } },
+    PALADIN = { { id = 642, name = "Divine Shield" }, { id = 31224, name = "Ardent Defender" }, { id = 86659, name = "Guardian of Ancient Kings" } },
+    HUNTER = { { id = 186265, name = "Turtle" }, { id = 264735, name = "Survival of the Fittest" } },
+    ROGUE = { { id = 31224, name = "Cloak of Shadows" }, { id = 5277, name = "Evasion" }, { id = 1966, name = "Feint" } },
+    PRIEST = { { id = 47585, name = "Dispersion" }, { id = 33206, name = "Pain Suppression" }, { id = 19236, name = "Desperate Prayer" } },
+    DEATHKNIGHT = { { id = 55233, name = "Vampiric Blood" }, { id = 48792, name = "Icebound Fortitude" } },
+    SHAMAN = { { id = 108271, name = "Astral Shift" } },
+    MAGE = { { id = 45438, name = "Ice Block" }, { id = 110959, name = "Greater Invisibility" } },
+    WARLOCK = { { id = 104773, name = "Unending Resolve" } },
+    MONK = { { id = 122470, name = "Touch of Karma" }, { id = 115203, name = "Fortifying Brew" } },
+    DRUID = { { id = 61336, name = "Survival Instincts" }, { id = 22812, name = "Barkskin" } },
+    DEMONHUNTER = { { id = 198589, name = "Blur" }, { id = 212800, name = "Netherwalk" } },
+    EVOKER = { { id = 363916, name = "Obsidian Scales" } },
 }
 
 Minimizer.Data.MASS_CC_SPELLS = {
-    WARRIOR = {118000, 5246}, -- Shockwave, Intimidating Shout
-    PALADIN = {115750}, -- Blinding Light
-    HUNTER = {109248, 213691}, -- Binding Shot, Bursting Shot
-    ROGUE = {2094}, -- Blind (Solo reference, no true mass CC available natively)
-    PRIEST = {8122}, -- Psychic Scream
-    DEATHKNIGHT = {207167, 108199}, -- Blinding Sleet, Gorefiend's Grasp
-    SHAMAN = {192058}, -- Capacitor Totem
-    MAGE = {31661, 113724}, -- Dragon's Breath, Ring of Frost
-    WARLOCK = {30283, 5484}, -- Shadowfury, Howl of Terror
-    MONK = {119381}, -- Leg Sweep
-    DRUID = {102793, 99, 102359}, -- Ursol's Vortex, Incap Roar, Mass Entanglement
-    DEMONHUNTER = {179057, 207684}, -- Chaos Nova, Sigil of Misery
-    EVOKER = {358385, 357210}, -- Landslide, Deep Breath
+    WARRIOR = { { id = 118000, name = "Dragon Roar" }, { id = 5246, name = "Intimidating Shout" } },
+    PALADIN = { { id = 115750, name = "Blinding Light" } },
+    HUNTER = { { id = 109248, name = "Binding Shot" }, { id = 213691, name = "Scatter Shot" } },
+    ROGUE = { { id = 2094, name = "Blind" } },
+    PRIEST = { { id = 8122, name = "Psychic Scream" } },
+    DEATHKNIGHT = { { id = 207167, name = "Blinding Sleet" }, { id = 108199, name = "Gorefiend's Grasp" } },
+    SHAMAN = { { id = 192058, name = "Capacitor Totem" } },
+    MAGE = { { id = 31661, name = "Dragon's Breath" }, { id = 113724, name = "Ring of Frost" } },
+    WARLOCK = { { id = 30283, name = "Shadowfury" }, { id = 5484, name = "Howl of Terror" } },
+    MONK = { { id = 119381, name = "Leg Sweep" } },
+    DRUID = { { id = 102793, name = "Ursol's Vortex" }, { id = 99, name = "Incap Roar" }, { id = 102359, name = "Mass Entanglement" } },
+    DEMONHUNTER = { { id = 179057, name = "Chaos Nova" }, { id = 207684, name = "Sigil of Misery" } },
+    EVOKER = { { id = 358385, name = "Landslide" }, { id = 357210, name = "Deep Breath" } },
 }

@@ -56,9 +56,14 @@ local function BuildSpellOptions(tableKey)
     if type(source) ~= "table" then
         return options
     end
-    for _, spellID in ipairs(source) do
-        local spellName = GetSpellInfo and GetSpellInfo(spellID) or ("Spell " .. tostring(spellID))
-        table.insert(options, { text = spellName, value = spellID })
+    for _, entry in ipairs(source) do
+        if type(entry) == "number" then
+            local spellName = GetSpellInfo and GetSpellInfo(entry) or ("Spell " .. tostring(entry))
+            table.insert(options, { text = spellName, value = entry })
+        elseif type(entry) == "table" and type(entry.id) == "number" then
+            local spellName = entry.name or (GetSpellInfo and GetSpellInfo(entry.id) or ("Spell " .. tostring(entry.id)))
+            table.insert(options, { text = spellName, value = entry.id })
+        end
     end
     return options
 end
@@ -119,7 +124,25 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
             UIDropDownMenu_SetText(dropdown, "Automático")
             return
         end
-        local foundName = GetSpellInfo and GetSpellInfo(selectedValue) or ("Spell " .. tostring(selectedValue))
+        -- Try to display the name from SpellData first (respecting ordering),
+        -- fall back to GetSpellInfo if not available.
+        local classToken = GetClassToken()
+        local source = Minimizer.Data and Minimizer.Data[tableKey] and Minimizer.Data[tableKey][classToken]
+        local foundName = nil
+        if type(source) == "table" then
+            for _, entry in ipairs(source) do
+                local id = (type(entry) == "number") and entry or (type(entry) == "table" and entry.id)
+                if id == selectedValue then
+                    if type(entry) == "table" and entry.name then
+                        foundName = entry.name
+                    end
+                    break
+                end
+            end
+        end
+        if not foundName then
+            foundName = GetSpellInfo and GetSpellInfo(selectedValue) or ("Spell " .. tostring(selectedValue))
+        end
         UIDropDownMenu_SetText(dropdown, foundName)
     end
 
@@ -165,12 +188,25 @@ local function EnsureFrame()
     title:SetText("Minimizer")
     title:SetPoint("TOP", frame, "TOP", 0, -16)
 
-    local slider = CreateFrame("Slider", "MinimizerMenuSimplifySlider", frame, "OptionsSliderTemplate")
+    -- Encapsulate controls inside a content sub-frame (the 'menu') so the
+    -- visible dialog frame can hold chrome (close button, drag area) and the
+    -- actual controls are in a separate container.
+    local content = CreateFrame("Frame", nil, frame)
+    content:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -36)
+    content:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -12, 12)
+
+    local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
+    closeBtn:SetScript("OnClick", function()
+        frame:Hide()
+    end)
+
+    local slider = CreateFrame("Slider", "MinimizerMenuSimplifySlider", content, "OptionsSliderTemplate")
     slider:SetMinMaxValues(0, 100)
     slider:SetValueStep(1)
     slider:SetPoint("TOPLEFT", frame, "TOPLEFT", 24, -40)
     slider:SetWidth(240)
-    slider:SetValue((MinimizerDB and MinimizerDB.simplifyPercent) or 0)
+    slider:SetValue((MinimizerDB and MinimizerDB.simplifyPercent) or 100)
     local sliderText = GetWidgetText(slider)
     if sliderText then
         sliderText:SetText("Simplify %")
@@ -188,7 +224,7 @@ local function EnsureFrame()
     sliderValueText:SetText(tostring(slider:GetValue()) .. "%")
     slider.valueText = sliderValueText
 
-    local targetMarkers = CreateFrame("CheckButton", nil, frame, "ChatConfigCheckButtonTemplate")
+    local targetMarkers = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
     targetMarkers:SetPoint("TOPLEFT", slider, "BOTTOMLEFT", 0, -20)
     targetMarkers:SetChecked(MinimizerDB and MinimizerDB.enableTargetMarkers ~= false)
     targetMarkers.text = GetWidgetText(targetMarkers)
@@ -200,7 +236,7 @@ local function EnsureFrame()
         if Minimizer.Core then Minimizer.Core.ApplyToAll() end
     end)
 
-    local focusMarkers = CreateFrame("CheckButton", nil, frame, "ChatConfigCheckButtonTemplate")
+    local focusMarkers = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
     focusMarkers:SetPoint("TOPLEFT", targetMarkers, "BOTTOMLEFT", 0, -10)
     focusMarkers:SetChecked(MinimizerDB and MinimizerDB.enableFocusMarkers ~= false)
     focusMarkers.text = GetWidgetText(focusMarkers)
@@ -212,7 +248,7 @@ local function EnsureFrame()
         if Minimizer.Core then Minimizer.Core.ApplyToAll() end
     end)
 
-    local faceToggle = CreateFrame("CheckButton", nil, frame, "ChatConfigCheckButtonTemplate")
+    local faceToggle = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
     faceToggle:SetPoint("TOPLEFT", focusMarkers, "BOTTOMLEFT", 0, -10)
     faceToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusFace == true)
     faceToggle.text = GetWidgetText(faceToggle)
@@ -227,7 +263,7 @@ local function EnsureFrame()
         end
     end)
 
-    local arrowsToggle = CreateFrame("CheckButton", nil, frame, "ChatConfigCheckButtonTemplate")
+    local arrowsToggle = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
     arrowsToggle:SetPoint("TOPLEFT", faceToggle, "BOTTOMLEFT", 0, -10)
     arrowsToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusArrows == true)
     arrowsToggle.text = GetWidgetText(arrowsToggle)
@@ -243,9 +279,9 @@ local function EnsureFrame()
     end)
 
     local dropdowns = {
-        CreateDropdown(frame, "MinimizerMenuTargetOffensiveDrop", "Target offensive CD", "OFFENSIVE_CDS", "targetOffensive"),
-        CreateDropdown(frame, "MinimizerMenuTargetDefensiveDrop", "Target defensive CD", "DEFENSIVE_CDS", "targetDefensive"),
-        CreateDropdown(frame, "MinimizerMenuFocusCCDrop", "Focus mass CC", "MASS_CC_SPELLS", "focusCC"),
+        CreateDropdown(content, "MinimizerMenuTargetOffensiveDrop", "Target offensive CD", "OFFENSIVE_CDS", "targetOffensive"),
+        CreateDropdown(content, "MinimizerMenuTargetDefensiveDrop", "Target defensive CD", "DEFENSIVE_CDS", "targetDefensive"),
+        CreateDropdown(content, "MinimizerMenuFocusCCDrop", "Focus mass CC", "MASS_CC_SPELLS", "focusCC"),
     }
 
     dropdowns[1]:SetPoint("TOPLEFT", arrowsToggle, "BOTTOMLEFT", 0, -20)
@@ -271,7 +307,7 @@ function Menu.Refresh()
     local frame = EnsureFrame()
     if not frame then return end
     if frame.MinimizerMenuControls and frame.MinimizerMenuControls.slider then
-        frame.MinimizerMenuControls.slider:SetValue((MinimizerDB and MinimizerDB.simplifyPercent) or 0)
+        frame.MinimizerMenuControls.slider:SetValue((MinimizerDB and MinimizerDB.simplifyPercent) or 100)
         if frame.MinimizerMenuControls.slider.valueText then
             frame.MinimizerMenuControls.slider.valueText:SetText(tostring(frame.MinimizerMenuControls.slider:GetValue()) .. "%")
         end

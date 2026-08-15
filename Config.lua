@@ -7,10 +7,9 @@ if not Minimizer then return end
 Minimizer.Config = Minimizer.Config or {}
 Minimizer.Config.VERSION = 2
 Minimizer.Config.DEFAULTS = {
-    -- TODO: product decision pending. We keep 0 as the safe default because it avoids
-    -- unexpected simplification for existing users; a full product decision on 0 vs 100
-    -- should be made explicitly before changing the default in a release.
-    simplifyPercent = 0,
+    -- Default simplification percent. Set to 100 by default so the addon
+    -- simplifies nameplates unless the user opts out.
+    simplifyPercent = 100,
     enableTargetMarkers = true,
     enableFocusMarkers = true,
     enableFocusFace = true,
