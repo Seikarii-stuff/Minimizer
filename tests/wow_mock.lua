@@ -180,13 +180,27 @@ _G.C_Timer = {
 
 _G.C_CurveUtil = {
     EvaluateColorValueFromBoolean = function(state, valueIfTrue, valueIfFalse)
-        if state == true then
+        local resolved = state
+        if type(state) == "table" and state.__minimizerMockSecret then
+            resolved = state.__value
+        end
+        if resolved == true then
             return valueIfTrue
         else
             return valueIfFalse
         end
     end
 }
+
+-- Mock secret helper used by tests to simulate Midnight/Secrets values.
+function Mocks.Secret(value)
+    return { __minimizerMockSecret = true, __value = value }
+end
+
+-- Global issecretvalue used by Minimizer.Utils.IsSecretValue()
+_G.issecretvalue = function(v)
+    return type(v) == "table" and v.__minimizerMockSecret == true
+end
 
 function _G.hooksecurefunc(table, funcName, hook)
     if type(table) == "string" then

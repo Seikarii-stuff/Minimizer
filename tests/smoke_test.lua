@@ -305,6 +305,67 @@ do
         "GAP2: el estado simplificado se recalcula para la nueva unidad")
 end
 
+-- === TESTS: Secrets handling for persistencia verde ===
+-- Test A: channel ininterrumpible enviado como secreto NO debe fijar persistencia
+do
+    local token = "nameplate23"
+    Mocks.CreateTestUnit(token, {
+        level = 70, classification = "normal", faction = "Horde", powerType = 1,
+        channel = { name = "Secret Channel", startTime = 0, endTime = 2000, uninterruptible = Mocks.Secret(true) }
+    })
+    local np = Mocks.CreateTestNameplate(token)
+    addonTable.Cast.InvalidateState(token)
+    addonTable.Core.ApplyToUnit(token)
+
+    local hb = addonTable.Utils.GetHealthBar(np)
+    local r, g, b = hb:GetStatusBarColor()
+    check(math.abs(r - addonTable.Constants.HealthColors.superiorUninterruptible[1]) < 0.01 and
+          math.abs(g - addonTable.Constants.HealthColors.superiorUninterruptible[2]) < 0.01 and
+          math.abs(b - addonTable.Constants.HealthColors.superiorUninterruptible[3]) < 0.01,
+        "TEST A1: channel secreto ininterrumpible pinta gris mientras dura")
+    check(np.MinimizerPersistentCastColorKind == nil,
+        "TEST A2: channel secreto ininterrumpible NO fija persistencia")
+
+    -- Terminar channel
+    Mocks.units[token].channel = nil
+    addonTable.Cast.InvalidateState(token)
+    addonTable.Core.ApplyToUnit(token)
+
+    local r2, g2, b2 = addonTable.Utils.GetHealthBar(np):GetStatusBarColor()
+    check(math.abs(r2 - addonTable.Constants.HealthColors.melee[1]) < 0.01 and
+          math.abs(g2 - addonTable.Constants.HealthColors.melee[2]) < 0.01 and
+          math.abs(b2 - addonTable.Constants.HealthColors.melee[3]) < 0.01,
+        "TEST A3: despues del channel, sin persistencia, vuelve a color base")
+end
+
+-- Test B: cast secreto que REALMENTE es interruptible debe fijar persistencia
+do
+    local token = "nameplate24"
+    Mocks.CreateTestUnit(token, {
+        level = 70, classification = "normal", faction = "Horde", powerType = 1,
+        cast = { name = "Secret Cast", startTime = 0, endTime = 2000, uninterruptible = Mocks.Secret(false) }
+    })
+    local np = Mocks.CreateTestNameplate(token)
+    addonTable.Core.ApplyToUnit(token)
+
+    local hb = addonTable.Utils.GetHealthBar(np)
+    local r, g, b = hb:GetStatusBarColor()
+    check(math.abs(r - addonTable.Constants.HealthColors.castInterruptible[1]) < 0.01 and
+          math.abs(g - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
+          math.abs(b - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01,
+        "TEST B1: cast secreto interrumpible pinta verde")
+    check(np.MinimizerPersistentCastColorKind == "castInterruptible",
+        "TEST B2: cast secreto interrumpible fija persistencia")
+
+    -- Terminar cast pero persiste
+    Mocks.units[token].cast = nil
+    addonTable.Cast.InvalidateState(token)
+    addonTable.Core.ApplyToUnit(token)
+
+    check(np.MinimizerPersistentCastColorKind == "castInterruptible",
+        "TEST B3: despues del cast secreto interrumpible, persiste verde")
+end
+
 -- --- TEST GROUP 5: HealthBarColor — Leyenda M+ ---
 --   Inferior interrumpible  -> verde PERSISTENTE
 --   Inferior ininterrumpible -> gris TEMPORAL
