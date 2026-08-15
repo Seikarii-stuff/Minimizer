@@ -7,8 +7,9 @@ Minimizer.Target = Target
 -- Reemplazamos la antigua insignia por un halo (anillo) enlazado al cooldown
 -- real del spell ofensivo disponible para la clase del jugador.
 local HALO_SIZE = 46
+local PORTRAIT_RADIUS = 18
 local offFrame = Minimizer.Widgets.CreateHalo("MinimizerTargetHalo", nil, HALO_SIZE)
-local defPip = Minimizer.Widgets.CreatePip("MinimizerTargetDefensivePip", offFrame, "defensive", "TOPLEFT")
+local defPip = Minimizer.Widgets.CreatePip("MinimizerTargetDefensivePip", offFrame, "defensive", "TOPLEFT", PORTRAIT_RADIUS)
 
 function Target:UpdateTargetCDs()
     if not UnitExists("target") or UnitIsDead("target") then 
@@ -32,7 +33,7 @@ function Target:UpdateTargetCDs()
     if offID then
         Minimizer.Widgets.UpdateHalo(offFrame, offID)
         offFrame:ClearAllPoints()
-        offFrame:SetPoint("BOTTOM", plate, "TOP", 0, 10)
+        offFrame:SetPoint("CENTER", plate, "TOP", 0, 10 + (HALO_SIZE / 2))
     else
         offFrame:Hide()
     end

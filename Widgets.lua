@@ -236,11 +236,14 @@ Minimizer.Widgets.PIP_SIZE = 6
 -- name: nombre único del frame (string).
 -- parentFrame: frame de Blizzard al que se ancla y del que hereda visibilidad.
 -- colorKind: clave en Minimizer.Constants.PipColors (ej. "cc", "defensive").
--- anchorCorner: esquina de parentFrame donde centrar el pip (ej. "TOPRIGHT",
---   "TOPLEFT", "BOTTOMRIGHT", "BOTTOMLEFT"). Por defecto "TOPRIGHT".
--- xOff, yOff: offset extra opcional (por si en el futuro hace falta apilar
---   más de un pip en la misma esquina). Por defecto 0, 0.
-function Minimizer.Widgets.CreatePip(name, parentFrame, colorKind, anchorCorner, xOff, yOff)
+-- anchorCorner: esquina del círculo/portrait donde centrar el pip (ej.
+--   "TOPRIGHT", "TOPLEFT", "BOTTOMRIGHT", "BOTTOMLEFT"). Por defecto
+--   "TOPRIGHT".
+-- radius: radio del portrait/círculo visible, no del rectángulo externo del halo.
+--   Cuando se omite, usa el 45% del lado más pequeño del padre para aproximar
+--   la zona circular real del portrait en el nombre de la placa.
+-- xOff, yOff: offset extra opcional. Por defecto 0, 0.
+function Minimizer.Widgets.CreatePip(name, parentFrame, colorKind, anchorCorner, radius, xOff, yOff)
     local colors = Minimizer.Constants.PipColors
         and Minimizer.Constants.PipColors[colorKind]
 
@@ -249,8 +252,13 @@ function Minimizer.Widgets.CreatePip(name, parentFrame, colorKind, anchorCorner,
     end
 
     anchorCorner = anchorCorner or "TOPRIGHT"
+    local parentSize = math.min(parentFrame:GetWidth() or 40, parentFrame:GetHeight() or 40)
+    radius = radius or (parentSize * 0.45)
     xOff = xOff or 0
     yOff = yOff or 0
+
+    local signX = (anchorCorner:find("RIGHT") and 1) or -1
+    local signY = (anchorCorner:find("TOP") and 1) or -1
 
     local pip = CreateFrame("Frame", name, parentFrame)
     pip:SetSize(Minimizer.Widgets.PIP_SIZE, Minimizer.Widgets.PIP_SIZE)
@@ -258,7 +266,9 @@ function Minimizer.Widgets.CreatePip(name, parentFrame, colorKind, anchorCorner,
     pip:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 5)
 
     pip:ClearAllPoints()
-    pip:SetPoint("CENTER", parentFrame, anchorCorner, xOff, yOff)
+    pip:SetPoint("CENTER", parentFrame, "CENTER", signX * radius + xOff, signY * radius + yOff)
+    pip.MinimizerPipRadius = radius
+    pip.MinimizerPipAnchorCorner = anchorCorner
     pip:Hide()
 
     -- ============================================================

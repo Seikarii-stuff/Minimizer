@@ -547,6 +547,12 @@ do
     local alpha = halo.MinimizerHaloTexture:GetAlpha()
     check(alpha > 0 and alpha <= 1, "Target halo: el alpha refleja progreso y no queda bloqueado en 0 o 1 fijo")
 
+    local parent = CreateFrame("Frame", "TestHaloParent")
+    parent:SetSize(46, 46)
+    local pip = addonTable.Widgets.CreatePip("TestSharedRadiusPip", parent, "defensive", "TOPLEFT", 23)
+    check(pip ~= nil and pip.MinimizerPipRadius == 23,
+        "Pips: se acepta un radio compartido explícito para centrar el pip sobre el halo")
+
     Mocks.cooldowns[107574] = nil
     check(addonTable.Widgets.UpdateHalo and addonTable.Widgets.UpdateHalo(halo, nil) == false,
         "Target halo: sin spell se oculta")

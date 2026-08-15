@@ -7,6 +7,8 @@ MinimizerDB = MinimizerDB or {}
 local Focus = {}
 Minimizer.Focus = Focus
 
+local HALO_SIZE = 46
+local PORTRAIT_RADIUS = 18
 local frame = CreateFrame("Frame", "MinimizerFocusPortrait", UIParent)
 frame:SetSize(40, 40)
 frame:SetFrameStrata("HIGH")
@@ -21,7 +23,7 @@ Minimizer.Widgets.MakeCooldownCircular(cooldown)
 
 local ccPip
 if Minimizer.Widgets and Minimizer.Widgets.CreatePip then
-    ccPip = Minimizer.Widgets.CreatePip("MinimizerFocusCCPip", frame, "cc", "TOPRIGHT")
+    ccPip = Minimizer.Widgets.CreatePip("MinimizerFocusCCPip", frame, "cc", "TOPRIGHT", PORTRAIT_RADIUS)
 end
 
 local function UpdateCooldown()
@@ -92,7 +94,7 @@ function Focus:UpdateFace()
 
     SetPortraitTexture(portrait, "player")
     frame:ClearAllPoints()
-    frame:SetPoint("BOTTOM", plate, "TOP", 0, 10)
+    frame:SetPoint("CENTER", plate, "TOP", 0, 10 + (HALO_SIZE / 2))
     frame:Show()
     UpdateCooldown()
 
