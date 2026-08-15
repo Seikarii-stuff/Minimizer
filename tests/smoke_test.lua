@@ -272,8 +272,11 @@ do
     local np2 = Mocks.nameplates[token]
     hb = addonTable.Utils.GetHealthBar(np2)
     r, g, b = hb:GetStatusBarColor()
-    check(np2.MinimizerPersistentCastColorKind == nil,
-        "GAP1: reciclaje del token borra el flag persistente del cast anterior")
+    do
+        local p2 = np2.MinimizerPersistentCastColor
+        check(p2 == nil,
+            "GAP1: reciclaje del token borra el flag persistente del cast anterior")
+    end
     check(math.abs(r - addonTable.Constants.HealthColors.melee[1]) < 0.01 and
           math.abs(g - addonTable.Constants.HealthColors.melee[2]) < 0.01 and
           math.abs(b - addonTable.Constants.HealthColors.melee[3]) < 0.01,
@@ -323,8 +326,11 @@ do
           math.abs(g - addonTable.Constants.HealthColors.superiorUninterruptible[2]) < 0.01 and
           math.abs(b - addonTable.Constants.HealthColors.superiorUninterruptible[3]) < 0.01,
         "TEST A1: channel secreto ininterrumpible pinta gris mientras dura")
-    check(np.MinimizerPersistentCastColorKind == nil,
-        "TEST A2: channel secreto ininterrumpible NO fija persistencia")
+    do
+        local p = np.MinimizerPersistentCastColor
+        check(p == nil,
+            "TEST A2: channel secreto ininterrumpible NO fija persistencia")
+    end
 
     -- Terminar channel
     Mocks.units[token].channel = nil
@@ -354,8 +360,11 @@ do
           math.abs(g - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
           math.abs(b - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01,
         "TEST B1: cast secreto interrumpible pinta verde")
-    check(np.MinimizerPersistentCastColorKind == nil,
-        "TEST B2: cast secreto interrumpible NO fija persistencia (secreto no resuelto)")
+    do
+        local p = np.MinimizerPersistentCastColor
+        check(p == nil,
+            "TEST B2: cast secreto interrumpible NO fija persistencia (secreto no resuelto)")
+    end
 
     -- Terminar cast pero persiste
     Mocks.units[token].cast = nil
@@ -458,8 +467,10 @@ do
     addonTable.Core.ApplyToUnit("nameplate11")
     local hbBossUnint = addonTable.Utils.GetHealthBar(npBossUnint)
     r, g, b = hbBossUnint:GetStatusBarColor()
-    check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01,
-        "HealthBarColor: boss (superior) casteando ininterrumpible -> gris TEMPORAL")
+    check(math.abs(r - addonTable.Constants.HealthColors.boss[1]) < 0.01 and
+          math.abs(g - addonTable.Constants.HealthColors.boss[2]) < 0.01 and
+          math.abs(b - addonTable.Constants.HealthColors.boss[3]) < 0.01,
+        "HealthBarColor: boss (superior) casteando ininterrumpible -> permanece morado")
 
     -- 5. Boss casteando interrumpible -> permanece morado (sin cambio)
     Mocks.CreateTestUnit("nameplate12", {
