@@ -173,13 +173,117 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
     return dropdown
 end
 
+-- ============================================================================
+-- Leyenda de colores: fila puramente informativa (swatch de color + texto).
+-- No es interactiva -- no lleva OnClick ni estado, solo documenta en pantalla
+-- lo que ya está definido en Constants.lua (HealthColors/CastColors), para
+-- que el usuario no tenga que memorizar la leyenda del README.
+--
+-- anchorFrame: fila anterior (o el título de la sección) bajo la cual se
+--   ancla esta fila. Si es nil, se ancla al TOPLEFT del parent.
+-- Devuelve la fila creada, para poder encadenar la siguiente pasando
+-- anchorFrame = filaAnterior.
+-- ============================================================================
+local LEGEND_SWATCH_SIZE = 14
+local LEGEND_ROW_SPACING = 8
+
+local function CreateLegendRow(parent, colorRGB, labelText, anchorFrame)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetHeight(LEGEND_SWATCH_SIZE)
+    if anchorFrame then
+        row:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", 0, -LEGEND_ROW_SPACING)
+        row:SetPoint("TOPRIGHT", anchorFrame, "BOTTOMRIGHT", 0, -LEGEND_ROW_SPACING)
+    else
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+        row:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
+    end
+
+    local swatch = row:CreateTexture(nil, "ARTWORK")
+    swatch:SetSize(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE)
+    swatch:SetPoint("LEFT", row, "LEFT", 0, 0)
+    swatch:SetColorTexture(colorRGB[1], colorRGB[2], colorRGB[3], 1)
+
+    local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    label:SetPoint("LEFT", swatch, "RIGHT", 6, 0)
+    label:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+    label:SetJustifyH("LEFT")
+    label:SetText(labelText)
+
+    return row
+end
+
+-- Orden y etiquetas de la leyenda: coincide con la prioridad descendente de
+-- la Leyenda de color M+ del README (§5). "boss"/"miniboss" comparten color
+-- (morado), así que se fusionan en una sola fila.
+local HEALTH_LEGEND_ENTRIES = {
+    { key = "focus", label = "Focus" },
+    { key = "aggro", label = "Aggro (tuyo)" },
+    { key = "absorb", label = "Shield / Absorb" },
+    { key = "boss", label = "Boss / Miniboss" },
+    { key = "caster", label = "Caster (maná)" },
+    { key = "melee", label = "Melee" },
+    { key = "trivial", label = "Trivial" },
+    { key = "castInterruptible", label = "Cast interrumpible" },
+    { key = "superiorUninterruptible", label = "Cast ininterrumpible" },
+}
+
+local CAST_LEGEND_ENTRIES = {
+    { key = "ready", label = "Interrupt listo" },
+    { key = "channel", label = "Channeling interrupt cooldown" },
+}
+
+-- Construye la columna completa de leyenda dentro de `legend` (frame vacío
+-- ya posicionado por EnsureFrame). Puramente visual, no guarda referencias
+-- porque nunca se refresca -- los colores de Constants.lua son estáticos en
+-- runtime (no hay Menu.Refresh que los toque).
+local function BuildLegend(legend)
+    local sectionTitle = legend:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    sectionTitle:SetPoint("TOPLEFT", legend, "TOPLEFT", 0, 0)
+    sectionTitle:SetPoint("TOPRIGHT", legend, "TOPRIGHT", 0, 0)
+    sectionTitle:SetJustifyH("LEFT")
+    sectionTitle:SetText("Leyenda: nameplate")
+
+    local lastRow = sectionTitle
+    local healthColors = Minimizer.Constants and Minimizer.Constants.HealthColors or {}
+    for _, entry in ipairs(HEALTH_LEGEND_ENTRIES) do
+        local color = healthColors[entry.key]
+        if color then
+            lastRow = CreateLegendRow(legend, color, entry.label, lastRow)
+        end
+    end
+
+    local castTitle = legend:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    castTitle:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 0, -16)
+    castTitle:SetPoint("TOPRIGHT", lastRow, "BOTTOMRIGHT", 0, -16)
+    castTitle:SetJustifyH("LEFT")
+    castTitle:SetText("Leyenda: cast bar")
+    lastRow = castTitle
+
+    local castColors = Minimizer.Constants and Minimizer.Constants.CastColors or {}
+    for _, entry in ipairs(CAST_LEGEND_ENTRIES) do
+        local color = castColors[entry.key]
+        if color then
+            lastRow = CreateLegendRow(legend, color, entry.label, lastRow)
+        end
+    end
+end
+
 local function EnsureFrame()
     if Menu.frame then
         return Menu.frame
     end
 
-    local frame = CreateFrame("Frame", "MinimizerMenuFrame", UIParent)
-    frame:SetSize(300, 250)
+    -- "BackdropTemplate" es obligatorio desde que Blizzard separó Backdrop
+    -- del mixin base de Frame: sin él, frame.SetBackdrop ni siquiera existe
+    -- y el "if frame.SetBackdrop then" de abajo se saltaba en silencio -- el
+    -- bug reportado de fondo 100% transparente venía de aquí, no de un alpha
+    -- mal puesto.
+    local FRAME_WIDTH = 460
+    local FRAME_HEIGHT = 400
+    local CONTENT_WIDTH = 230
+
+    local frame = CreateFrame("Frame", "MinimizerMenuFrame", UIParent, "BackdropTemplate")
+    frame:SetSize(FRAME_WIDTH, FRAME_HEIGHT)
     frame:SetFrameStrata("DIALOG")
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -194,6 +298,8 @@ local function EnsureFrame()
             edgeSize = 32,
             insets = { left = 11, right = 11, top = 11, bottom = 11 },
         })
+        frame:SetBackdropColor(0, 0, 0, 0.92)
+        frame:SetBackdropBorderColor(1, 1, 1, 1)
     end
     frame:SetScript("OnDragStart", function(self)
         if self:IsMovable() then
@@ -212,10 +318,12 @@ local function EnsureFrame()
 
     -- Encapsulate controls inside a content sub-frame (the 'menu') so the
     -- visible dialog frame can hold chrome (close button, drag area) and the
-    -- actual controls are in a separate container.
+    -- actual controls are in a separate container. La ventana ahora se
+    -- divide en dos columnas: controles (izquierda, ancho fijo) y leyenda
+    -- de colores puramente informativa (derecha, ver BuildLegend arriba).
     local content = CreateFrame("Frame", nil, frame)
-    content:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -36)
-    content:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -12, 12)
+    content:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -36)
+    content:SetSize(CONTENT_WIDTH, FRAME_HEIGHT - 50)
 
     local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
@@ -299,6 +407,22 @@ local function EnsureFrame()
     dropdowns[1]:SetPoint("TOPLEFT", arrowsToggle, "BOTTOMLEFT", 0, -20)
     dropdowns[2]:SetPoint("TOPLEFT", dropdowns[1], "BOTTOMLEFT", 0, -18)
     dropdowns[3]:SetPoint("TOPLEFT", dropdowns[2], "BOTTOMLEFT", 0, -18)
+
+    -- Columna de leyenda: aprovecha el lateral derecho, que antes quedaba
+    -- vacío. Ancho = lo que sobra del frame tras la columna de controles.
+    -- Puramente informativa -- BuildLegend no crea ningún control, solo
+    -- swatches + texto, así que no hace falta guardarla en
+    -- frame.MinimizerMenuControls (Menu.Refresh no necesita tocarla).
+    local divider = frame:CreateTexture(nil, "ARTWORK")
+    divider:SetPoint("TOP", content, "TOPRIGHT", 9, 2)
+    divider:SetPoint("BOTTOM", content, "BOTTOMRIGHT", 9, 0)
+    divider:SetWidth(1)
+    divider:SetColorTexture(1, 1, 1, 0.15)
+
+    local legend = CreateFrame("Frame", nil, frame)
+    legend:SetPoint("TOPLEFT", content, "TOPRIGHT", 18, 0)
+    legend:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
+    BuildLegend(legend)
 
     frame.MinimizerMenuControls = {
         simplifyToggle = simplifyToggle,
