@@ -151,6 +151,18 @@ local function run_single(runIndex, seed)
     local perCallSamples = {} -- elapsed times (s) per ApplyToUnit call
     local perFrameApplyCounts = {} -- number of ApplyToUnit calls per frame
 
+    -- Medicion de basura generada DURANTE el pase cronometrado, no del setup
+    -- previo (creacion de nameplates/mocks, que ya paso antes de entrar aqui).
+    -- Se detiene el GC para la ventana medida: collectgarbage("count") normalmente
+    -- refleja el heap NETO (ya descontando lo que el colector automatico haya
+    -- liberado a mitad de camino), lo que esconde el churn real -- exactamente
+    -- el numero que nos interesa para detectar el tipo de basura que causa
+    -- stuttering. Con el GC detenido, nada se libera durante el loop, asi que
+    -- el delta de KB es el total ASIGNADO, no el neto retenido.
+    collectgarbage("collect")
+    collectgarbage("stop")
+    local gcStartKB = collectgarbage("count")
+
     local benchStart = os.clock()
     for frame = 1, ITERATIONS do
     -- Advance a small time slice (simulate 100 FPS-ish)
@@ -204,6 +216,15 @@ local function run_single(runIndex, seed)
     perFrameApplyCounts[#perFrameApplyCounts + 1] = calls
     end
 
+    -- Reactivar el GC INMEDIATAMENTE tras el loop cronometrado -- no dejar
+    -- nunca el colector detenido mas alla de la ventana medida. Si en el
+    -- futuro NUM_NAMEPLATES/ITERATIONS suben mucho, revisar el pico de
+    -- memoria durante esta ventana antes de asumir que sigue siendo inofensivo.
+    local gcEndKB = collectgarbage("count")
+    collectgarbage("restart")
+    collectgarbage("collect")
+    local totalGarbageKB = gcEndKB - gcStartKB
+
     local totalTime = os.clock() - benchStart
 
     -- Compute per-call statistics (ms) and percentiles
@@ -211,6 +232,7 @@ local function run_single(runIndex, seed)
     local totalCallTime = 0
     for _, v in ipairs(perCallSamples) do totalCallTime = totalCallTime + v end
     local avgCallMs = (totalCalls > 0) and (totalCallTime / totalCalls) * 1000 or 0
+    local kbPerCall = (totalCalls > 0) and (totalGarbageKB / totalCalls) or 0
 
     local sortedSamples = {}
     for i, v in ipairs(perCallSamples) do sortedSamples[i] = v end
@@ -236,6 +258,8 @@ local function run_single(runIndex, seed)
         totalTime = totalTime,
         totalCalls = totalCalls,
         avgCallMs = avgCallMs,
+        totalGarbageKB = totalGarbageKB,
+        kbPerCall = kbPerCall,
         p50 = p50,
         p90 = p90,
         p99 = p99,
@@ -255,6 +279,7 @@ local function run_single(runIndex, seed)
     line(string.format("Nameplates : %d units", summary.nameplates))
     line(string.format("Total Time : %.4f s", summary.totalTime))
     line(string.format("Total ApplyToUnit calls : %d", summary.totalCalls))
+    line(string.format("Basura generada (GC)    : %.2f KB total / %.4f KB por ApplyToUnit", summary.totalGarbageKB, summary.kbPerCall))
     line(string.format("Avg ApplyToUnit  : %.6f ms", summary.avgCallMs))
     line(string.format("P50 / P90 / P99 / Max : %.3f ms / %.3f ms / %.3f ms / %.3f ms", summary.p50, summary.p90, summary.p99, summary.maxCallMs))
     line(string.format("Worst frame (calls)   : %d", summary.worstFrameCalls))
@@ -368,12 +393,15 @@ local function median(values)
 end
 local p90_vals = {}
 local avg_vals = {}
+local kb_vals = {}
 for _, s in ipairs(allSummaries) do
     p90_vals[#p90_vals + 1] = s.p90
     avg_vals[#avg_vals + 1] = s.avgCallMs
+    kb_vals[#kb_vals + 1] = s.kbPerCall
 end
 local agg_p90 = median(p90_vals)
 local agg_avg = median(avg_vals)
+local agg_kb = median(kb_vals)
 
 -- Write aggregated report into single file
 local dateTag   = os.date("%Y%m%d_%H%M%S")
@@ -385,7 +413,7 @@ if fh then
         fh:write(rep)
         fh:write("\n" .. string.rep("=", 72) .. "\n")
     end
-    fh:write(string.format("\nAGGREGATE SUMMARY (median across runs): p90 = %.4f ms, avgApplyToUnit = %.6f ms\n", agg_p90, agg_avg))
+    fh:write(string.format("\nAGGREGATE SUMMARY (median across runs): p90 = %.4f ms, avgApplyToUnit = %.6f ms, GC = %.4f KB/call\n", agg_p90, agg_avg, agg_kb))
     fh:close()
     print("Aggregated results saved to: " .. outPath)
 else
@@ -394,7 +422,7 @@ end
 
 -- Print a concise aggregated summary and perform regression check
 local REGRESSION_THRESHOLD_MS = 2.5 -- conservative threshold for p90 (ms)
-print(string.format("Aggregated median p90 = %.4f ms, median avg = %.6f ms", agg_p90, agg_avg))
+print(string.format("Aggregated median p90 = %.4f ms, median avg = %.6f ms, median GC = %.4f KB/call", agg_p90, agg_avg, agg_kb))
 if agg_p90 > REGRESSION_THRESHOLD_MS then
     io.stderr:write(string.format("REGRESSION DETECTADA: median p90 = %.4f ms > threshold %.4f ms\n", agg_p90, REGRESSION_THRESHOLD_MS))
     os.exit(1)
