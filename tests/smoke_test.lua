@@ -502,8 +502,7 @@ end
 -- --- TEST GROUP 5: HealthBarColor — Leyenda M+ ---
 --   Inferior interrumpible  -> verde PERSISTENTE
 --   Inferior ininterrumpible -> gris TEMPORAL
---   Superior ininterrumpible -> gris TEMPORAL
---   Superior interrumpible   -> morado (sin cambio)
+--   Superior  -> morado (sin cambio)
 do
     -- 1a. Melee (blanco) casteando interrumpible -> verde
     Mocks.CreateTestUnit("nameplate10", {
@@ -581,7 +580,7 @@ do
     check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01,
         "HealthBarColor: inferior termina cast ininterrumpible -> el COLOR persiste gris (desimplificacion sigue siendo temporal)")
 
-    -- 4. Boss casteando ininterrumpible -> gris TEMPORAL
+    -- 4. Boss casteando ininterrumpible -> gris TEMPORAL deprecated SIEMPRE MORADO ,REHACER TEST
     Mocks.CreateTestUnit("nameplate11", {
         level = -1, classification = "elite", faction = "Horde",
         cast = { name = "Boss MegaCast", startTime = 0, endTime = 2000, uninterruptible = true }
