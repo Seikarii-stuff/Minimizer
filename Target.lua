@@ -42,5 +42,5 @@ end
 -- Throttle a 30 FPS (0.033s): visuales de target no necesitan repintarse más rápido.
 Target.DebouncedUpdate = Minimizer.Utils.Throttle(function()
     Target:UpdateTargetCDs()
-end, 0.030)
+end, 0.033)
 
