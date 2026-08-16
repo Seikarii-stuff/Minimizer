@@ -3,24 +3,30 @@ if not Minimizer then return end
 
 Minimizer.Classification = Minimizer.Classification or {}
 
-local function IsTrivial(unit, classification)
+local UnitEffectiveLevel = UnitEffectiveLevel
+local UnitClassification = UnitClassification
+local UnitIsLieutenant = UnitIsLieutenant
+local UnitHasPowerType = UnitHasPowerType
+local UnitPowerType = UnitPowerType
+local MANA_POWER_TYPE = Enum and Enum.PowerType and Enum.PowerType.Mana
+
+-- level/playerLevel se piden UNA sola vez en GetEliteType y se pasan como
+-- parametro a IsTrivial/GetSuperiorKind -- antes cada funcion volvia a
+-- llamar a UnitEffectiveLevel por su cuenta (hasta 4 llamadas nativas
+-- donde bastan 2 por unidad/pase).
+local function IsTrivial(classification, level, playerLevel)
     if Minimizer.Utils.IsSecretValue(classification) then return false end
     if classification == "trivial" or classification == "minus" then return true end
-    local level = UnitEffectiveLevel(unit)
-    local playerLevel = UnitEffectiveLevel("player")
     if Minimizer.Utils.IsSecretValue(level) or Minimizer.Utils.IsSecretValue(playerLevel) then return false end
     return type(level) == "number" and type(playerLevel) == "number"
         and level > 0 and level <= playerLevel - 10
 end
 
-local function GetSuperiorKind(unit, classification)
+local function GetSuperiorKind(unit, classification, level, playerLevel)
     if Minimizer.Utils.IsSecretValue(classification) then return nil end
     if classification == "worldboss" then return "boss" end
 
     if classification == "elite" or classification == "rareelite" then
-        local level = UnitEffectiveLevel(unit)
-        local playerLevel = UnitEffectiveLevel("player")
-        
         if not Minimizer.Utils.IsSecretValue(level) and not Minimizer.Utils.IsSecretValue(playerLevel)
            and type(level) == "number" and type(playerLevel) == "number" then
             
@@ -45,8 +51,8 @@ local function GetSuperiorKind(unit, classification)
 end
 
 local function HasMana(unit)
-    if UnitHasPowerType and Enum and Enum.PowerType and Enum.PowerType.Mana then
-        local value = UnitHasPowerType(unit, Enum.PowerType.Mana)
+    if UnitHasPowerType and MANA_POWER_TYPE then
+        local value = UnitHasPowerType(unit, MANA_POWER_TYPE)
         return not Minimizer.Utils.IsSecretValue(value) and value == true
     end
     local powerType = UnitPowerType(unit)
@@ -64,11 +70,14 @@ function Minimizer.Classification.GetEliteType(unit)
     end
 
     local classification = UnitClassification(unit)
+    local level = UnitEffectiveLevel(unit)
+    local playerLevel = UnitEffectiveLevel("player")
+
     local result
-    if IsTrivial(unit, classification) then
+    if IsTrivial(classification, level, playerLevel) then
         result = "trivial"
     else
-        local superior = GetSuperiorKind(unit, classification)
+        local superior = GetSuperiorKind(unit, classification, level, playerLevel)
         if superior then
             result = superior
         elseif HasMana(unit) then
