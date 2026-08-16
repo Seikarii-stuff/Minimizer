@@ -149,15 +149,23 @@ function Minimizer.Utils.IsPvPUnit(unit)
 end
 
 function Minimizer.Utils.Debounce(fn)
+    -- NOTA: esta version asume que `fn` siempre se invoca sin argumentos
+    -- variables (confirmado por grep: el unico consumidor en el repo es
+    -- Core.lua -> Minimizer.Core.RequestApplyToAll, siempre llamado como
+    -- RequestApplyToAll() sin parametros). Si en el futuro se necesita pasar
+    -- argumentos variables a traves de un Debounce, NO reintroducir la tabla
+    -- `{...}` por llamada -- usar una tabla scratch reutilizada a nivel de
+    -- closure en su lugar.
     local pending = false
-    return function(...)
+    local afterCallback
+    afterCallback = function()
+        pending = false
+        fn()
+    end
+    return function()
         if pending then return end
         pending = true
-        local args = {...}
-        C_Timer.After(0, function()
-            pending = false
-            fn(unpack(args))
-        end)
+        C_Timer.After(0, afterCallback)
     end
 end
 
@@ -167,6 +175,16 @@ function Minimizer.Utils.Throttle(fn, interval)
     interval = interval or 0.033
     local lastTime = 0
     local pending = false
+    -- Closure de callback creada UNA sola vez (no en cada disparo de la rama
+    -- "pending"). Antes se creaba una closure nueva por cada llamada que
+    -- caia en esa rama -- con Target/Focus llamando esto ~25 veces/seg via
+    -- SPELL_UPDATE_COOLDOWN, era basura constante.
+    local afterCallback
+    afterCallback = function()
+        pending = false
+        lastTime = GetTime()
+        fn()
+    end
     return function()
         local now = GetTime()
         local elapsed = now - lastTime
@@ -177,11 +195,7 @@ function Minimizer.Utils.Throttle(fn, interval)
             pending = true
             local remaining = interval - elapsed
             if remaining < 0 then remaining = 0 end
-            C_Timer.After(remaining, function()
-                pending = false
-                lastTime = GetTime()
-                fn()
-            end)
+            C_Timer.After(remaining, afterCallback)
         end
     end
 end
