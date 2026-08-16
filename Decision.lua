@@ -15,17 +15,22 @@ function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
 
     if not UnitCanAttack("player", unit) then return false, "friendly" end
 
-    -- Simplify is now an on/off flag. Backwards-compatible: if the older
-    -- `simplifyPercent` exists and is > 0 we treat it as enabled.
+    -- Simplify toggle: delegar la lógica al módulo de configuración.
     local enabled
-    if MinimizerDB == nil then
-        enabled = true
+    if Minimizer.Config and Minimizer.Config.IsSimplifyEnabled then
+        enabled = Minimizer.Config.IsSimplifyEnabled()
     else
-        if MinimizerDB.simplifyEnabled == nil then
-            local legacy = tonumber(MinimizerDB.simplifyPercent)
-            enabled = (legacy == nil) or (legacy > 0)
+        -- Fallback seguro al comportamiento legacy si por alguna razón la
+        -- función no existe (entornos de test aislados).
+        if MinimizerDB == nil then
+            enabled = true
         else
-            enabled = MinimizerDB.simplifyEnabled == true
+            if MinimizerDB.simplifyEnabled == nil then
+                local legacy = tonumber(MinimizerDB.simplifyPercent)
+                enabled = (legacy == nil) or (legacy > 0)
+            else
+                enabled = MinimizerDB.simplifyEnabled == true
+            end
         end
     end
     if not enabled then return false, "disabled" end

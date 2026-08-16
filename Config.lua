@@ -80,3 +80,22 @@ function Minimizer.Config.Initialize()
 end
 
 
+-- Comprueba si la simplificación está activada, soportando la clave legacy
+-- `simplifyPercent` como fallback. Centraliza la lógica usada por el
+-- menú y la toma de decisiones para evitar duplicados en el código.
+function Minimizer.Config.IsSimplifyEnabled()
+    -- Si por alguna razon MinimizerDB no existe (tests, entorno aislado),
+    -- asumimos el comportamiento por defecto previo: habilitado.
+    if MinimizerDB == nil then
+        return true
+    end
+
+    if MinimizerDB.simplifyEnabled == nil then
+        local legacy = tonumber(MinimizerDB.simplifyPercent)
+        return (legacy == nil) or (legacy > 0)
+    else
+        return MinimizerDB.simplifyEnabled == true
+    end
+end
+
+

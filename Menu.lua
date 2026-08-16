@@ -230,7 +230,7 @@ local function EnsureFrame()
     if simplifyToggle.text then
         simplifyToggle.text:SetText("Enable simplify")
     end
-    simplifyToggle:SetChecked((MinimizerDB and (MinimizerDB.simplifyEnabled == nil and (tonumber(MinimizerDB.simplifyPercent) == nil or tonumber(MinimizerDB.simplifyPercent) > 0)) or (MinimizerDB and MinimizerDB.simplifyEnabled == true)))
+    simplifyToggle:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
     simplifyToggle:SetScript("OnClick", function(self)
         if MinimizerDB then MinimizerDB.simplifyEnabled = self:GetChecked() end
         if Minimizer.Core then Minimizer.Core.ApplyToAll() end
@@ -320,7 +320,7 @@ function Menu.Refresh()
     if not frame then return end
     if frame.MinimizerMenuControls and frame.MinimizerMenuControls.simplifyToggle then
         local st = frame.MinimizerMenuControls.simplifyToggle
-        st:SetChecked((MinimizerDB and (MinimizerDB.simplifyEnabled == nil and (tonumber(MinimizerDB.simplifyPercent) == nil or tonumber(MinimizerDB.simplifyPercent) > 0)) or (MinimizerDB and MinimizerDB.simplifyEnabled == true)))
+        st:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
     end
     if frame.MinimizerMenuControls then
         frame.MinimizerMenuControls.targetMarkers:SetChecked(MinimizerDB and MinimizerDB.enableTargetMarkers ~= false)

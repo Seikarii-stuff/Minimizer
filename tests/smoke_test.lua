@@ -336,6 +336,32 @@ do
         "Config: migracion old focusIndicator=arrows crea los booleans separados")
 end
 
+-- --- TEST GROUP 5B: Config.IsSimplifyEnabled behaviour (centralized logic) ---
+do
+    -- Caso: MinimizerDB nil -> por compatibilidad devolvemos true
+    MinimizerDB = nil
+    check(addonTable.Config.IsSimplifyEnabled() == true,
+        "Config.IsSimplifyEnabled: nil MinimizerDB => true (por compatibilidad)")
+
+    -- Caso legacy: simplifyPercent = 0 -> desactivado
+    MinimizerDB = { simplifyPercent = "0" }
+    check(addonTable.Config.IsSimplifyEnabled() == false,
+        "Config.IsSimplifyEnabled: simplifyPercent=0 => false")
+
+    -- Caso legacy: simplifyPercent > 0 -> activado
+    MinimizerDB = { simplifyPercent = "25" }
+    check(addonTable.Config.IsSimplifyEnabled() == true,
+        "Config.IsSimplifyEnabled: simplifyPercent=25 => true")
+
+    -- Caso moderno: simplifyEnabled boolean prevalece
+    MinimizerDB = { simplifyEnabled = false }
+    check(addonTable.Config.IsSimplifyEnabled() == false,
+        "Config.IsSimplifyEnabled: simplifyEnabled=false => false")
+    MinimizerDB = { simplifyEnabled = true }
+    check(addonTable.Config.IsSimplifyEnabled() == true,
+        "Config.IsSimplifyEnabled: simplifyEnabled=true => true")
+end
+
 -- --- TEST GROUP 6: Token recycle generation counter prevents stale cache ---
 do
     Mocks.CreateTestUnit("nameplate5", { level = 70, faction = "Horde", threatSituation = 3 })
