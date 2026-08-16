@@ -73,8 +73,21 @@ end
 -- Reconstruye la nameplate a partir de un healthBar (usado por los hooks de
 -- SetStatusBarColor/Show/Hide que solo reciben el widget, no la nameplate).
 function Minimizer.Utils.GetNameplateFromHealthBar(healthBar)
+    if not healthBar or type(healthBar.GetParent) ~= "function" then return nil end
     local parent = healthBar:GetParent()
-    return parent and (parent.UnitFrame and parent or parent:GetParent())
+    -- Climb parent chain until we find the frame that holds the nameplate token
+    while parent do
+        if parent.namePlateUnitToken then
+            return parent
+        end
+        if parent.UnitFrame then
+            -- parent is the nameplate container
+            return parent
+        end
+        if type(parent.GetParent) ~= "function" then break end
+        parent = parent:GetParent()
+    end
+    return nil
 end
 
 function Minimizer.Utils.GetHealthBar(nameplate)
