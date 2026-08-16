@@ -141,13 +141,18 @@ end
 -- We simulate per-unit events, random state churn (casts/threat/absorbs), and
 -- occasional bursts of simultaneous updates to exercise worst-cases.
 local ITERATIONS = 1000
-print(string.format("Running benchmark: %d iterations (simulated frames) x %d nameplates...", ITERATIONS, NUM_NAMEPLATES))
+local NUM_RUNS = 6
+local BASE_SEED = tonumber(os.time())
 
-local perCallSamples = {} -- elapsed times (s) per ApplyToUnit call
-local perFrameApplyCounts = {} -- number of ApplyToUnit calls per frame
+local function run_single(runIndex, seed)
+    math.randomseed(seed)
+    print(string.format("Run %d/%d — seed=%d — iterations=%d x %d nameplates", runIndex, NUM_RUNS, seed, ITERATIONS, NUM_NAMEPLATES))
 
-local benchStart = os.clock()
-for frame = 1, ITERATIONS do
+    local perCallSamples = {} -- elapsed times (s) per ApplyToUnit call
+    local perFrameApplyCounts = {} -- number of ApplyToUnit calls per frame
+
+    local benchStart = os.clock()
+    for frame = 1, ITERATIONS do
     -- Advance a small time slice (simulate 100 FPS-ish)
     Mocks.AdvanceTime(0.01)
 
@@ -197,157 +202,203 @@ for frame = 1, ITERATIONS do
         calls = calls + 1
     end
     perFrameApplyCounts[#perFrameApplyCounts + 1] = calls
-end
-
-local totalTime = os.clock() - benchStart
-
--- 5. Build Report
-local lines = {}
-local function line(s) lines[#lines + 1] = s end
-
-local timestamp = os.date("%Y-%m-%d %H:%M:%S")
-
--- Compute per-call statistics (ms) and percentiles
-local totalCalls = #perCallSamples
-local totalCallTime = 0
-for _, v in ipairs(perCallSamples) do totalCallTime = totalCallTime + v end
-local avgCallMs = (totalCalls > 0) and (totalCallTime / totalCalls) * 1000 or 0
-
-local function ms(v) return v * 1000 end
-local sortedSamples = {}
-for i, v in ipairs(perCallSamples) do sortedSamples[i] = v end
-table.sort(sortedSamples)
-local function percentile(p)
-    if #sortedSamples == 0 then return 0 end
-    local idx = math.max(1, math.floor(#sortedSamples * p / 100 + 0.5))
-    return sortedSamples[idx] * 1000
-end
-local p50 = percentile(50)
-local p90 = percentile(90)
-local p99 = percentile(99)
-local maxCallMs = (#sortedSamples > 0) and (sortedSamples[#sortedSamples] * 1000) or 0
-
-local worstFrameCalls = 0
-for _, c in ipairs(perFrameApplyCounts) do if c > worstFrameCalls then worstFrameCalls = c end end
-
-line("")
-line("=== Minimizer Benchmark Results ===")
-line("Date       : " .. timestamp)
-line(string.format("Iterations : %d frames", ITERATIONS))
-line(string.format("Nameplates : %d units", NUM_NAMEPLATES))
-line(string.format("Total Time : %.4f s", totalTime))
-line(string.format("Total ApplyToUnit calls : %d", totalCalls))
-line(string.format("Avg ApplyToUnit  : %.6f ms", avgCallMs))
-line(string.format("P50 / P90 / P99 / Max : %.3f ms / %.3f ms / %.3f ms / %.3f ms", p50, p90, p99, maxCallMs))
-line(string.format("Worst frame (calls)   : %d", worstFrameCalls))
-line("")
-line("--- Module Breakdown (sorted by total cost) ---")
-line(string.format("%-22s %-12s %-14s %-10s %s", "Module", "Total (s)", "Avg/call (ms)", "Calls", "Share"))
-line(string.rep("-", 72))
-
-local sortedModules = {}
-for name, stats in pairs(moduleStats) do
-    table.insert(sortedModules, { name = name, stats = stats })
-end
-table.sort(sortedModules, function(a, b) return a.stats.time > b.stats.time end)
-
-for _, mod in ipairs(sortedModules) do
-    local s = mod.stats
-    if s.count > 0 then
-        local avgMs   = (s.time / s.count) * 1000
-        local percent = (s.time / totalTime) * 100
-        line(string.format("%-22s %-12.4f %-14.6f %-10d %5.2f%%",
-            mod.name, s.time, avgMs, s.count, percent))
-    end
-end
-
-line("")
-line("--- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---")
-line(string.format("%-22s %-12s %-14s %-10s %s", "Funcion", "Total (s)", "Avg/call (ms)", "Calls", "Share"))
-line(string.rep("-", 72))
-local sortedExtra = {}
-for name, stats in pairs(extraStats) do
-    table.insert(sortedExtra, { name = name, stats = stats })
-end
-table.sort(sortedExtra, function(a, b) return a.stats.time > b.stats.time end)
-for _, item in ipairs(sortedExtra) do
-    local s = item.stats
-    if s.count > 0 then
-        local avgMs = (s.time / s.count) * 1000
-        local percent = (s.time / totalTime) * 100
-        line(string.format("%-22s %-12.4f %-14.6f %-10d %5.2f%%",
-            item.name, s.time, avgMs, s.count, percent))
-    end
-end
-
--- ============================================================
--- 9. Medicion de throttle: cuantas veces por segundo se repintan
---    realmente los widgets de Target/Focus bajo un rafagueo de
---    SPELL_UPDATE_COOLDOWN (simula combate real, donde este evento
---    puede dispararse muy seguido).
--- ============================================================
-if addonTable.Target and addonTable.Focus then
-    -- Crear una unidad target y focus falsas para que UpdateTargetCDs /
-    -- UpdateFace tengan algo que pintar.
-    Mocks.CreateTestUnit("target", { name = "Target Dummy", health = 100, healthMax = 100, faction = "Horde" })
-    Mocks.CreateTestNameplate("target")
-    Mocks.CreateTestUnit("focus", { name = "Focus Dummy", health = 100, healthMax = 100, faction = "Horde" })
-    Mocks.CreateTestNameplate("focus")
-
-    local targetPaintCount, focusPaintCount = 0, 0
-    local origTargetUpdate = addonTable.Target.UpdateTargetCDs
-    addonTable.Target.UpdateTargetCDs = function(...)
-        targetPaintCount = targetPaintCount + 1
-        return origTargetUpdate(...)
-    end
-    local origFocusUpdate = addonTable.Focus.UpdateFace
-    addonTable.Focus.UpdateFace = function(...)
-        focusPaintCount = focusPaintCount + 1
-        return origFocusUpdate(...)
     end
 
-    -- Simular una rafaga de 100 eventos SPELL_UPDATE_COOLDOWN en 1 segundo
-    -- simulado (combate con muchos cooldowns rotando).
-    local SIMULATED_EVENTS = 100
-    for i = 1, SIMULATED_EVENTS do
-        Mocks.AdvanceTime(0.01) -- 100 eventos repartidos en 1 segundo
-        Mocks.FireEvent("SPELL_UPDATE_COOLDOWN")
-    end
+    local totalTime = os.clock() - benchStart
 
+    -- Compute per-call statistics (ms) and percentiles
+    local totalCalls = #perCallSamples
+    local totalCallTime = 0
+    for _, v in ipairs(perCallSamples) do totalCallTime = totalCallTime + v end
+    local avgCallMs = (totalCalls > 0) and (totalCallTime / totalCalls) * 1000 or 0
+
+    local sortedSamples = {}
+    for i, v in ipairs(perCallSamples) do sortedSamples[i] = v end
+    table.sort(sortedSamples)
+    local function percentile(p)
+        if #sortedSamples == 0 then return 0 end
+        local idx = math.max(1, math.floor(#sortedSamples * p / 100 + 0.5))
+        return sortedSamples[idx] * 1000
+    end
+    local p50 = percentile(50)
+    local p90 = percentile(90)
+    local p99 = percentile(99)
+    local maxCallMs = (#sortedSamples > 0) and (sortedSamples[#sortedSamples] * 1000) or 0
+
+    local worstFrameCalls = 0
+    for _, c in ipairs(perFrameApplyCounts) do if c > worstFrameCalls then worstFrameCalls = c end end
+
+    -- Build a compact summary table to return
+    local summary = {
+        timestamp = os.date("%Y-%m-%d %H:%M:%S"),
+        iterations = ITERATIONS,
+        nameplates = NUM_NAMEPLATES,
+        totalTime = totalTime,
+        totalCalls = totalCalls,
+        avgCallMs = avgCallMs,
+        p50 = p50,
+        p90 = p90,
+        p99 = p99,
+        maxCallMs = maxCallMs,
+        worstFrameCalls = worstFrameCalls,
+        moduleStats = moduleStats,
+        extraStats = extraStats,
+    }
+
+    -- Also rebuild the human-readable report (reuse previous lines construction)
+    local lines = {}
+    local function line(s) lines[#lines + 1] = s end
     line("")
-    line("--- Throttle check: Target/Focus repaints bajo rafaga de eventos ---")
-    line(string.format("Eventos SPELL_UPDATE_COOLDOWN simulados : %d (en ~1s simulado)", SIMULATED_EVENTS))
-    line(string.format("Target:UpdateTargetCDs() llamadas reales: %d", targetPaintCount))
-    line(string.format("Focus:UpdateFace() llamadas reales       : %d", focusPaintCount))
-    line("(Si estos numeros son cercanos a " .. SIMULATED_EVENTS .. ", el debounce actual NO esta limitando el repintado real y hace falta un throttle explicito, p.ej. limitar a max 1 repintado cada 0.1s con C_Timer)")
+    line("=== Minimizer Benchmark Results (run " .. runIndex .. ") ===")
+    line("Date       : " .. summary.timestamp)
+    line(string.format("Iterations : %d frames", summary.iterations))
+    line(string.format("Nameplates : %d units", summary.nameplates))
+    line(string.format("Total Time : %.4f s", summary.totalTime))
+    line(string.format("Total ApplyToUnit calls : %d", summary.totalCalls))
+    line(string.format("Avg ApplyToUnit  : %.6f ms", summary.avgCallMs))
+    line(string.format("P50 / P90 / P99 / Max : %.3f ms / %.3f ms / %.3f ms / %.3f ms", summary.p50, summary.p90, summary.p99, summary.maxCallMs))
+    line(string.format("Worst frame (calls)   : %d", summary.worstFrameCalls))
     line("")
+    line("--- Module Breakdown (sorted by total cost) ---")
+    line(string.format("%-22s %-12s %-14s %-10s %s", "Module", "Total (s)", "Avg/call (ms)", "Calls", "Share"))
+    line(string.rep("-", 72))
+    local sortedModules = {}
+    for name, stats in pairs(moduleStats) do
+        table.insert(sortedModules, { name = name, stats = stats })
+    end
+    table.sort(sortedModules, function(a, b) return a.stats.time > b.stats.time end)
+    for _, mod in ipairs(sortedModules) do
+        local s = mod.stats
+        if s.count > 0 then
+            local avgMs   = (s.time / s.count) * 1000
+            local percent = (s.time / totalTime) * 100
+            line(string.format("%-22s %-12.4f %-14.6f %-10d %5.2f%%",
+                mod.name, s.time, avgMs, s.count, percent))
+        end
+    end
+    line("")
+    line("--- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---")
+    line(string.format("%-22s %-12s %-14s %-10s %s", "Funcion", "Total (s)", "Avg/call (ms)", "Calls", "Share"))
+    line(string.rep("-", 72))
+    local sortedExtra = {}
+    for name, stats in pairs(extraStats) do
+        table.insert(sortedExtra, { name = name, stats = stats })
+    end
+    table.sort(sortedExtra, function(a, b) return a.stats.time > b.stats.time end)
+    for _, item in ipairs(sortedExtra) do
+        local s = item.stats
+        if s.count > 0 then
+            local avgMs = (s.time / s.count) * 1000
+            local percent = (s.time / totalTime) * 100
+            line(string.format("%-22s %-12.4f %-14.6f %-10d %5.2f%%",
+                item.name, s.time, avgMs, s.count, percent))
+        end
+    end
+
+    -- Throttle check block (recompute target/focus counts inline)
+    if addonTable.Target and addonTable.Focus then
+        local targetPaintCount, focusPaintCount = 0, 0
+        local origTargetUpdate = addonTable.Target.UpdateTargetCDs
+        addonTable.Target.UpdateTargetCDs = function(...)
+            targetPaintCount = targetPaintCount + 1
+            return origTargetUpdate(...)
+        end
+        local origFocusUpdate = addonTable.Focus.UpdateFace
+        addonTable.Focus.UpdateFace = function(...)
+            focusPaintCount = focusPaintCount + 1
+            return origFocusUpdate(...)
+        end
+        local SIMULATED_EVENTS = 100
+        for i = 1, SIMULATED_EVENTS do
+            Mocks.AdvanceTime(0.01)
+            Mocks.FireEvent("SPELL_UPDATE_COOLDOWN")
+        end
+        line("")
+        line("--- Throttle check: Target/Focus repaints bajo rafaga de eventos ---")
+        line(string.format("Eventos SPELL_UPDATE_COOLDOWN simulados : %d (en ~1s simulado)", SIMULATED_EVENTS))
+        line(string.format("Target:UpdateTargetCDs() llamadas reales: %d", targetPaintCount))
+        line(string.format("Focus:UpdateFace() llamadas reales       : %d", focusPaintCount))
+        line("(Si estos numeros son cercanos a " .. SIMULATED_EVENTS .. ", el debounce actual NO esta limitando el repintado real y hace falta un throttle explicito, p.ej. limitar a max 1 repintado cada 0.1s con C_Timer)")
+        line("")
+    end
+
+    local report = table.concat(lines, "\n")
+    return summary, report
 end
 
-line(string.rep("=", 72))
-line("")
+-- Main: run multiple passes with different seeds and aggregate results
+print(string.format("Running benchmark: %d runs x %d iterations x %d nameplates (base seed=%d)", NUM_RUNS, ITERATIONS, NUM_NAMEPLATES, BASE_SEED))
+local allSummaries = {}
+local allReports = {}
+for run = 1, NUM_RUNS do
+    -- reset per-run instrumentation counters
+    moduleStats = {}
+    for name, module in pairs(addonTable.Modules) do
+        if type(module.UpdateNamePlate) == "function" then
+            moduleStats[name] = { count = 0, time = 0 }
+            local orig = module.UpdateNamePlate
+            module.UpdateNamePlate = function(self, unit, nameplate, snapshot)
+                local start = os.clock()
+                orig(self, unit, nameplate, snapshot)
+                local elapsed = os.clock() - start
+                moduleStats[name].count = moduleStats[name].count + 1
+                moduleStats[name].time  = moduleStats[name].time  + elapsed
+            end
+        end
+    end
+    extraStats = {}
+    WrapFunction(addonTable.Decision, "ShouldSimplifyUnit")
+    WrapFunction(addonTable.Classification, "GetEliteType")
+    WrapFunction(addonTable.Threat, "PlayerHasAggro")
+    WrapFunction(addonTable.Absorb, "HasAbsorb")
 
--- 6. Print to stdout
-local report = table.concat(lines, "\n")
-print(report)
+    local seed = BASE_SEED + run
+    local summary, report = run_single(run, seed)
+    allSummaries[#allSummaries + 1] = summary
+    allReports[#allReports + 1] = report
+end
 
--- 7. Save to tests/results/
+-- Aggregate results: compute medians for p90 and avgCallMs
+local function median(values)
+    table.sort(values)
+    local n = #values
+    if n == 0 then return 0 end
+    if n % 2 == 1 then return values[(n+1)/2] end
+    return (values[n/2] + values[n/2 + 1]) / 2
+end
+local p90_vals = {}
+local avg_vals = {}
+for _, s in ipairs(allSummaries) do
+    p90_vals[#p90_vals + 1] = s.p90
+    avg_vals[#avg_vals + 1] = s.avgCallMs
+end
+local agg_p90 = median(p90_vals)
+local agg_avg = median(avg_vals)
+
+-- Write aggregated report into single file
 local dateTag   = os.date("%Y%m%d_%H%M%S")
-local outPath   = "tests/results/benchmark_" .. dateTag .. ".txt"
+local outPath   = "tests/results/benchmark_aggregated_" .. dateTag .. ".txt"
 local fh, err   = io.open(outPath, "w")
 if fh then
-    fh:write(report)
+    fh:write("Aggregated Benchmark Runs: " .. #allSummaries .. "\n\n")
+    for i, rep in ipairs(allReports) do
+        fh:write(rep)
+        fh:write("\n" .. string.rep("=", 72) .. "\n")
+    end
+    fh:write(string.format("\nAGGREGATE SUMMARY (median across runs): p90 = %.4f ms, avgApplyToUnit = %.6f ms\n", agg_p90, agg_avg))
     fh:close()
-    print("Results saved to: " .. outPath)
+    print("Aggregated results saved to: " .. outPath)
 else
-    io.stderr:write("Warning: could not write results file: " .. tostring(err) .. "\n")
+    io.stderr:write("Warning: could not write aggregated results file: " .. tostring(err) .. "\n")
 end
 
--- 8. Umbral de regresion automatica
--- Regression threshold: use P90 per-ApplyToUnit as a conservative indicator.
-local REGRESSION_THRESHOLD_MS = 2.5 -- ajustar tras confirmar el baseline post-refactor
-if p90 > REGRESSION_THRESHOLD_MS then
-    error(string.format(
-        "REGRESION DE PERFORMANCE: p90 ApplyToUnit = %.4fms supera el umbral de %.4fms",
-        p90, REGRESSION_THRESHOLD_MS))
+-- Print a concise aggregated summary and perform regression check
+local REGRESSION_THRESHOLD_MS = 2.5 -- conservative threshold for p90 (ms)
+print(string.format("Aggregated median p90 = %.4f ms, median avg = %.6f ms", agg_p90, agg_avg))
+if agg_p90 > REGRESSION_THRESHOLD_MS then
+    io.stderr:write(string.format("REGRESSION DETECTADA: median p90 = %.4f ms > threshold %.4f ms\n", agg_p90, REGRESSION_THRESHOLD_MS))
+    os.exit(1)
+else
+    print(string.format("Performance OK: median p90 = %.4f ms (threshold: %.4f ms)", agg_p90, REGRESSION_THRESHOLD_MS))
 end
-print(string.format("Performance OK: p90 ApplyToUnit = %.4fms (umbral: %.4fms)", p90, REGRESSION_THRESHOLD_MS))
+

@@ -78,6 +78,11 @@ end
 handlers["UNIT_DISPLAYPOWER"] = HandleUnitStateChange
 handlers["UNIT_CLASSIFICATION_CHANGED"] = HandleUnitStateChange
 handlers["UNIT_LEVEL"] = HandleUnitStateChange
+handlers["UNIT_ABSORB_AMOUNT_CHANGED"] = function(self, event, unit)
+    if unit and unit:match("^nameplate%d+$") then
+        Minimizer.Core.ApplyToUnit(unit)
+    end
+end
 
 handlers["UNIT_THREAT_SITUATION_UPDATE"] = function(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then
