@@ -14,6 +14,22 @@ function Minimizer.Core.GetPlateGeneration(token)
     return Minimizer.Core.plateGeneration[token] or 0
 end
 
+-- Temporada de shields: marcar persistentemente si una nameplate mostro
+-- alguna vez un shield para que el color (no la simplificacion) no se
+-- pierda cuando Blizzard ocultara el indicador. SOLO afecta color.
+function Minimizer.Core.MarkAbsorbSeen(unit, nameplate, hasAbsorbNow)
+    if not nameplate then return hasAbsorbNow == true end
+    local currentGen = Minimizer.Core.GetPlateGeneration(unit)
+    if nameplate.MinimizerAbsorbPersistentGen ~= currentGen then
+        nameplate.MinimizerAbsorbPersistentGen = currentGen
+        nameplate.MinimizerHasHadAbsorb = nil
+    end
+    if hasAbsorbNow then
+        nameplate.MinimizerHasHadAbsorb = true
+    end
+    return nameplate.MinimizerHasHadAbsorb == true
+end
+
 -- ============================================================================
 -- Red de seguridad: ApplyToAll periodico de bajo coste.
 --
@@ -101,6 +117,8 @@ local function BuildSnapshot(unit, nameplate)
     local s = scratchSnapshot
     s.eliteType = Minimizer.Classification.GetEliteType(unit)
     s.hasAbsorb = Minimizer.Absorb.HasAbsorb(unit, nameplate)
+    -- persistente para color; Decision.lua sigue leyendo s.hasAbsorb vivo
+    s.hasHadAbsorb = Minimizer.Core.MarkAbsorbSeen(unit, nameplate, s.hasAbsorb)
     s.hasAggro = Minimizer.Threat.PlayerHasAggro(unit)
     s.isPvP = Minimizer.Utils.IsPvPUnit(unit)
     s.isCasting, s.isUninterruptible, s.rawUninterruptible, s.isChanneling = Minimizer.Cast.GetState(unit)
@@ -115,7 +133,7 @@ local function BuildSnapshot(unit, nameplate)
         s.displayKind = "focus"
     elseif s.hasAggro then
         s.displayKind = "aggro"
-    elseif s.hasAbsorb then
+    elseif s.hasHadAbsorb then
         s.displayKind = "absorb"
     else
         s.displayKind = s.eliteType
@@ -132,7 +150,8 @@ function Minimizer.Core.ComputeDisplayKind(unit, nameplate)
     if Minimizer.Threat and Minimizer.Threat.PlayerHasAggro and Minimizer.Threat.PlayerHasAggro(unit) then
         return "aggro"
     end
-    if Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate) then
+    local hasAbsorbNow = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
+    if Minimizer.Core and Minimizer.Core.MarkAbsorbSeen and Minimizer.Core.MarkAbsorbSeen(unit, nameplate, hasAbsorbNow) then
         return "absorb"
     end
     if Minimizer.Classification and Minimizer.Classification.GetEliteType then
@@ -229,6 +248,8 @@ function Minimizer.Core.ClearNeverSimplify(unit)
         nameplate.MinimizerDesimplifiedPersistentGen = nil
         nameplate.MinimizerState = nil
         nameplate.MinimizerCastBar = nil
+        nameplate.MinimizerHasHadAbsorb = nil
+        nameplate.MinimizerAbsorbPersistentGen = nil
     end
     Minimizer.ActiveNameplates[unit] = nil
 end

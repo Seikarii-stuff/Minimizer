@@ -9,6 +9,51 @@ Minimizer.HealthBarColor = HealthBarColor
 
 local COLORS = Minimizer.Constants.HealthColors
 
+local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
+local UnitHealthMax = UnitHealthMax
+
+local OVERSHIELD_ALPHA = 1
+
+-- Overlay propio (no el indicator nativo). Mismo patron que
+-- BloodShieldOverlay/AbsorbIndicator.lua: StatusBar encima de la
+-- healthBar, con el numero de absorb pasado DIRECTO a SetValue como sink.
+local function EnsureOvershieldBar(healthBar)
+    local bar = healthBar.MinimizerOvershieldBar
+    if bar then return bar end
+
+    bar = CreateFrame("StatusBar", nil, healthBar)
+    bar:SetAllPoints(healthBar)
+    bar:SetFrameLevel((healthBar:GetFrameLevel() or 0) + 1)
+    bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+    bar:SetStatusBarColor(1, 1, 1, OVERSHIELD_ALPHA)
+    bar:SetOrientation("HORIZONTAL")
+    bar:SetReverseFill(true)
+    bar:EnableMouse(false)
+    bar:Hide()
+
+    healthBar.MinimizerOvershieldBar = bar
+    return bar
+end
+
+local function UpdateOvershieldBar(bar, absorb, maxHealth)
+    local absorbIsSecret = Minimizer.Utils.IsSecretValue(absorb)
+    local maxHealthIsSecret = Minimizer.Utils.IsSecretValue(maxHealth)
+    if not absorbIsSecret and not maxHealthIsSecret then
+        if bar:IsShown() and bar.MinimizerLastAbsorb == absorb and bar.MinimizerLastMaxHealth == maxHealth then
+            return
+        end
+        bar.MinimizerLastAbsorb = absorb
+        bar.MinimizerLastMaxHealth = maxHealth
+    else
+        bar.MinimizerLastAbsorb = nil
+        bar.MinimizerLastMaxHealth = nil
+    end
+
+    bar:SetMinMaxValues(0, maxHealth)
+    bar:SetValue(absorb)
+    bar:Show()
+end
+
 function HealthBarColor:GetHealthBar(nameplate)
     return Minimizer.Utils.GetHealthBar(nameplate)
 end
@@ -78,6 +123,20 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
 
     local isActiveCastOrChannel = isCasting == true or isChanneling == true
 
+    -- Sobreescudo: la magnitud SOLO se pasa como sink directo, nunca se
+    -- compara. El booleano (hasAbsorbNow) sigue siendo la unica fuente
+    -- segura para decidir mostrar/ocultar.
+    local hasAbsorbNow = snapshot and snapshot.hasAbsorb
+    if hasAbsorbNow == nil then
+        hasAbsorbNow = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
+    end
+    local overshieldBar = EnsureOvershieldBar(healthBar)
+    if hasAbsorbNow and UnitGetTotalAbsorbs then
+        UpdateOvershieldBar(overshieldBar, UnitGetTotalAbsorbs(unit), UnitHealthMax(unit))
+    else
+        overshieldBar:Hide()
+    end
+
     --[[
         LEYENDA M+ (v2 -- ver README para el porque del cambio):
         Prioridad descendente — la primera regla que aplica gana:
@@ -118,9 +177,14 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
 
     -- displayKind ya resuelve la prioridad focus > aggro > absorb > eliteType
     -- (calculado en Core.BuildSnapshot). Aqui solo leemos el resultado.
-    local isSuperior = baseKind == "boss" or baseKind == "miniboss"
-    -- 'Azules' (caster) no siguen las reglas de casteo; solo cambian por focus/aggro/absorb
-    local isSpecial  = baseKind == "focus" or baseKind == "absorb" or baseKind == "aggro" or baseKind == "caster"
+    -- IMPORTANTE (temporada de shields): baseKind puede ser "absorb" para
+    -- CUALQUIER unidad que alguna vez enseño el indicador, incluido un boss
+    -- o un caster azul. isSuperior/isCasterClass miran la clasificacion REAL.
+    local eliteType = (snapshot and snapshot.eliteType) or Minimizer.Classification.GetEliteType(unit)
+    local isSuperior = eliteType == "boss" or eliteType == "miniboss"
+    local isCasterClass = eliteType == "caster"
+    -- 'absorb' YA NO esta en isSpecial: los casters siguen ignorando el cast
+    local isSpecial  = baseKind == "focus" or baseKind == "aggro" or isCasterClass
 
     if not isSpecial and not isSuperior then
         -- Regla 5 & 6: CUALQUIER inferior (melee, caster ya excluido arriba
@@ -224,6 +288,13 @@ function HealthBarColor:OnNamePlateRemoved(_, nameplate)
         nameplate.MinimizerPersistentCastColorKind = nil
         nameplate.MinimizerHasAbsorb = nil
         nameplate.MinimizerLastAppliedColor = nil
+        local healthBar = self:GetHealthBar(nameplate)
+        local bar = healthBar and healthBar.MinimizerOvershieldBar
+        if bar then
+            bar:Hide()
+            bar.MinimizerLastAbsorb = nil
+            bar.MinimizerLastMaxHealth = nil
+        end
     end
 end
 
