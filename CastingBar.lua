@@ -20,7 +20,6 @@ local type = type
 -- EvaluateColorRGB (no se guarda la referencia en ningun lado), asi que
 -- reutilizarlas es seguro: no hay aliasing entre nameplates distintas porque
 -- el resultado se copia a r,g,b inmediatamente después.
-local _scratchCurrentColor = {0, 0, 0}
 local _scratchDangerColor = {0, 0, 0}
 
 local function IsSpellTargetingPlayer(unit)
@@ -101,9 +100,6 @@ end
 function CastingBar:ApplyCastColor(castBar, unit, isCasting, isChanneling, ready, uninterruptible)
     if not castBar or type(castBar.SetStatusBarColor) ~= "function" then return end
     local r, g, b, a = 1, 1, 1, 1
-    if castBar.GetStatusBarColor then
-        r, g, b, a = castBar:GetStatusBarColor()
-    end
 
     if isCasting or isChanneling then
         -- Misma leyenda para cast Y channel:
@@ -114,9 +110,8 @@ function CastingBar:ApplyCastColor(castBar, unit, isCasting, isChanneling, ready
         -- nunca se compara con if/==, solo se pasa a EvaluateColorRGB (curve
         -- C-side de Blizzard).
         local dangerR, dangerG, dangerB = Minimizer.Utils.EvaluateColorRGB(ready, COLORS.ready, COLORS.channel)
-        _scratchCurrentColor[1], _scratchCurrentColor[2], _scratchCurrentColor[3] = r, g, b
         _scratchDangerColor[1], _scratchDangerColor[2], _scratchDangerColor[3] = dangerR, dangerG, dangerB
-        r, g, b = Minimizer.Utils.EvaluateColorRGB(uninterruptible, _scratchCurrentColor, _scratchDangerColor)
+        r, g, b = Minimizer.Utils.EvaluateColorRGB(uninterruptible, Minimizer.Constants.HealthColors.superiorUninterruptible, _scratchDangerColor)
         a = 1
     end
 
