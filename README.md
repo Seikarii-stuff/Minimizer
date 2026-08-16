@@ -374,6 +374,17 @@ Causa raíz conocida y ya parcheada parcialmente: las unidades fuera de combate 
 
 **Sincronización con Target/Focus nativos:** el Target y el Focus están forzados a maximizarse por Blizzard. `Minimizer.Decision.ShouldSimplifyUnit` devuelve `false, "target"` / `false, "focus"` explícitamente para alinear la respuesta del addon con lo que Blizzard impone. Esto es intencional, no un bug.
 
+**Nameplates que no aparecen en pulls masivos:** (limitación del motor, NO bug
+de Minimizer).** Confirmado en pulls de ~80 unidades: algunas nameplates no
+reciben plate del cliente hasta que muere otra unidad y libera un slot del
+pool interno de Blizzard. `C_NamePlate.GetNamePlateForUnit` devuelve `nil`
+para esas unidades mientras tanto — no hay widget que Minimizer pueda
+pintar, sea cual sea su color/estado. En cuanto Blizzard asigna el plate
+(`NAME_PLATE_UNIT_ADDED`), `Core.ApplyToUnit` corre de inmediato y pinta
+correctamente sin delay perceptible. No existe API de addon para forzar
+más plates simultáneas ni para priorizar qué unidad recibe una. No
+"arreglar" esto buscando el bug en Absorb/HealthBarColor — no está ahí.
+
 ---
 
 ## 9. Optimización pendiente
