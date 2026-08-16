@@ -37,17 +37,12 @@ end
 local SAFETY_NET_INTERVAL = 2.0
 local _safetyNetStarted = false
 
-local function ScheduleSafetyNet()
-    C_Timer.After(SAFETY_NET_INTERVAL, function()
-        Minimizer.Core.ApplyToAll(false)
-        ScheduleSafetyNet()
-    end)
-end
-
 function Minimizer.Core.StartSafetyNet()
     if _safetyNetStarted then return end
     _safetyNetStarted = true
-    ScheduleSafetyNet()
+    C_Timer.NewTicker(SAFETY_NET_INTERVAL, function()
+        Minimizer.Core.ApplyToAll(false)
+    end)
 end
 
 function Minimizer.Core.IncrementPlateGeneration(token)
@@ -59,6 +54,7 @@ end
 
 local C_NamePlate = C_NamePlate
 local C_NamePlateManager = C_NamePlateManager
+local UnitIsUnit = UnitIsUnit
 local type = type
 local pcall = pcall
 local GetTime = GetTime
@@ -106,6 +102,7 @@ local function BuildSnapshot(unit, nameplate)
     s.eliteType = Minimizer.Classification.GetEliteType(unit)
     s.hasAbsorb = Minimizer.Absorb.HasAbsorb(unit, nameplate)
     s.hasAggro = Minimizer.Threat.PlayerHasAggro(unit)
+    s.isPvP = Minimizer.Utils.IsPvPUnit(unit)
     s.isCasting, s.isUninterruptible, s.rawUninterruptible, s.isChanneling = Minimizer.Cast.GetState(unit)
 
     -- Prioridad focus > aggro > absorb > eliteType, calculada inline

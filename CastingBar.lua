@@ -126,10 +126,14 @@ function CastingBar:ApplyCastColor(castBar, unit, isCasting, isChanneling, ready
     end)
 end
 
-function CastingBar:UpdateNamePlate(unit, nameplate)
+function CastingBar:UpdateNamePlate(unit, nameplate, snapshot)
     if not unit or not UnitExists(unit) then return end
     -- En PvP dejamos el castbar de Blizzard sin modificar.
-    if Minimizer.Utils.IsPvPUnit(unit) then return end
+    -- isPvP viene del snapshot compartido (Core.BuildSnapshot) en el pase
+    -- normal; fallback a calculo directo si nos llaman sin snapshot.
+    local isPvP = snapshot and snapshot.isPvP
+    if isPvP == nil then isPvP = Minimizer.Utils.IsPvPUnit(unit) end
+    if isPvP then return end
     local castBar = self:GetCastBar(nameplate)
     if not castBar or type(castBar.SetStatusBarColor) ~= "function" then return end
 

@@ -42,6 +42,7 @@ Mocks.frames = {}
 Mocks.events = {}
 Mocks.timers = {}
 Mocks.cooldowns = {}
+Mocks.unitClassificationCallCounts = {}
 
 function _G.GetTime()
     return Mocks.time
@@ -198,6 +199,23 @@ _G.C_Timer = {
     end,
 }
 
+_G.C_Timer.NewTicker = function(interval, callback)
+    local ticker = { cancelled = false }
+    local function reschedule()
+        if ticker.cancelled then return end
+        table.insert(Mocks.timers, {
+            fireTime = Mocks.time + interval,
+            callback = function()
+                callback(ticker)
+                reschedule()
+            end,
+        })
+    end
+    reschedule()
+    function ticker:Cancel() self.cancelled = true end
+    return ticker
+end
+
 _G.C_CurveUtil = {
     EvaluateColorValueFromBoolean = function(state, valueIfTrue, valueIfFalse)
         local resolved = state
@@ -341,6 +359,8 @@ end
 
 function _G.UnitClassification(unit)
     local u = getUnit(unit)
+    -- Count calls for tests that want to assert how often this API is used.
+    Mocks.unitClassificationCallCounts[unit] = (Mocks.unitClassificationCallCounts[unit] or 0) + 1
     return u and u.classification or "normal"
 end
 

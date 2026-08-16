@@ -19,7 +19,12 @@ local HookIndicator
 function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     if not unit or not UnitExists(unit) then return end
     -- En PvP dejamos la healthbar de Blizzard sin modificar.
-    if Minimizer.Utils.IsPvPUnit(unit) then return end
+    -- isPvP viene del snapshot compartido (Core.BuildSnapshot) en el pase
+    -- normal; fallback a calculo directo solo si nos llaman sin snapshot
+    -- (hooks de repintado nativo, igual que baseKind mas abajo en esta func).
+    local isPvP = snapshot and snapshot.isPvP
+    if isPvP == nil then isPvP = Minimizer.Utils.IsPvPUnit(unit) end
+    if isPvP then return end
     local healthBar = self:GetHealthBar(nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
     HookHealthBar(healthBar)

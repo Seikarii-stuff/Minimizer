@@ -133,18 +133,14 @@ do
     check(addonTable.Classification.GetEliteType("t_melee") == "melee",
         "Classification: sin mana y sin elite/trivial = melee")
 
-    local realUnitClassification = _G.UnitClassification
-    local unitClassificationCalls = 0
-    _G.UnitClassification = function(unit)
-        unitClassificationCalls = unitClassificationCalls + 1
-        return realUnitClassification(unit)
-    end
+    Mocks.unitClassificationCallCounts = Mocks.unitClassificationCallCounts or {}
+    local before = Mocks.unitClassificationCallCounts["t_cache_gen"] or 0
     Mocks.CreateTestUnit("t_cache_gen", { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
     addonTable.Classification.GetEliteType("t_cache_gen")
     addonTable.Classification.GetEliteType("t_cache_gen")
-    check(unitClassificationCalls == 1,
+    local after = Mocks.unitClassificationCallCounts["t_cache_gen"] or 0
+    check(after - before == 1,
         "Classification: memoiza la clasificacion dentro de la misma generacion")
-    _G.UnitClassification = realUnitClassification
 end
 
 -- --- TEST GROUP 2A: Utils.IsSpellKnownByPlayer / Widgets.GetCDSpellID override ---
