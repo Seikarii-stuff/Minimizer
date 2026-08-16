@@ -45,7 +45,11 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     if snapshot then
         baseKind = snapshot.displayKind
     else
-        baseKind = Minimizer.Classification.GetEliteType(unit)
+        -- Use the shared ComputeDisplayKind helper from Core so the fallback
+        -- replicates the same priority logic (focus > aggro > absorb > eliteType)
+        -- and does not accidentally ignore absorb/aggro/focus when called
+        -- from native Blizzard repaints (SetStatusBarColor hooks).
+        baseKind = Minimizer.Core and Minimizer.Core.ComputeDisplayKind and Minimizer.Core.ComputeDisplayKind(unit, nameplate) or Minimizer.Classification.GetEliteType(unit)
     end
 
     nameplate.MinimizerHasAbsorb = baseKind == "absorb"

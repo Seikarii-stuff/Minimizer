@@ -610,6 +610,30 @@ do
 end
 
 -- --- TEST GROUP 7: Target halo uses cooldown logic, not a static fake fill ---
+-- === BUG FIX TEST: HealthBarColor survives native Blizzard repaints when absorb is active ===
+do
+    local token = "absorb_test"
+    Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
+    local np = Mocks.CreateTestNameplate(token)
+    -- Simulate the absorb indicator existing on the healthbar (as in real UI templates)
+    np.UnitFrame.healthBar.totalAbsorbOverlay = CreateFrame("Frame")
+    np.UnitFrame.healthBar.totalAbsorbOverlay:Show()
+
+    -- Ensure ApplyToUnit paints the absorb color
+    addonTable.Core.ApplyToUnit(token)
+    local hb = addonTable.Utils.GetHealthBar(np)
+    local r, g, b = hb:GetStatusBarColor()
+    local ac = addonTable.Constants.HealthColors.absorb
+    check(math.abs(r - ac[1]) < 0.01 and math.abs(g - ac[2]) < 0.01 and math.abs(b - ac[3]) < 0.01,
+        "BUG_FIX: ApplyToUnit pinta la barra en color absorb cuando el indicador esta visible")
+
+    -- Simulate a native Blizzard repaint calling SetStatusBarColor directly.
+    hb:SetStatusBarColor(1, 1, 1, 1)
+    local r2, g2, b2 = hb:GetStatusBarColor()
+    check(math.abs(r2 - ac[1]) < 0.01 and math.abs(g2 - ac[2]) < 0.01 and math.abs(b2 - ac[3]) < 0.01,
+        "BUG_FIX: repintado nativo de Blizzard NO debe eliminar el color absorb")
+end
+
 do
     local halo = addonTable.Widgets.CreateHalo("TestTargetHalo", nil, 46)
     Mocks.cooldowns[107574] = { start = Mocks.time, duration = 30 }

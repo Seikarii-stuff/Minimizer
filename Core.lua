@@ -71,18 +71,30 @@ local function BuildSnapshot(unit, nameplate)
     s.hasAbsorb = Minimizer.Absorb.HasAbsorb(unit, nameplate)
     s.hasAggro = Minimizer.Threat.PlayerHasAggro(unit)
     s.isCasting, s.isUninterruptible, s.rawUninterruptible, s.isChanneling = Minimizer.Cast.GetState(unit)
-    -- displayKind: prioridad aggro > absorb > eliteType. Logica identica a la
-    -- que antes vivia en HealthBarColor:GetKind, ahora centralizada aqui.
-    if UnitIsUnit(unit, "focus") then
-        s.displayKind = "focus"
-    elseif s.hasAggro then
-        s.displayKind = "aggro"
-    elseif s.hasAbsorb then
-        s.displayKind = "absorb"
-    else
-        s.displayKind = s.eliteType
-    end
+    -- displayKind: prioridad focus > aggro > absorb > eliteType.
+    -- Delegar la logica a la funcion publica ComputeDisplayKind para que otros
+    -- módulos (p.ej. HealthBarColor hook fallback) puedan reutilizarla sin
+    -- duplicar la prioridad y divergirse en el futuro.
+    s.displayKind = Minimizer.Core.ComputeDisplayKind(unit, nameplate)
     return s
+end
+
+function Minimizer.Core.ComputeDisplayKind(unit, nameplate)
+    if not unit then return nil end
+    -- Note: nameplate is optional but passed through to HasAbsorb where needed
+    if UnitIsUnit(unit, "focus") then
+        return "focus"
+    end
+    if Minimizer.Threat and Minimizer.Threat.PlayerHasAggro and Minimizer.Threat.PlayerHasAggro(unit) then
+        return "aggro"
+    end
+    if Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate) then
+        return "absorb"
+    end
+    if Minimizer.Classification and Minimizer.Classification.GetEliteType then
+        return Minimizer.Classification.GetEliteType(unit)
+    end
+    return nil
 end
 
 function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
