@@ -357,25 +357,25 @@ local allSummaries = {}
 local allReports = {}
 for run = 1, NUM_RUNS do
     -- reset per-run instrumentation counters
+    -- NOTE: Do NOT re-wrap functions each run. Wrapping is performed once
+    -- above during initialization; re-wrapping here would stack wrappers and
+    -- artificially inflate timings and allocations across runs.
     moduleStats = {}
     for name, module in pairs(addonTable.Modules) do
         if type(module.UpdateNamePlate) == "function" then
             moduleStats[name] = { count = 0, time = 0 }
-            local orig = module.UpdateNamePlate
-            module.UpdateNamePlate = function(self, unit, nameplate, snapshot)
-                local start = os.clock()
-                orig(self, unit, nameplate, snapshot)
-                local elapsed = os.clock() - start
-                moduleStats[name].count = moduleStats[name].count + 1
-                moduleStats[name].time  = moduleStats[name].time  + elapsed
-            end
         end
     end
-    extraStats = {}
-    WrapFunction(addonTable.Decision, "ShouldSimplifyUnit")
-    WrapFunction(addonTable.Classification, "GetEliteType")
-    WrapFunction(addonTable.Threat, "PlayerHasAggro")
-    WrapFunction(addonTable.Absorb, "HasAbsorb")
+    -- Reset counters in extraStats without replacing the table so that the
+    -- wrappers created at initialization keep their references. Replacing
+    -- the table would make existing wrappers attempt to index missing keys
+    -- and crash (see discussion in the test plan).
+    for k, v in pairs(extraStats) do
+        if type(v) == "table" then
+            v.count = 0
+            v.time = 0
+        end
+    end
 
     local seed = BASE_SEED + run
     local summary, report = run_single(run, seed)
@@ -429,4 +429,5 @@ if agg_p90 > REGRESSION_THRESHOLD_MS then
 else
     print(string.format("Performance OK: median p90 = %.4f ms (threshold: %.4f ms)", agg_p90, REGRESSION_THRESHOLD_MS))
 end
+
 
