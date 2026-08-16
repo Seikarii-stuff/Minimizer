@@ -1,4 +1,4 @@
-## Interface: 120100, 120007
+## Interface: 120100
 ## Title: Minimizer
 ## Notes: Simplifica nameplates enemigas usando APIs nativas de Blizzard. /simp abre el menu
 ## Author: Seikarii
