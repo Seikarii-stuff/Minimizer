@@ -6,11 +6,15 @@ Minimizer.Interrupt = Minimizer.Interrupt or {}
 
 local INTERRUPT_SPELLS = Minimizer.Data.INTERRUPT_SPELLS
 
--- Cache: se recalcula solo cuando cambia de clase (no pasa en runtime) o al
--- refrescar. No hace falta invalidar por talento porque el spellID de
--- interrupcion no cambia con la especializacion, solo su cooldown.
+-- Cache: se recalcula cuando cambia la clase o la especializacion, porque
+-- algunas clases tienen varios interrupt disponibles y el conocido cambia.
 local cachedSpellID
 local cachedSpellIDResolved = false
+
+function Minimizer.Interrupt.InvalidateSpellIDCache()
+    cachedSpellID = nil
+    cachedSpellIDResolved = false
+end
 
 function Minimizer.Interrupt.GetSpellID()
     if cachedSpellIDResolved then

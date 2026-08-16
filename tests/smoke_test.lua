@@ -160,6 +160,37 @@ do
     local wrongClassOverride = addonTable.Widgets.GetCDSpellID(addonTable.Data.DEFENSIVE_CDS, 1719)
     check(wrongClassOverride ~= 1719,
         "Widgets: GetCDSpellID cae a auto si override no pertenece a la lista de la clase")
+
+    local cacheStable = addonTable.Widgets.GetCDSpellID(addonTable.Data.OFFENSIVE_CDS, 1719)
+    local cacheStable2 = addonTable.Widgets.GetCDSpellID(addonTable.Data.OFFENSIVE_CDS, 1719)
+    check(cacheStable == 1719 and cacheStable2 == 1719,
+        "Widgets: el cache de override es estable para la misma clave")
+end
+
+-- --- TEST GROUP 2B: Interrupt cache invalidation ---
+do
+    Mocks.CreateTestUnit("player", { name = "Player", health = 100, healthMax = 100, level = 70, faction = "Alliance", isPlayer = true, class = "HUNTER", classId = 3, guid = "player_guid" })
+    Mocks.playerSpells = {
+        [147362] = true,
+        [187707] = false,
+    }
+    if addonTable.Interrupt and addonTable.Interrupt.InvalidateSpellIDCache then
+        addonTable.Interrupt.InvalidateSpellIDCache()
+    end
+    local firstInterrupt = addonTable.Interrupt and addonTable.Interrupt.GetSpellID and addonTable.Interrupt.GetSpellID()
+    check(firstInterrupt == 147362,
+        "Interrupt: resuelve el interrupt conocido de la spec actual para Hunter")
+
+    Mocks.playerSpells = {
+        [147362] = false,
+        [187707] = true,
+    }
+    if addonTable.Interrupt and addonTable.Interrupt.InvalidateSpellIDCache then
+        addonTable.Interrupt.InvalidateSpellIDCache()
+    end
+    local nextInterrupt = addonTable.Interrupt and addonTable.Interrupt.GetSpellID and addonTable.Interrupt.GetSpellID()
+    check(nextInterrupt == 187707,
+        "Interrupt: invalida el cache al cambiar de spec")
 end
 
 -- --- TEST GROUP 2: Decision.ShouldSimplifyUnit ---

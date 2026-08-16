@@ -42,9 +42,9 @@ local cdSpellCache = setmetatable({}, { __mode = "k" }) -- weak keys, una entrad
 
 local function GetCooldownCacheKey(dbTable, override)
     if override == nil then
-        return dbTable
+        return tostring(dbTable)
     end
-    return { dbTable = dbTable, override = override }
+    return tostring(dbTable) .. ":" .. tostring(override)
 end
 
 function Minimizer.Widgets.GetCDSpellID(dbTable, override)

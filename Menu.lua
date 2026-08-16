@@ -47,6 +47,29 @@ local function GetWidgetText(frame)
     return frame.Text or nil
 end
 
+local function ResolveSpellName(spellID)
+    if type(spellID) ~= "number" then
+        return nil
+    end
+
+    if C_Spell then
+        if C_Spell.GetSpellInfo then
+            local info = C_Spell.GetSpellInfo(spellID)
+            if info and type(info.name) == "string" and info.name ~= "" then
+                return info.name
+            end
+        end
+        if C_Spell.GetSpellName then
+            local name = C_Spell.GetSpellName(spellID)
+            if type(name) == "string" and name ~= "" then
+                return name
+            end
+        end
+    end
+
+    return "Spell " .. tostring(spellID)
+end
+
 local function BuildSpellOptions(tableKey)
     local classToken = GetClassToken()
     local source = Minimizer.Data and Minimizer.Data[tableKey] and Minimizer.Data[tableKey][classToken]
@@ -58,10 +81,9 @@ local function BuildSpellOptions(tableKey)
     end
     for _, entry in ipairs(source) do
         if type(entry) == "number" then
-            local spellName = GetSpellInfo and GetSpellInfo(entry) or ("Spell " .. tostring(entry))
-            table.insert(options, { text = spellName, value = entry })
+            table.insert(options, { text = ResolveSpellName(entry), value = entry })
         elseif type(entry) == "table" and type(entry.id) == "number" then
-            local spellName = entry.name or (GetSpellInfo and GetSpellInfo(entry.id) or ("Spell " .. tostring(entry.id)))
+            local spellName = entry.name or ResolveSpellName(entry.id)
             table.insert(options, { text = spellName, value = entry.id })
         end
     end
@@ -141,7 +163,7 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
             end
         end
         if not foundName then
-            foundName = GetSpellInfo and GetSpellInfo(selectedValue) or ("Spell " .. tostring(selectedValue))
+            foundName = ResolveSpellName(selectedValue)
         end
         UIDropDownMenu_SetText(dropdown, foundName)
     end
