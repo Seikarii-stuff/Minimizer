@@ -5,7 +5,6 @@ local _, Minimizer = ...
 if not Minimizer then return end
 
 Minimizer.Config = Minimizer.Config or {}
-Minimizer.Config.VERSION = 2
 Minimizer.Config.DEFAULTS = {
     -- Default simplification percent. Set to 100 by default so the addon
     -- simplifies nameplates unless the user opts out.
@@ -22,10 +21,13 @@ Minimizer.Config.DEFAULTS = {
     },
 }
 
-Minimizer.Config.CHAR_DEFAULTS = {
-    targetOffensive = nil,
-    targetDefensive = nil,
-    focusCC = nil,
+-- No hay valores por defecto reales que asignar (todas las claves son overrides
+-- manuales de usuario, "sin override" YA es nil por ausencia). Se documenta la
+-- lista de claves válidas aquí en vez de fingir defaults que nunca existieron.
+Minimizer.Config.CHAR_DEFAULT_KEYS = {
+    "targetOffensive",
+    "targetDefensive",
+    "focusCC",
 }
 
 function Minimizer.Config.Initialize()
@@ -43,12 +45,10 @@ function Minimizer.Config.Initialize()
         end
     end
 
-    local charDefaults = Minimizer.Config.CHAR_DEFAULTS
-    for key, value in pairs(charDefaults) do
-        if MinimizerCharDB[key] == nil then
-            MinimizerCharDB[key] = value
-        end
-    end
+    -- No se asignan defaults (no existen valores por defecto reales para estas
+    -- claves, ver Minimizer.Config.CHAR_DEFAULT_KEYS). Se deja este bloque solo
+    -- para dejar constancia explícita de qué claves gestiona MinimizerCharDB,
+    -- sin fingir una inicialización que nunca tuvo efecto.
 
     -- Migración real de la configuración legacy: si algún usuario tenía un único
     -- flag string de focus, convierte la intención al modelo nuevo de dos booleans,
@@ -67,10 +67,12 @@ function Minimizer.Config.Initialize()
         MinimizerDB.enableFocusArrows = true
     end
 
-    local version = tonumber(MinimizerDB.version) or 0
-    if version < Minimizer.Config.VERSION then
-        MinimizerDB.version = Minimizer.Config.VERSION
-    end
+    -- Las migraciones de este archivo se disparan comprobando la EXISTENCIA
+    -- de la clave vieja (ej. MinimizerDB.focusIndicator ~= nil), no un número
+    -- de versión — así funcionan igual de bien aunque un usuario salte varias
+    -- versiones de golpe. Si en el futuro hace falta gatear una migración que
+    -- NO se pueda detectar por presencia/ausencia de clave, reintroducir aquí
+    -- un contador de versión que SÍ se lea en algún `if version < N`.
 
     return MinimizerDB, MinimizerCharDB
 end

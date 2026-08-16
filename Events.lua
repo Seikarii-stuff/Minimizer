@@ -236,14 +236,13 @@ EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_UPDATE")
 EventFrame:SetScript("OnEvent", OnEvent)
 
 -- Secure Hooks canonicos (sin cambios respecto al original)
+-- NOTA: OnNamePlateAdded NO se hookea. Toda la lógica de llegada (incremento
+-- de generación + ApplyToUnit) vive en el handler de NAME_PLATE_UNIT_ADDED
+-- (arriba en este archivo) para evitar doble incremento del mismo spawn en
+-- el mismo frame. Solo OnNamePlateRemoved necesita hook propio porque no
+-- existe un evento equivalente de "acaba de desaparecer" que dispare esta
+-- limpieza específica de forma fiable.
 if NamePlateDriverFrame then
-    hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit)
-        if not unit or not unit:match("^nameplate%d+$") then return end
-        -- Hook path intentionally left lightweight: NAME_PLATE_UNIT_ADDED
-        -- performs the generation increment and ApplyToUnit. Keeping the
-        -- increment only on the event avoids double-increment for the same
-        -- spawn in the same frame.
-    end)
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit)
         if not unit or not unit:match("^nameplate%d+$") then return end
         Minimizer.Core.ClearNeverSimplify(unit)

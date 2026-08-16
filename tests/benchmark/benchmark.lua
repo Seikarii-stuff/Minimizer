@@ -94,6 +94,13 @@ end
 -- profiling de "Module Breakdown" de arriba si no se instrumentan aparte).
 local extraStats = {}
 
+-- Compat shim: table.pack no existe en Lua 5.1, empaquetar valores y contar n.
+local function pack_results(...)
+    local t = {...}
+    t.n = select('#', ...)
+    return t
+end
+
 local function WrapFunction(namespace, fnName)
     if not namespace then return end
     local orig = namespace[fnName]
@@ -101,11 +108,15 @@ local function WrapFunction(namespace, fnName)
     extraStats[fnName] = { count = 0, time = 0 }
     namespace[fnName] = function(...)
         local start = os.clock()
-        local a, b, c, d = orig(...)
+        -- table.pack conserva TODOS los valores de retorno (incluye .n para
+        -- distinguir nils explícitos de "no hubo más valores"), a diferencia
+        -- de `local a,b,c,d = orig(...)` que truncaba silenciosamente a 4.
+        local results = (table.pack and table.pack(orig(...))) or pack_results(orig(...))
         local elapsed = os.clock() - start
         extraStats[fnName].count = extraStats[fnName].count + 1
         extraStats[fnName].time = extraStats[fnName].time + elapsed
-        return a, b, c, d
+        local unpack_fn = table.unpack or unpack
+        return unpack_fn(results, 1, results.n)
     end
 end
 

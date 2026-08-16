@@ -38,7 +38,16 @@ function Cache.SetUnitKeyWithGeneration(unit, key, value)
         Cache.units[unit] = state
     end
     local gen = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
-    state[key] = { value = value, gen = gen }
+    -- Reutilizar la entry existente en vez de crear una tabla nueva en cada
+    -- escritura: esta función se llama por cada unidad/clave/pase, así que
+    -- una tabla nueva por llamada es basura constante e innecesaria.
+    local entry = state[key]
+    if type(entry) == "table" then
+        entry.value = value
+        entry.gen = gen
+    else
+        state[key] = { value = value, gen = gen }
+    end
 end
 
 function Cache.InvalidateUnit(unit, kind)
@@ -46,9 +55,9 @@ function Cache.InvalidateUnit(unit, kind)
     local state = Cache.units[unit]
     if not state then return end
     if kind then
-        -- Remove keys equal to kind or starting with kind..":" (e.g. "threat:player").
+        local prefix = kind .. ":"
         for k in pairs(state) do
-            if k == kind or k:match("^"..kind..":") then
+            if k == kind or k:sub(1, #prefix) == prefix then
                 state[k] = nil
             end
         end
@@ -59,9 +68,10 @@ end
 
 function Cache.InvalidateAll(kind)
     if kind then
+        local prefix = kind .. ":"
         for _, state in pairs(Cache.units) do
             for k in pairs(state) do
-                if k == kind or k:match("^"..kind..":") then
+                if k == kind or k:sub(1, #prefix) == prefix then
                     state[k] = nil
                 end
             end

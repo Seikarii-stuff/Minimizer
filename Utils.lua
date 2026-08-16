@@ -35,6 +35,12 @@ function Minimizer.Utils.GetNamePlateForUnit(unit)
         return C_NamePlate.GetNamePlateForUnit(unit)
     end
 
+    -- CAMINO LENTO: itera TODAS las nameplates activas (C_NamePlate.GetNamePlates()
+    -- aloca una tabla nueva en cada llamada). Solo debería llegar aquí un `unit`
+    -- que NO sea un token nameplateN y que tampoco tenga ya un camino directo.
+    -- Para "target"/"focus" específicamente, usa siempre
+    -- C_NamePlate.GetNamePlateForUnit("target"/"focus") directo si Blizzard lo
+    -- soporta (así lo hacen ya Target.lua y Focus.lua) en vez de pasar por aquí.
     if C_NamePlate and C_NamePlate.GetNamePlates then
         for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
             local token = nameplate.namePlateUnitToken or (nameplate.UnitFrame and nameplate.UnitFrame.unit)
@@ -161,14 +167,12 @@ function Minimizer.Utils.Throttle(fn, interval)
     interval = interval or 0.033
     local lastTime = 0
     local pending = false
-    local lastArgs
-    return function(...)
+    return function()
         local now = GetTime()
-        lastArgs = {...}
         local elapsed = now - lastTime
         if elapsed >= interval then
             lastTime = now
-            fn(unpack(lastArgs))
+            fn()
         elseif not pending then
             pending = true
             local remaining = interval - elapsed
@@ -176,9 +180,7 @@ function Minimizer.Utils.Throttle(fn, interval)
             C_Timer.After(remaining, function()
                 pending = false
                 lastTime = GetTime()
-                if lastArgs then
-                    fn(unpack(lastArgs))
-                end
+                fn()
             end)
         end
     end

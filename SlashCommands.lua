@@ -73,10 +73,12 @@ SlashCmdList["MINIMIZER"] = function(msg)
         return
     end
 
-    -- Backwards-compatible numeric: treat >0 as enabled, 0 as disabled.
+    -- Compatibilidad legacy: se sigue aceptando /simp <0-100> por si algún
+    -- usuario tiene el hábito o un perfil/macro viejo, pero internamente
+    -- SIEMPRE se traduce a booleano y NUNCA se vuelve a escribir simplifyPercent.
     value = ClampSimplifyPercent(value)
     if not MinimizerDB then MinimizerDB = {} end
     MinimizerDB.simplifyEnabled = (value > 0)
-    print("|cff33ff99Minimizer|r: simplificación " .. (value > 0 and "habilitada" or "deshabilitada") .. " (map from " .. value .. "%)")
+    print("|cff33ff99Minimizer|r: simplificación " .. (value > 0 and "habilitada" or "deshabilitada"))
     Minimizer.Core.ApplyToAll()
 end

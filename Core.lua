@@ -47,9 +47,10 @@ end
 function Minimizer.Core.UpdateModules(unit, nameplate, snapshot)
     for name, module in pairs(Minimizer.Modules) do
         if type(module.UpdateNamePlate) == "function" then
-            local ok, err = pcall(function()
-                module:UpdateNamePlate(unit, nameplate, snapshot)
-            end)
+            -- pcall directo sobre la función + self + args: evita crear una
+            -- closure nueva por módulo/nameplate/pase (esto corre decenas de
+            -- veces por frame con nameplates activas).
+            local ok, err = pcall(module.UpdateNamePlate, module, unit, nameplate, snapshot)
             if not ok then
                 local now = GetTime and GetTime() or 0
                 local last = _module_error_throttle[name]
@@ -124,9 +125,6 @@ function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
         end
     end
 
-    if Minimizer.Markers and Minimizer.Markers.Update then
-        Minimizer.Markers.Update(npToken, nameplate)
-    end
     Minimizer.Core.UpdateModules(npToken, nameplate, snapshot)
 end
 
@@ -158,11 +156,9 @@ function Minimizer.Core.ClearNeverSimplify(unit)
     local nameplate = Minimizer.ActiveNameplates[unit] or Minimizer.Utils.GetNamePlateForUnit(unit)
     if nameplate then
         for name, module in pairs(Minimizer.Modules) do
-            if type(module.OnNamePlateRemoved) == "function" then
-                local ok, err = pcall(function()
-                    module:OnNamePlateRemoved(unit, nameplate)
-                end)
-                if not ok then
+                if type(module.OnNamePlateRemoved) == "function" then
+                    local ok, err = pcall(module.OnNamePlateRemoved, module, unit, nameplate)
+                    if not ok then
                     local now = GetTime and GetTime() or 0
                     local last = _module_error_throttle[name]
                     if not last or (now - last) >= _MODULE_ERROR_THROTTLE_SECONDS then
@@ -172,9 +168,7 @@ function Minimizer.Core.ClearNeverSimplify(unit)
                 end
             end
         end
-        if Minimizer.Markers and Minimizer.Markers.Clear then
-            Minimizer.Markers.Clear(nameplate)
-        end
+        
         nameplate.MinimizerDesimplifiedPersistent = nil
         nameplate.MinimizerDesimplifiedPersistentGen = nil
         nameplate.MinimizerState = nil
