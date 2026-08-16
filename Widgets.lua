@@ -38,26 +38,31 @@ function Minimizer.Widgets.FindCastBar(nameplate)
     return FindCastBarInChildren(healthBar, unitFrame:GetChildren())
 end
 
-local cdSpellCache = {} -- simple strong-key cache (keys are strings)
-
-local function GetCooldownCacheKey(dbTable, override)
-    if override == nil then
-        return tostring(dbTable)
-    end
-    return tostring(dbTable) .. ":" .. tostring(override)
-end
+-- Cache anidado: cdSpellCache[dbTable][override or false] = spellID or false.
+-- dbTable ya es una referencia de tabla estable (Minimizer.Data.OFFENSIVE_CDS,
+-- etc.) asi que sirve como key directa sin tostring/concat. Antes esta funcion
+-- generaba un string nuevo en CADA llamada (Target/Focus la llaman ~25
+-- veces/seg via su throttle de 30fps, incluso sin cambios de estado).
+local cdSpellCache = {}
 
 function Minimizer.Widgets.GetCDSpellID(dbTable, override)
     if not dbTable then return nil end
 
-    local _, classToken = UnitClass("player")
-    local spellList = classToken and dbTable[classToken]
-    local cacheKey = GetCooldownCacheKey(dbTable, override)
-    local cached = cdSpellCache[cacheKey]
+    local bucket = cdSpellCache[dbTable]
+    if not bucket then
+        bucket = {}
+        cdSpellCache[dbTable] = bucket
+    end
+
+    local key = override or false
+    local cached = bucket[key]
     if cached ~= nil then
         if cached == false then return nil end
         return cached
     end
+
+    local _, classToken = UnitClass("player")
+    local spellList = classToken and dbTable[classToken]
 
     if override ~= nil then
         local overrideAllowed = false
@@ -71,13 +76,13 @@ function Minimizer.Widgets.GetCDSpellID(dbTable, override)
             end
         end
         if overrideAllowed and Minimizer.Utils and Minimizer.Utils.IsSpellKnownByPlayer and Minimizer.Utils.IsSpellKnownByPlayer(override) then
-            cdSpellCache[cacheKey] = override
+            bucket[key] = override
             return override
         end
     end
 
     local result = Minimizer.Utils.FindKnownSpell(spellList)
-    cdSpellCache[cacheKey] = result or false
+    bucket[key] = result or false
     return result
 end
 
