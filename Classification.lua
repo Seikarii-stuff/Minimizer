@@ -54,10 +54,32 @@ local function HasMana(unit)
 end
 
 function Minimizer.Classification.GetEliteType(unit)
+    if not unit then return nil end
+
+    if Minimizer.Cache and Minimizer.Cache.GetUnitKeyWithGeneration then
+        local cached = Minimizer.Cache.GetUnitKeyWithGeneration(unit, "eliteType")
+        if cached ~= nil then
+            return cached
+        end
+    end
+
     local classification = UnitClassification(unit)
-    if IsTrivial(unit, classification) then return "trivial" end
-    local superior = GetSuperiorKind(unit, classification)
-    if superior then return superior end
-    if HasMana(unit) then return "caster" end
-    return "melee"
+    local result
+    if IsTrivial(unit, classification) then
+        result = "trivial"
+    else
+        local superior = GetSuperiorKind(unit, classification)
+        if superior then
+            result = superior
+        elseif HasMana(unit) then
+            result = "caster"
+        else
+            result = "melee"
+        end
+    end
+
+    if Minimizer.Cache and Minimizer.Cache.SetUnitKeyWithGeneration then
+        Minimizer.Cache.SetUnitKeyWithGeneration(unit, "eliteType", result)
+    end
+    return result
 end
