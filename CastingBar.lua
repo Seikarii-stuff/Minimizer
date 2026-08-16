@@ -10,6 +10,9 @@ local CastingBar = {}
 Minimizer.CastingBar = CastingBar
 
 local COLORS = Minimizer.Constants.CastColors
+local UnitExists = UnitExists
+local UnitIsUnit = UnitIsUnit
+local type = type
 
 -- Tablas scratch reutilizadas para evitar allocar 2 tablas por llamada en
 -- el hot path (ApplyCastColor corre por cada unidad casteando, sin throttle,
@@ -139,7 +142,23 @@ function CastingBar:UpdateNamePlate(unit, nameplate, snapshot)
 
     local visuals = self:EnsureVisuals(castBar)
     castBar.MinimizerCastUnit = unit
-    local isCasting, _, uninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
+
+    -- Reusar el estado de cast ya leído por Core.BuildSnapshot en este mismo
+    -- pase, en vez de volver a llamar a Cast.GetState (que repetiría
+    -- UnitCastingInfo/UnitChannelInfo para la misma unidad en el mismo
+    -- frame). snapshot.rawUninterruptible es el mismo valor -- potencialmente
+    -- secreto -- que antes devolvía Cast.GetState como tercer retorno; se
+    -- sigue pasando crudo a ApplyCastColor/EvaluateColorRGB, sin comparar.
+    -- Fallback a Cast.GetState solo si nos llaman sin snapshot (hooks de
+    -- repintado nativo fuera del pase normal, igual que isPvP arriba).
+    local isCasting, isChanneling, uninterruptible
+    if snapshot then
+        isCasting = snapshot.isCasting
+        isChanneling = snapshot.isChanneling
+        uninterruptible = snapshot.rawUninterruptible
+    else
+        isCasting, _, uninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
+    end
     local ready = Minimizer.Interrupt.IsReady()
 
     self:ApplyCastColor(castBar, unit, isCasting, isChanneling, ready, uninterruptible)

@@ -105,6 +105,27 @@ end
 Mocks.units = {}
 Mocks.nameplates = {}
 
+-- --- TEST GROUP: Core.ModuleList sincronizado con Core.Modules ---
+do
+    local countHash = 0
+    for _ in pairs(addonTable.Modules) do countHash = countHash + 1 end
+    local countList = #addonTable.ModuleList
+
+    check(countHash == countList,
+        "Core: ModuleList y Modules tienen el mismo numero de entradas")
+
+    local seenInList = {}
+    for _, m in ipairs(addonTable.ModuleList) do
+        seenInList[m.MinimizerModuleName] = true
+    end
+    local allFound = true
+    for name in pairs(addonTable.Modules) do
+        if not seenInList[name] then allFound = false end
+    end
+    check(allFound,
+        "Core: todo modulo registrado en Modules aparece tambien en ModuleList")
+end
+
 -- --- TEST GROUP 1: Classification.GetEliteType ---
 do
     Mocks.CreateTestUnit("player", { level = 70, faction = "Alliance", isPlayer = true, class = "WARRIOR" })
@@ -382,6 +403,69 @@ do
 end
 
 -- --- GAP 1: HealthBarColor persistent cast flag invalidates on token recycle ---
+-- --- TEST GROUP: Cache.InvalidateUnit / InvalidateAll (prefix matching) ---
+do
+    local unit = "nameplate70"
+    addonTable.Cache.SetUnitKeyWithGeneration(unit, "threat:player", 3)
+    addonTable.Cache.SetUnitKeyWithGeneration(unit, "threat:party1", 1)
+    addonTable.Cache.SetUnitKeyWithGeneration(unit, "eliteType", "melee")
+
+    addonTable.Cache.InvalidateUnit(unit, "threat")
+
+    check(addonTable.Cache.GetUnitKeyWithGeneration(unit, "threat:player") == nil,
+        "Cache: InvalidateUnit borra todas las claves con el prefijo threat:")
+    check(addonTable.Cache.GetUnitKeyWithGeneration(unit, "threat:party1") == nil,
+        "Cache: InvalidateUnit borra threat:party1 tambien")
+    check(addonTable.Cache.GetUnitKeyWithGeneration(unit, "eliteType") == "melee",
+        "Cache: InvalidateUnit NO toca claves de otro kind (eliteType)")
+end
+
+do
+    local unitA, unitB = "nameplate71", "nameplate72"
+    addonTable.Cache.SetUnitKeyWithGeneration(unitA, "threat:player", 2)
+    addonTable.Cache.SetUnitKeyWithGeneration(unitB, "threat:player", 3)
+    addonTable.Cache.SetUnitKeyWithGeneration(unitA, "eliteType", "boss")
+
+    addonTable.Cache.InvalidateAll("threat")
+
+    check(addonTable.Cache.GetUnitKeyWithGeneration(unitA, "threat:player") == nil and
+          addonTable.Cache.GetUnitKeyWithGeneration(unitB, "threat:player") == nil,
+        "Cache: InvalidateAll(threat) borra la clave threat:* en TODAS las unidades")
+    check(addonTable.Cache.GetUnitKeyWithGeneration(unitA, "eliteType") == "boss",
+        "Cache: InvalidateAll(threat) no toca otras claves")
+end
+
+-- --- TEST GROUP: CastingBar reusa snapshot.isCasting/rawUninterruptible (no relee Cast.GetState) ---
+do
+    local token = "nameplate73"
+    Mocks.CreateTestUnit(token, {
+        level = 70, classification = "normal", faction = "Horde", powerType = 1,
+        cast = { name = "Reuse Check", startTime = 0, endTime = 2000, uninterruptible = false }
+    })
+    Mocks.CreateTestNameplate(token)
+
+    Mocks.unitCastingInfoCallCounts[token] = 0
+    Mocks.unitChannelInfoCallCounts[token] = 0
+
+    addonTable.Core.ApplyToUnit(token)
+
+    check(Mocks.unitCastingInfoCallCounts[token] == 1,
+        "CastingBar: UnitCastingInfo se llama UNA sola vez por ApplyToUnit (BuildSnapshot), no dos")
+    check(Mocks.unitChannelInfoCallCounts[token] == 1,
+        "CastingBar: UnitChannelInfo se llama UNA sola vez por ApplyToUnit (BuildSnapshot), no dos")
+
+    local np = Mocks.nameplates[token]
+    local castBar = np.UnitFrame.castBar
+    local r, g, b = castBar:GetStatusBarColor()
+    check(math.abs(r - addonTable.Constants.CastColors.ready[1]) < 0.01 and
+          math.abs(g - addonTable.Constants.CastColors.ready[2]) < 0.01 and
+          math.abs(b - addonTable.Constants.CastColors.ready[3]) < 0.01,
+        "CastingBar: el color de la castbar sigue siendo correcto tras leer del snapshot")
+end
+
+-- --- END additional cache/casting tests ---
+
+-- --- GAP 1: HealthBarColor persistent cast flag invalidates on token recycle ---
 do
     local token = "nameplate21"
     Mocks.CreateTestUnit(token, {
@@ -397,8 +481,7 @@ do
           math.abs(g - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
           math.abs(b - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01,
         "GAP1: inferior en cast interrumpible pinta verde persistente")
-    check(np.MinimizerPersistentCastColorKind == "castInterruptible",
-        "GAP1: el flag persistente queda fijado tras el cast interrumpible")
+    -- Kind flag removed in new contract; only color persistence remains
 
     Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
     Mocks.CreateTestNameplate(token)
@@ -463,12 +546,11 @@ do
           math.abs(b - addonTable.Constants.HealthColors.superiorUninterruptible[3]) < 0.01,
         "TEST A1: channel secreto ininterrumpible pinta gris mientras dura")
     do
-        local p = np.MinimizerPersistentCastColor
-        check(p ~= nil and math.abs(p[1] - addonTable.Constants.HealthColors.superiorUninterruptible[1]) < 0.01 and
-              math.abs(p[2] - addonTable.Constants.HealthColors.superiorUninterruptible[2]) < 0.01 and
-              math.abs(p[3] - addonTable.Constants.HealthColors.superiorUninterruptible[3]) < 0.01 and
-              np.MinimizerPersistentCastColorKind == nil,
-            "TEST A2: channel secreto ininterrumpible FIJA persistencia de color pero NO el Kind")
+                local p = np.MinimizerPersistentCastColor
+                check(p ~= nil and math.abs(p[1] - addonTable.Constants.HealthColors.superiorUninterruptible[1]) < 0.01 and
+                            math.abs(p[2] - addonTable.Constants.HealthColors.superiorUninterruptible[2]) < 0.01 and
+                            math.abs(p[3] - addonTable.Constants.HealthColors.superiorUninterruptible[3]) < 0.01,
+                        "TEST A2: channel secreto ininterrumpible FIJA persistencia de color")
     end
 
     -- Terminar channel
@@ -500,25 +582,23 @@ do
           math.abs(g - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
           math.abs(b - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01,
         "TEST B1: cast secreto interrumpible pinta verde")
-    do
-        local p = np.MinimizerPersistentCastColor
-        check(p ~= nil and math.abs(p[1] - addonTable.Constants.HealthColors.castInterruptible[1]) < 0.01 and
-              math.abs(p[2] - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
-              math.abs(p[3] - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01 and
-              np.MinimizerPersistentCastColorKind == nil,
-            "TEST B2: cast secreto interrumpible FIJA persistencia de color (verde) pero NO el Kind")
-    end
+        do
+                local p = np.MinimizerPersistentCastColor
+                check(p ~= nil and math.abs(p[1] - addonTable.Constants.HealthColors.castInterruptible[1]) < 0.01 and
+                            math.abs(p[2] - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
+                            math.abs(p[3] - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01,
+                        "TEST B2: cast secreto interrumpible FIJA persistencia de color (verde)")
+        end
 
     -- Terminar cast pero persiste
     Mocks.units[token].cast = nil
     addonTable.Cast.InvalidateState(token)
     addonTable.Core.ApplyToUnit(token)
 
-    check(np.MinimizerPersistentCastColor ~= nil and math.abs(np.MinimizerPersistentCastColor[1] - addonTable.Constants.HealthColors.castInterruptible[1]) < 0.01 and
-          math.abs(np.MinimizerPersistentCastColor[2] - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
-          math.abs(np.MinimizerPersistentCastColor[3] - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01 and
-          np.MinimizerPersistentCastColorKind == nil,
-        "TEST B3: despues del cast secreto interrumpible, el COLOR persiste (verde) y el Kind no queda fijado")
+        check(np.MinimizerPersistentCastColor ~= nil and math.abs(np.MinimizerPersistentCastColor[1] - addonTable.Constants.HealthColors.castInterruptible[1]) < 0.01 and
+                    math.abs(np.MinimizerPersistentCastColor[2] - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
+                    math.abs(np.MinimizerPersistentCastColor[3] - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01,
+                "TEST B3: despues del cast secreto interrumpible, el COLOR persiste (verde)")
 end
 
 -- --- TEST GROUP 5: HealthBarColor — Leyenda M+ ---
@@ -741,6 +821,41 @@ do
     Mocks.cooldowns[107574] = nil
     check(addonTable.Widgets.UpdateHalo and addonTable.Widgets.UpdateHalo(halo, nil) == false,
         "Target halo: sin spell se oculta")
+end
+
+-- --- TEST GROUP: ApplyToAll usa el registro ActiveNameplates ---
+do
+    local tokenA, tokenB = "nameplate80", "nameplate81"
+
+    Mocks.CreateTestUnit(tokenA, { level = 70, classification = "normal", faction = "Horde" })
+    Mocks.CreateTestNameplate(tokenA)
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", tokenA)
+
+    Mocks.CreateTestUnit(tokenB, { level = 70, classification = "normal", faction = "Horde" })
+    Mocks.CreateTestNameplate(tokenB)
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", tokenB)
+
+    check(addonTable.ActiveNameplates[tokenA] ~= nil and addonTable.ActiveNameplates[tokenB] ~= nil,
+        "ApplyToAll: ambas unidades quedan registradas en ActiveNameplates tras NAME_PLATE_UNIT_ADDED")
+
+    local okAll = pcall(addonTable.Core.ApplyToAll, true)
+    check(okAll == true,
+        "ApplyToAll: se ejecuta sin error iterando ActiveNameplates")
+
+    local hbA = addonTable.Utils.GetHealthBar(Mocks.nameplates[tokenA])
+    local hbB = addonTable.Utils.GetHealthBar(Mocks.nameplates[tokenB])
+    check(hbA.MinimizerHealthColorHooked == true and hbB.MinimizerHealthColorHooked == true,
+        "ApplyToAll: ambas nameplates fueron efectivamente procesadas (healthBar hookeada)")
+
+    NamePlateDriverFrame:OnNamePlateRemoved(tokenA)
+    check(addonTable.ActiveNameplates[tokenA] == nil,
+        "ApplyToAll: ActiveNameplates limpia el token tras OnNamePlateRemoved")
+    check(addonTable.ActiveNameplates[tokenB] ~= nil,
+        "ApplyToAll: ActiveNameplates NO afecta a otros tokens al remover uno")
+
+    local okAfterRemoval = pcall(addonTable.Core.ApplyToAll, true)
+    check(okAfterRemoval == true,
+        "ApplyToAll: sigue funcionando sin error tras remover una unidad del registro")
 end
 
 -- --- RESUMEN FINAL ---

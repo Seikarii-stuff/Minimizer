@@ -136,7 +136,69 @@ addonTable.Core.ApplyToAll = function()
     coreStats.time  = coreStats.time  + elapsed
 end
 
+-- Sanity: cuantos modulos instrumentados tenemos (deberia incluir HealthBarColor, CastingBar, Markers)
+do
+    local wrappedCount = 0
+    for name, stats in pairs(moduleStats) do wrappedCount = wrappedCount + 1 end
+    print(string.format("Modulos instrumentados para profiling: %d (esperado: 3)", wrappedCount))
+end
+
+-- ============================================================
+-- Regresion check: CastingBar no debe releer Cast.GetState
+-- (UnitCastingInfo/UnitChannelInfo) dentro del mismo ApplyToUnit.
+-- ============================================================
+do
+    Mocks.unitCastingInfoCallCounts = Mocks.unitCastingInfoCallCounts or {}
+    Mocks.unitChannelInfoCallCounts = Mocks.unitChannelInfoCallCounts or {}
+
+    local sampleUnit = "nameplate3" -- unidad con cast garantizado por el setup (i % 3 == 0)
+    Mocks.unitCastingInfoCallCounts[sampleUnit] = 0
+    Mocks.unitChannelInfoCallCounts[sampleUnit] = 0
+
+    addonTable.Core.ApplyToUnit(sampleUnit, true)
+
+    local castCalls = Mocks.unitCastingInfoCallCounts[sampleUnit] or 0
+    local channelCalls = Mocks.unitChannelInfoCallCounts[sampleUnit] or 0
+
+    print("")
+    print("--- Regresion: llamadas a UnitCastingInfo/UnitChannelInfo por ApplyToUnit ---")
+    print(string.format("UnitCastingInfo=%d UnitChannelInfo=%d (objetivo: 1 y 1)", castCalls, channelCalls))
+    if castCalls > 1 or channelCalls > 1 then
+        io.stderr:write("REGRESION: Cast.GetState se esta llamando mas de una vez por ApplyToUnit (CastingBar no esta reusando el snapshot)\n")
+    end
+end
+
 -- 4. Run Benchmark
+-- ============================================================
+-- 3c. Medicion dedicada de ApplyToAll: antes de este cambio, cada llamada
+-- alocaba una tabla nueva via C_NamePlate.GetNamePlates(); tras el cambio,
+-- itera Minimizer.ActiveNameplates (tabla ya existente, sin allocation
+-- extra por llamada). Este bloque cuantifica el KB/llamada de ApplyToAll
+-- de forma aislada del resto del benchmark.
+-- ============================================================
+do
+    collectgarbage("collect")
+    collectgarbage("stop")
+    local gcStart = collectgarbage("count")
+    local APPLY_TO_ALL_SAMPLES = 200
+    for i = 1, APPLY_TO_ALL_SAMPLES do
+        addonTable.Core.ApplyToAll(false)
+    end
+    local gcEnd = collectgarbage("count")
+    collectgarbage("restart")
+    collectgarbage("collect")
+
+    local totalKB = gcEnd - gcStart
+    local kbPerCall = totalKB / APPLY_TO_ALL_SAMPLES
+
+    print("")
+    print("--- ApplyToAll: coste de asignacion aislado ---")
+    print(string.format("Muestras: %d llamadas -- Total: %.2f KB -- %.4f KB/llamada",
+        APPLY_TO_ALL_SAMPLES, totalKB, kbPerCall))
+    print("(Con Minimizer.ActiveNameplates este numero deberia ser notablemente menor")
+    print(" que con C_NamePlate.GetNamePlates(), que alocaba una tabla de tamano N por llamada)")
+end
+
 -- Improved benchmark: realistic hot-path is ApplyToUnit per event/unit.
 -- We simulate per-unit events, random state churn (casts/threat/absorbs), and
 -- occasional bursts of simultaneous updates to exercise worst-cases.

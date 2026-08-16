@@ -3,6 +3,8 @@ if not Minimizer then return end
 
 Minimizer.Core = {}
 Minimizer.Modules = Minimizer.Modules or {}
+-- Array paralelo a Minimizer.Modules para iteracion numerica en hot-path
+Minimizer.ModuleList = Minimizer.ModuleList or {}
 Minimizer.ActiveNameplates = Minimizer.ActiveNameplates or {}
 -- Monotonic generation counter por token de nameplate. Se incrementa cuando
 -- una unidad LLEGA al token (NAME_PLATE_UNIT_ADDED / OnNamePlateAdded hook).
@@ -93,17 +95,17 @@ function Minimizer.Core.RegisterModule(name, module)
 
     Minimizer.Modules[name] = module
     module.MinimizerModuleName = name
-
+    Minimizer.ModuleList[#Minimizer.ModuleList + 1] = module
 end
 
 function Minimizer.Core.UpdateModules(unit, nameplate, snapshot)
-    for name, module in pairs(Minimizer.Modules) do
+    local list = Minimizer.ModuleList
+    for i = 1, #list do
+        local module = list[i]
         if type(module.UpdateNamePlate) == "function" then
-            -- pcall directo sobre la función + self + args: evita crear una
-            -- closure nueva por módulo/nameplate/pase (esto corre decenas de
-            -- veces por frame con nameplates activas).
             local ok, err = pcall(module.UpdateNamePlate, module, unit, nameplate, snapshot)
             if not ok then
+                local name = module.MinimizerModuleName or "?"
                 local now = GetTime and GetTime() or 0
                 local last = _module_error_throttle[name]
                 if not last or (now - last) >= _MODULE_ERROR_THROTTLE_SECONDS then
@@ -208,17 +210,15 @@ function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
 end
 
 function Minimizer.Core.ApplyToAll(forceUpdate)
-    if not C_NamePlate or not C_NamePlate.GetNamePlates then return end
     -- Refrescar el estado global "interrupcion lista" UNA vez por pase,
     -- nunca dentro del loop de nameplates.
     if Minimizer.Interrupt and Minimizer.Interrupt.RefreshReadyCache then
         Minimizer.Interrupt.RefreshReadyCache()
     end
-    for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
-        local token = Minimizer.Utils.GetValidNamePlateToken(nil, nameplate)
-        if token then
-            Minimizer.Core.ApplyToUnit(token, forceUpdate)
-        end
+    -- Iterar el registro propio de nameplates activas en vez de pedirle a
+    -- Blizzard una tabla nueva por llamada (C_NamePlate.GetNamePlates alocaba).
+    for token in pairs(Minimizer.ActiveNameplates) do
+        Minimizer.Core.ApplyToUnit(token, forceUpdate)
     end
 end
 

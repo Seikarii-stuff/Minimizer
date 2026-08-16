@@ -71,7 +71,7 @@ function Cache.InvalidateUnit(unit, kind)
     if kind then
         local prefix = GetPrefixForKind(kind)
         for k in pairs(state) do
-            if k == kind or k:sub(1, #prefix) == prefix then
+            if k == kind or k:find(prefix, 1, true) == 1 then
                 state[k] = nil
             end
         end
@@ -85,7 +85,7 @@ function Cache.InvalidateAll(kind)
         local prefix = GetPrefixForKind(kind)
         for _, state in pairs(Cache.units) do
             for k in pairs(state) do
-                if k == kind or k:sub(1, #prefix) == prefix then
+                if k == kind or k:find(prefix, 1, true) == 1 then
                     state[k] = nil
                 end
             end

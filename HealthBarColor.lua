@@ -9,8 +9,10 @@ Minimizer.HealthBarColor = HealthBarColor
 
 local COLORS = Minimizer.Constants.HealthColors
 
+local UnitExists = UnitExists
 local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
 local UnitHealthMax = UnitHealthMax
+local type = type
 
 local OVERSHIELD_ALPHA = 1
 
@@ -223,18 +225,9 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
                 nameplate.MinimizerPersistentCastColor = nameplate.MinimizerPersistentCastColor or {}
                 local p = nameplate.MinimizerPersistentCastColor
                 p[1], p[2], p[3] = r, g, b
-                -- Solo el "kind" mantiene semántica adicional cuando sabemos que
-                -- era explícitamente interruptible (safeUninterruptible == false).
-                if safeUninterruptible == false then
-                    nameplate.MinimizerPersistentCastColorKind = "castInterruptible"
-                else
-                    nameplate.MinimizerPersistentCastColorKind = nil
-                end
         elseif nameplate.MinimizerPersistentCastColor then
             local p = nameplate.MinimizerPersistentCastColor
             r, g, b = p[1], p[2], p[3]
-        else
-            nameplate.MinimizerPersistentCastColorKind = nil
         end
     end
     -- isSuperior: sin rama de color por cast/channel. Se queda con el color
@@ -307,7 +300,7 @@ function HealthBarColor:OnNamePlateRemoved(_, nameplate)
         nameplate.MinimizerHealthBarColorUnit = nil
         nameplate.MinimizerHealthBarColorGen = nil
         nameplate.MinimizerPersistentCastColor = nil
-        nameplate.MinimizerPersistentCastColorKind = nil
+        
         nameplate.MinimizerHasAbsorb = nil
         nameplate.MinimizerLastAppliedColor = nil
         local healthBar = self:GetHealthBar(nameplate)

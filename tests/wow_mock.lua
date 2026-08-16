@@ -43,6 +43,9 @@ Mocks.events = {}
 Mocks.timers = {}
 Mocks.cooldowns = {}
 Mocks.unitClassificationCallCounts = {}
+-- Counters for UnitCastingInfo/UnitChannelInfo to assert we don't double-call
+Mocks.unitCastingInfoCallCounts = {}
+Mocks.unitChannelInfoCallCounts = {}
 
 function _G.GetTime()
     return Mocks.time
@@ -141,6 +144,12 @@ function FrameMixin:GetParent()
     return rawget(self, "parent")
 end
 
+function FrameMixin:GetChildren()
+    local ch = rawget(self, "_children")
+    if not ch or #ch == 0 then return end
+    return unpack(ch)
+end
+
 -- Explicit dummy methods instead of catch-all __index
 local function dummyMethod() end
 local function dummyCreateObject(self)
@@ -182,6 +191,11 @@ function _G.CreateFrame(frameType, name, parent, template)
     }
     setmetatable(frame, { __index = FrameMixin })
     if name then _G[name] = frame end
+    -- register as child of parent frame for GetChildren() to work
+    if parent and type(parent) == "table" then
+        parent._children = parent._children or {}
+        table.insert(parent._children, frame)
+    end
     table.insert(Mocks.frames, frame)
     return frame
 end
@@ -418,6 +432,7 @@ function _G.UnitThreatSituation(source, target)
 end
 
 function _G.UnitCastingInfo(unit)
+    Mocks.unitCastingInfoCallCounts[unit] = (Mocks.unitCastingInfoCallCounts[unit] or 0) + 1
     local u = getUnit(unit)
     if u and u.cast then
         return u.cast.name, nil, nil, u.cast.startTime, u.cast.endTime, nil, u.cast.castID, u.cast.uninterruptible
@@ -426,6 +441,7 @@ function _G.UnitCastingInfo(unit)
 end
 
 function _G.UnitChannelInfo(unit)
+    Mocks.unitChannelInfoCallCounts[unit] = (Mocks.unitChannelInfoCallCounts[unit] or 0) + 1
     local u = getUnit(unit)
     if u and u.channel then
         return u.channel.name, nil, nil, u.channel.startTime, u.channel.endTime, nil, u.channel.uninterruptible
@@ -525,8 +541,12 @@ function Mocks.CreateTestNameplate(unitId)
     local np = _G.CreateFrame("Frame", "NamePlate_" .. unitId)
     np.namePlateUnitToken = unitId
     np.UnitFrame = _G.CreateFrame("Frame", nil, np)
-    np.UnitFrame.healthBar = _G.CreateFrame("StatusBar", nil, np.UnitFrame)
-    np.UnitFrame.castBar = _G.CreateFrame("StatusBar", nil, np.UnitFrame)
+    -- Create an intermediate container so healthBar and castBar are
+    -- grandchildren of UnitFrame (matches many real templates and allows
+    -- Widgets.FindCastBar to locate castbars via GetChildren()/grandchildren).
+    local container = _G.CreateFrame("Frame", nil, np.UnitFrame)
+    np.UnitFrame.healthBar = _G.CreateFrame("StatusBar", nil, container)
+    np.UnitFrame.castBar = _G.CreateFrame("StatusBar", nil, container)
     Mocks.nameplates[unitId] = np
     return np
 end
