@@ -1,4 +1,3 @@
-# Ignore benchmark result outputs
-tests/results/*.txt
+
 # Preserve explicit baseline files
 !tests/results/BASELINE_*.txt
