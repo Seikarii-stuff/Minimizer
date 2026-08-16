@@ -612,7 +612,7 @@ end
 -- --- TEST GROUP 7: Target halo uses cooldown logic, not a static fake fill ---
 -- === BUG FIX TEST: HealthBarColor survives native Blizzard repaints when absorb is active ===
 do
-    local token = "absorb_test"
+    local token = "nameplate99"
     Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
     local np = Mocks.CreateTestNameplate(token)
     -- Simulate the absorb indicator existing on the healthbar (as in real UI templates)
