@@ -25,6 +25,10 @@ local C_NamePlate = C_NamePlate
 local C_NamePlateManager = C_NamePlateManager
 local type = type
 local pcall = pcall
+local GetTime = GetTime
+
+local _module_error_throttle = {}
+local _MODULE_ERROR_THROTTLE_SECONDS = 10
 
 -- Table reutilizado para el snapshot de cada unidad. Se sobreescribe en cada
 -- llamada a ApplyToUnit; NUNCA guardes una referencia a este table mas alla
@@ -47,7 +51,12 @@ function Minimizer.Core.UpdateModules(unit, nameplate, snapshot)
                 module:UpdateNamePlate(unit, nameplate, snapshot)
             end)
             if not ok then
-                print("|cffff4444Minimizer|r: Error in module " .. name .. ": " .. tostring(err))
+                local now = GetTime and GetTime() or 0
+                local last = _module_error_throttle[name]
+                if not last or (now - last) >= _MODULE_ERROR_THROTTLE_SECONDS then
+                    _module_error_throttle[name] = now
+                    print("|cffff4444Minimizer|r: Error in module " .. name .. ": " .. tostring(err))
+                end
             end
         end
     end
@@ -154,7 +163,12 @@ function Minimizer.Core.ClearNeverSimplify(unit)
                     module:OnNamePlateRemoved(unit, nameplate)
                 end)
                 if not ok then
-                    print("|cffff4444Minimizer|r: Error in module " .. name .. " OnNamePlateRemoved: " .. tostring(err))
+                    local now = GetTime and GetTime() or 0
+                    local last = _module_error_throttle[name]
+                    if not last or (now - last) >= _MODULE_ERROR_THROTTLE_SECONDS then
+                        _module_error_throttle[name] = now
+                        print("|cffff4444Minimizer|r: Error in module " .. name .. " OnNamePlateRemoved: " .. tostring(err))
+                    end
                 end
             end
         end

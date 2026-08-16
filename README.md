@@ -153,13 +153,13 @@ if rawUninterruptible == true then ... end -- MAL: podría taintar
 Seguir este patrón evita que el addon taint-e la UI alrededor de casts/channels
 y preserva la persistencia correcta del color verde para casts interrumpibles.
 
-### Nota verificada sobre `SetVertexColorFromBoolean`
+### Pendiente de validar: `Region:SetVertexColorFromBoolean`
 
-No se aplicó `Region:SetVertexColorFromBoolean` en este addon porque no se pudo validar
-`/dump portrait:HasSecretValues()` en cliente real desde este entorno de trabajo. El patrón
-actual sigue siendo `EvaluateColorRGB` / `EvaluateColorValueFromBoolean` para resolver valores
-secretos sin comparar el secreto en Lua. Queda como TODO explícito de validación en cliente real
-antes de sustituir este sink por una API alternativa.
+API vista en la Widget API de este cliente (Midnight), no verificada aún contra
+Platynator. Aplica a Texture/Region (portrait de Focus), no a StatusBar
+(HealthBarColor/CastingBar siguen usando EvaluateColorRGB, que es el sink correcto
+para SetStatusBarColor). Validar con /dump portrait:HasSecretValues() en cliente
+real antes de adoptarlo.
 
 ### Rationale M+
 

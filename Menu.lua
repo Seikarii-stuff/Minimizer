@@ -223,31 +223,21 @@ local function EnsureFrame()
         frame:Hide()
     end)
 
-    local slider = CreateFrame("Slider", "MinimizerMenuSimplifySlider", content, "OptionsSliderTemplate")
-    slider:SetMinMaxValues(0, 100)
-    slider:SetValueStep(1)
-    slider:SetPoint("TOPLEFT", frame, "TOPLEFT", 24, -40)
-    slider:SetWidth(240)
-    slider:SetValue((MinimizerDB and MinimizerDB.simplifyPercent) or 100)
-    local sliderText = GetWidgetText(slider)
-    if sliderText then
-        sliderText:SetText("Simplify %")
+    -- Simplify ON/OFF toggle (replaces the previous percentage slider).
+    local simplifyToggle = CreateFrame("CheckButton", "MinimizerMenuSimplifyToggle", content, "ChatConfigCheckButtonTemplate")
+    simplifyToggle:SetPoint("TOPLEFT", frame, "TOPLEFT", 24, -40)
+    simplifyToggle.text = GetWidgetText(simplifyToggle)
+    if simplifyToggle.text then
+        simplifyToggle.text:SetText("Enable simplify")
     end
-    slider:SetScript("OnValueChanged", function(_, value)
-        value = math.floor(value)
-        if MinimizerDB then MinimizerDB.simplifyPercent = value end
+    simplifyToggle:SetChecked((MinimizerDB and (MinimizerDB.simplifyEnabled == nil and (tonumber(MinimizerDB.simplifyPercent) == nil or tonumber(MinimizerDB.simplifyPercent) > 0)) or (MinimizerDB and MinimizerDB.simplifyEnabled == true)))
+    simplifyToggle:SetScript("OnClick", function(self)
+        if MinimizerDB then MinimizerDB.simplifyEnabled = self:GetChecked() end
         if Minimizer.Core then Minimizer.Core.ApplyToAll() end
-        if slider.valueText then
-            slider.valueText:SetText(value .. "%")
-        end
     end)
-    local sliderValueText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    sliderValueText:SetPoint("RIGHT", slider, "RIGHT", -6, 0)
-    sliderValueText:SetText(tostring(slider:GetValue()) .. "%")
-    slider.valueText = sliderValueText
 
     local targetMarkers = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
-    targetMarkers:SetPoint("TOPLEFT", slider, "BOTTOMLEFT", 0, -20)
+    targetMarkers:SetPoint("TOPLEFT", simplifyToggle, "BOTTOMLEFT", 0, -20)
     targetMarkers:SetChecked(MinimizerDB and MinimizerDB.enableTargetMarkers ~= false)
     targetMarkers.text = GetWidgetText(targetMarkers)
     if targetMarkers.text then
@@ -311,7 +301,7 @@ local function EnsureFrame()
     dropdowns[3]:SetPoint("TOPLEFT", dropdowns[2], "BOTTOMLEFT", 0, -18)
 
     frame.MinimizerMenuControls = {
-        slider = slider,
+        simplifyToggle = simplifyToggle,
         targetMarkers = targetMarkers,
         focusMarkers = focusMarkers,
         faceToggle = faceToggle,
@@ -328,11 +318,9 @@ end
 function Menu.Refresh()
     local frame = EnsureFrame()
     if not frame then return end
-    if frame.MinimizerMenuControls and frame.MinimizerMenuControls.slider then
-        frame.MinimizerMenuControls.slider:SetValue((MinimizerDB and MinimizerDB.simplifyPercent) or 100)
-        if frame.MinimizerMenuControls.slider.valueText then
-            frame.MinimizerMenuControls.slider.valueText:SetText(tostring(frame.MinimizerMenuControls.slider:GetValue()) .. "%")
-        end
+    if frame.MinimizerMenuControls and frame.MinimizerMenuControls.simplifyToggle then
+        local st = frame.MinimizerMenuControls.simplifyToggle
+        st:SetChecked((MinimizerDB and (MinimizerDB.simplifyEnabled == nil and (tonumber(MinimizerDB.simplifyPercent) == nil or tonumber(MinimizerDB.simplifyPercent) > 0)) or (MinimizerDB and MinimizerDB.simplifyEnabled == true)))
     end
     if frame.MinimizerMenuControls then
         frame.MinimizerMenuControls.targetMarkers:SetChecked(MinimizerDB and MinimizerDB.enableTargetMarkers ~= false)

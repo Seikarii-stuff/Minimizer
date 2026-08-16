@@ -12,7 +12,8 @@ local ADDON_NAME, Minimizer = ...
 -- Los módulos declaran sus sub-tablas usando Minimizer.X = Minimizer.X or {}
 -- para que el orden de carga no importe. Bootstrap garantiza que la raíz
 -- existe y expone el namespace global por si algún script externo lo necesita.
-_G.Minimizer = Minimizer
+-- Expose global only if not already present to avoid clobbering other addons
+_G.Minimizer = _G.Minimizer or Minimizer
 
 -- ── Frame de arranque ────────────────────────────────────────────────────────
 local bootstrapFrame = CreateFrame("Frame", "MinimizerBootstrapFrame")

@@ -239,11 +239,10 @@ EventFrame:SetScript("OnEvent", OnEvent)
 if NamePlateDriverFrame then
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateAdded", function(_, unit)
         if not unit or not unit:match("^nameplate%d+$") then return end
-        -- Hook path also increments . See design: increment in both
-        -- NAME_PLATE_UNIT_ADDED and OnNamePlateAdded to be robust to ordering.
-        if Minimizer.Core.IncrementPlateGeneration then
-            Minimizer.Core.IncrementPlateGeneration(unit)
-        end
+        -- Hook path intentionally left lightweight: NAME_PLATE_UNIT_ADDED
+        -- performs the generation increment and ApplyToUnit. Keeping the
+        -- increment only on the event avoids double-increment for the same
+        -- spawn in the same frame.
     end)
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit)
         if not unit or not unit:match("^nameplate%d+$") then return end

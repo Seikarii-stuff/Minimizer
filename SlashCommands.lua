@@ -53,14 +53,30 @@ SlashCmdList["MINIMIZER"] = function(msg)
     end
 
     local value = tonumber(msg)
-    if not value then
-        print("|cff33ff99Minimizer|r: uso /simp, /simp menu, /simp <0-100>, /simp face, /simp arrows, /simp noface, /simp noarrows")
+    if msg == "on" then
+        if not MinimizerDB then MinimizerDB = {} end
+        MinimizerDB.simplifyEnabled = true
+        print("|cff33ff99Minimizer|r: simplificación habilitada")
+        Minimizer.Core.ApplyToAll()
+        return
+    end
+    if msg == "off" then
+        if not MinimizerDB then MinimizerDB = {} end
+        MinimizerDB.simplifyEnabled = false
+        print("|cff33ff99Minimizer|r: simplificación deshabilitada")
+        Minimizer.Core.ApplyToAll()
         return
     end
 
-    value = ClampSimplifyPercent(value)
-    MinimizerDB.simplifyPercent = value
+    if not value then
+        print("|cff33ff99Minimizer|r: uso /simp menu, /simp on, /simp off, /simp <0-100>, /simp face, /simp arrows, /simp noface, /simp noarrows")
+        return
+    end
 
-    print("|cff33ff99Minimizer|r: simplificación ajustada a " .. value .. "%")
+    -- Backwards-compatible numeric: treat >0 as enabled, 0 as disabled.
+    value = ClampSimplifyPercent(value)
+    if not MinimizerDB then MinimizerDB = {} end
+    MinimizerDB.simplifyEnabled = (value > 0)
+    print("|cff33ff99Minimizer|r: simplificación " .. (value > 0 and "habilitada" or "deshabilitada") .. " (map from " .. value .. "%)")
     Minimizer.Core.ApplyToAll()
 end

@@ -5,6 +5,7 @@ Minimizer.Decision = Minimizer.Decision or {}
 
 local UnitExists = UnitExists
 local UnitCanAttack = UnitCanAttack
+local UnitIsUnit = UnitIsUnit
 
 function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
     if not unit or not UnitExists(unit) then return false, "invalid" end
@@ -14,8 +15,20 @@ function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
 
     if not UnitCanAttack("player", unit) then return false, "friendly" end
 
-    local pct = MinimizerDB and MinimizerDB.simplifyPercent or 100
-    if pct <= 0 then return false, "disabled" end
+    -- Simplify is now an on/off flag. Backwards-compatible: if the older
+    -- `simplifyPercent` exists and is > 0 we treat it as enabled.
+    local enabled
+    if MinimizerDB == nil then
+        enabled = true
+    else
+        if MinimizerDB.simplifyEnabled == nil then
+            local legacy = tonumber(MinimizerDB.simplifyPercent)
+            enabled = (legacy == nil) or (legacy > 0)
+        else
+            enabled = MinimizerDB.simplifyEnabled == true
+        end
+    end
+    if not enabled then return false, "disabled" end
 
     -- snapshot es opcional por compatibilidad hacia atras (p.ej. en tests que
     -- llaman a esta funcion directamente sin pasar snapshot); si no viene, se
@@ -28,8 +41,6 @@ function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
         return false, "no simp"
     end
 
-    local hasAggro = snapshot and snapshot.hasAggro
-    if hasAggro == nil then hasAggro = Minimizer.Threat.ShouldUnsimplify(unit) end
     -- OJO: ShouldUnsimplify y PlayerHasAggro NO son la misma funcion (ver
     -- Threat.lua: ShouldUnsimplify tiene rama especial para tanks). No
     -- sustituyas ShouldUnsimplify por snapshot.hasAggro sin mas -- mantenlos

@@ -38,7 +38,7 @@ function Minimizer.Widgets.FindCastBar(nameplate)
     return FindCastBarInChildren(healthBar, unitFrame:GetChildren())
 end
 
-local cdSpellCache = setmetatable({}, { __mode = "k" }) -- weak keys, una entrada por dbTable+override
+local cdSpellCache = {} -- simple strong-key cache (keys are strings)
 
 local function GetCooldownCacheKey(dbTable, override)
     if override == nil then
@@ -85,7 +85,7 @@ end
 -- el jugador cambia de spec y eso afecta que spell tiene disponible, se
 -- recalculen los CDs mostrados.
 function Minimizer.Widgets.InvalidateCDSpellCache()
-    cdSpellCache = setmetatable({}, { __mode = "k" })
+    cdSpellCache = {}
 end
 
 function Minimizer.Widgets.ConfigureCooldownFrame(cooldown, opts)

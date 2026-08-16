@@ -13,6 +13,10 @@ local C_Timer = C_Timer
 local C_CurveUtil = C_CurveUtil
 local issecretvalue = issecretvalue
 local pcall = pcall
+local GetTime = GetTime
+
+local _guarded_log_throttle = {}
+local _GUARDED_LOG_THROTTLE_SECONDS = 10
 
 function Minimizer.Utils.IsSecretValue(value)
     return issecretvalue and issecretvalue(value)
@@ -96,8 +100,21 @@ end
 function Minimizer.Utils.GuardedCall(obj, flagName, fn)
     if obj[flagName] then return end
     obj[flagName] = true
-    fn()
+    local ok, err = pcall(fn)
     obj[flagName] = nil
+    if not ok then
+        Minimizer.Utils.LogGuardedError(flagName, err)
+    end
+end
+
+function Minimizer.Utils.LogGuardedError(flagName, err)
+    if not flagName then flagName = "guarded" end
+    local now = GetTime and GetTime() or 0
+    local last = _guarded_log_throttle[flagName]
+    if not last or (now - last) >= _GUARDED_LOG_THROTTLE_SECONDS then
+        _guarded_log_throttle[flagName] = now
+        print("|cffff4444Minimizer|r: Error in guarded call " .. tostring(flagName) .. ": " .. tostring(err))
+    end
 end
 
 function Minimizer.Utils.ApplyReadyShade(texture, ready)
