@@ -208,7 +208,7 @@ end
 
 -- --- TEST GROUP 2: Decision.ShouldSimplifyUnit ---
 do
-    MinimizerDB.simplifyPercent = 50 -- necesario o Decision devuelve "disabled" siempre
+    MinimizerDB.simplifyEnabled = true -- necesario o Decision devuelve "disabled" siempre
 
     Mocks.CreateTestUnit("d_friendly", { level = 70, classification = "normal", faction = "Alliance" })
     local simplify, reason = addonTable.Decision.ShouldSimplifyUnit("d_friendly", nil)
@@ -256,11 +256,11 @@ do
     check(simplify == true and reason == "simplify",
         "Decision: unidad normal sin nada especial SI se simplifica")
 
-    MinimizerDB.simplifyPercent = 0
+    MinimizerDB.simplifyEnabled = false
     simplify, reason = addonTable.Decision.ShouldSimplifyUnit("d_normal", nil)
     check(simplify == false and reason == "disabled",
         "Decision: simplifyPercent=0 desactiva la simplificacion")
-    MinimizerDB.simplifyPercent = 50 -- restaurar para no afectar tests siguientes
+    MinimizerDB.simplifyEnabled = true -- restaurar para no afectar tests siguientes
 end
 
 -- --- TEST GROUP 3: Cast.GetState cachea y se invalida ---
@@ -400,7 +400,7 @@ end
 -- --- GAP 2: Core persistent fast-path invalidates on token recycle ---
 do
     local token = "nameplate22"
-    MinimizerDB.simplifyPercent = 50
+    MinimizerDB.simplifyEnabled = true
 
     Mocks.CreateTestUnit(token, { level = -1, classification = "elite", faction = "Horde" })
     local npBoss = Mocks.CreateTestNameplate(token)

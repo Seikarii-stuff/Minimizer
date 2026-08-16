@@ -6,9 +6,11 @@ if not Minimizer then return end
 
 Minimizer.Config = Minimizer.Config or {}
 Minimizer.Config.DEFAULTS = {
-    -- Default simplification percent. Set to 100 by default so the addon
-    -- simplifies nameplates unless the user opts out.
-    simplifyPercent = 100,
+    -- Flag on/off: simplificación activada por defecto.
+    -- `simplifyPercent` se mantiene para compatibilidad de lectura legacy
+    -- en Decision.lua, pero internamente usamos `simplifyEnabled` como la
+    -- fuente de verdad a partir de esta versión.
+    simplifyEnabled = true,
     enableTargetMarkers = true,
     enableFocusMarkers = true,
     enableFocusFace = true,
