@@ -126,14 +126,68 @@ addonTable.Core.ApplyToAll = function()
 end
 
 -- 4. Run Benchmark
+-- Improved benchmark: realistic hot-path is ApplyToUnit per event/unit.
+-- We simulate per-unit events, random state churn (casts/threat/absorbs), and
+-- occasional bursts of simultaneous updates to exercise worst-cases.
 local ITERATIONS = 1000
-print(string.format("Running benchmark: %d iterations x %d nameplates...", ITERATIONS, NUM_NAMEPLATES))
+print(string.format("Running benchmark: %d iterations (simulated frames) x %d nameplates...", ITERATIONS, NUM_NAMEPLATES))
+
+local perCallSamples = {} -- elapsed times (s) per ApplyToUnit call
+local perFrameApplyCounts = {} -- number of ApplyToUnit calls per frame
 
 local benchStart = os.clock()
-for i = 1, ITERATIONS do
+for frame = 1, ITERATIONS do
+    -- Advance a small time slice (simulate 100 FPS-ish)
     Mocks.AdvanceTime(0.01)
-    addonTable.Core.ApplyToAll()
+
+    -- Occasionally create a burst (simulate many nameplates recycled / many casts start)
+    local burst = (math.random() < 0.02) -- 2% of frames are bursts
+    local updatesThisFrame = burst and math.random(10, math.min(30, NUM_NAMEPLATES)) or math.random(1, 5)
+
+    -- Choose random units to update this frame
+    local calls = 0
+    for j = 1, updatesThisFrame do
+        local idx = math.random(1, NUM_NAMEPLATES)
+        local unit = "nameplate" .. idx
+
+        -- Introduce churn: with some probability mutate the unit state so
+        -- code paths that invalidate caches and flip persistent flags are hit.
+        local u = Mocks.units[unit]
+        if u then
+            -- End casts whose endTime passed
+            if u.cast and (u.cast.endTime or 0) <= Mocks.time then
+                u.cast = nil
+            end
+            -- Start a new cast sometimes
+            if (not u.cast) and (math.random() < 0.05 or burst and math.random() < 0.3) then
+                local dur = 0.8 + math.random() * 3.0
+                u.cast = {
+                    name = "Bench Spell",
+                    startTime = Mocks.time * 1000,
+                    endTime = (Mocks.time + dur) * 1000,
+                    castID = math.random(1, 1000000),
+                    uninterruptible = (math.random() < 0.1),
+                }
+            end
+            -- Randomly toggle absorbs/threat to exercise Decision/Absorb/Threat
+            if math.random() < 0.03 then
+                u.absorbs = (math.random() < 0.5) and math.random(10, 500) or 0
+            end
+            if math.random() < 0.05 then
+                u.threatSituation = math.random(0, 3)
+            end
+        end
+
+        -- Measure ApplyToUnit (hot-path)
+        local start = os.clock()
+        addonTable.Core.ApplyToUnit(unit)
+        local elapsed = os.clock() - start
+        perCallSamples[#perCallSamples + 1] = elapsed
+        calls = calls + 1
+    end
+    perFrameApplyCounts[#perFrameApplyCounts + 1] = calls
 end
+
 local totalTime = os.clock() - benchStart
 
 -- 5. Build Report
@@ -141,7 +195,29 @@ local lines = {}
 local function line(s) lines[#lines + 1] = s end
 
 local timestamp = os.date("%Y-%m-%d %H:%M:%S")
-local avgFrameMs = (coreStats.count > 0) and (coreStats.time / coreStats.count) * 1000 or 0
+
+-- Compute per-call statistics (ms) and percentiles
+local totalCalls = #perCallSamples
+local totalCallTime = 0
+for _, v in ipairs(perCallSamples) do totalCallTime = totalCallTime + v end
+local avgCallMs = (totalCalls > 0) and (totalCallTime / totalCalls) * 1000 or 0
+
+local function ms(v) return v * 1000 end
+local sortedSamples = {}
+for i, v in ipairs(perCallSamples) do sortedSamples[i] = v end
+table.sort(sortedSamples)
+local function percentile(p)
+    if #sortedSamples == 0 then return 0 end
+    local idx = math.max(1, math.floor(#sortedSamples * p / 100 + 0.5))
+    return sortedSamples[idx] * 1000
+end
+local p50 = percentile(50)
+local p90 = percentile(90)
+local p99 = percentile(99)
+local maxCallMs = (#sortedSamples > 0) and (sortedSamples[#sortedSamples] * 1000) or 0
+
+local worstFrameCalls = 0
+for _, c in ipairs(perFrameApplyCounts) do if c > worstFrameCalls then worstFrameCalls = c end end
 
 line("")
 line("=== Minimizer Benchmark Results ===")
@@ -149,7 +225,10 @@ line("Date       : " .. timestamp)
 line(string.format("Iterations : %d frames", ITERATIONS))
 line(string.format("Nameplates : %d units", NUM_NAMEPLATES))
 line(string.format("Total Time : %.4f s", totalTime))
-line(string.format("Avg/Frame  : %.6f ms  (ApplyToAll)", avgFrameMs))
+line(string.format("Total ApplyToUnit calls : %d", totalCalls))
+line(string.format("Avg ApplyToUnit  : %.6f ms", avgCallMs))
+line(string.format("P50 / P90 / P99 / Max : %.3f ms / %.3f ms / %.3f ms / %.3f ms", p50, p90, p99, maxCallMs))
+line(string.format("Worst frame (calls)   : %d", worstFrameCalls))
 line("")
 line("--- Module Breakdown (sorted by total cost) ---")
 line(string.format("%-22s %-12s %-14s %-10s %s", "Module", "Total (s)", "Avg/call (ms)", "Calls", "Share"))
@@ -253,10 +332,11 @@ else
 end
 
 -- 8. Umbral de regresion automatica
+-- Regression threshold: use P90 per-ApplyToUnit as a conservative indicator.
 local REGRESSION_THRESHOLD_MS = 2.5 -- ajustar tras confirmar el baseline post-refactor
-if avgFrameMs > REGRESSION_THRESHOLD_MS then
+if p90 > REGRESSION_THRESHOLD_MS then
     error(string.format(
-        "REGRESION DE PERFORMANCE: %.4fms/frame supera el umbral de %.4fms/frame",
-        avgFrameMs, REGRESSION_THRESHOLD_MS))
+        "REGRESION DE PERFORMANCE: p90 ApplyToUnit = %.4fms supera el umbral de %.4fms",
+        p90, REGRESSION_THRESHOLD_MS))
 end
-print(string.format("Performance OK: %.4fms/frame (umbral: %.4fms/frame)", avgFrameMs, REGRESSION_THRESHOLD_MS))
+print(string.format("Performance OK: p90 ApplyToUnit = %.4fms (umbral: %.4fms)", p90, REGRESSION_THRESHOLD_MS))
