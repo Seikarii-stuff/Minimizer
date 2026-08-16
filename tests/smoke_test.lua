@@ -576,7 +576,8 @@ do
     check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01,
         "HealthBarColor: inferior termina cast ininterrumpible -> el COLOR persiste gris (desimplificacion sigue siendo temporal)")
 
-    -- 4. Boss casteando ininterrumpible -> gris TEMPORAL deprecated SIEMPRE MORADO ,REHACER TEST
+    -- 4. Boss (superior) casteando ininterrumpible -> permanece morado
+    -- (ver README §6.3: los superiores no cambian de color por cast/channel).
     Mocks.CreateTestUnit("nameplate11", {
         level = -1, classification = "elite", faction = "Horde",
         cast = { name = "Boss MegaCast", startTime = 0, endTime = 2000, uninterruptible = true }
@@ -603,6 +604,66 @@ do
     r, g, b = hbBossInt:GetStatusBarColor()
     check(math.abs(r - 0.65) < 0.01 and math.abs(g - 0.25) < 0.01 and math.abs(b - 1.00) < 0.01,
         "HealthBarColor: boss (superior) casteando interrumpible -> permanece morado")
+end
+
+-- --- TEST GROUP 5B: Prioridad sobre superiores (boss/miniboss)
+do
+    -- a) Boss que es `focus` debe pintar `focus` (amarillo), NO morado
+    do
+        local token = "nameplate50"
+        Mocks.CreateTestUnit(token, { level = -1, classification = "elite", faction = "Horde" })
+        -- Simular que la unidad es la misma que el unit 'focus' (misma GUID)
+        local bossGuid = Mocks.units[token].guid
+        Mocks.CreateTestUnit("focus", { guid = bossGuid, name = "Focus Boss" })
+        local np = Mocks.CreateTestNameplate(token)
+        addonTable.Core.ApplyToUnit(token)
+
+        local hb = addonTable.Utils.GetHealthBar(np)
+        local r, g, b = hb:GetStatusBarColor()
+        local fc = addonTable.Constants.HealthColors.focus
+        local bc = addonTable.Constants.HealthColors.boss
+        check(math.abs(r - fc[1]) < 0.01 and math.abs(g - fc[2]) < 0.01 and math.abs(b - fc[3]) < 0.01,
+            "PRIORITY: focus gana a superior (boss) -> amarillo")
+        check(not (math.abs(r - bc[1]) < 0.01 and math.abs(g - bc[2]) < 0.01 and math.abs(b - bc[3]) < 0.01),
+            "PRIORITY: focus NO debe quedar morado (boss)")
+    end
+
+    -- b) Boss con threatSituation=3 (aggro del jugador) -> rojo (aggro), NO morado
+    do
+        local token = "nameplate51"
+        Mocks.CreateTestUnit(token, { level = -1, classification = "elite", faction = "Horde", threatSituation = 3 })
+        local np = Mocks.CreateTestNameplate(token)
+        addonTable.Core.ApplyToUnit(token)
+
+        local hb = addonTable.Utils.GetHealthBar(np)
+        local r, g, b = hb:GetStatusBarColor()
+        local ac = addonTable.Constants.HealthColors.aggro
+        local bc = addonTable.Constants.HealthColors.boss
+        check(math.abs(r - ac[1]) < 0.01 and math.abs(g - ac[2]) < 0.01 and math.abs(b - ac[3]) < 0.01,
+            "PRIORITY: aggro (player) gana a superior (boss) -> rojo")
+        check(not (math.abs(r - bc[1]) < 0.01 and math.abs(g - bc[2]) < 0.01 and math.abs(b - bc[3]) < 0.01),
+            "PRIORITY: aggro NO debe quedar morado (boss)")
+    end
+
+    -- c) Boss con indicador de absorb visible -> absorb (rosa), NO morado
+    do
+        local token = "nameplate52"
+        Mocks.CreateTestUnit(token, { level = -1, classification = "elite", faction = "Horde" })
+        local np = Mocks.CreateTestNameplate(token)
+        -- Simular overlay de absorb presente
+        np.UnitFrame.healthBar.totalAbsorbOverlay = CreateFrame("Frame")
+        np.UnitFrame.healthBar.totalAbsorbOverlay:Show()
+
+        addonTable.Core.ApplyToUnit(token)
+        local hb = addonTable.Utils.GetHealthBar(np)
+        local r, g, b = hb:GetStatusBarColor()
+        local ac = addonTable.Constants.HealthColors.absorb
+        local bc = addonTable.Constants.HealthColors.boss
+        check(math.abs(r - ac[1]) < 0.01 and math.abs(g - ac[2]) < 0.01 and math.abs(b - ac[3]) < 0.01,
+            "PRIORITY: absorb gana a superior (boss) -> rosa")
+        check(not (math.abs(r - bc[1]) < 0.01 and math.abs(g - bc[2]) < 0.01 and math.abs(b - bc[3]) < 0.01),
+            "PRIORITY: absorb NO debe quedar morado (boss)")
+    end
 end
 
 -- --- TEST GROUP 7: Target halo uses cooldown logic, not a static fake fill ---
