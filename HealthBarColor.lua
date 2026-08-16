@@ -150,6 +150,10 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     -- base (COLORS.boss / COLORS.miniboss) siempre, cast o no. Ver nota
     -- "DEPRECATED desde v2" arriba.
 
+    nameplate.MinimizerLastAppliedColor = nameplate.MinimizerLastAppliedColor or {}
+    local lc = nameplate.MinimizerLastAppliedColor
+    lc[1], lc[2], lc[3] = r, g, b
+
     Minimizer.Utils.GuardedCall(healthBar, "MinimizerHealthColorApplying", function()
         healthBar:SetStatusBarColor(r, g, b)
     end)
@@ -163,13 +167,23 @@ HookHealthBar = function(healthBar)
         hooksecurefunc(healthBar, "SetStatusBarColor", function()
             if healthBar.MinimizerHealthColorApplying then return end
             local nameplate = Minimizer.Utils.GetNameplateFromHealthBar(healthBar)
-            local unit = Minimizer.Utils.GetUnitFromNameplate(nameplate)
-            if unit and not Minimizer.Utils.IsPvPUnit(unit) then
-                -- Sin snapshot disponible aqui (este hook se dispara fuera del pase
-                -- normal de ApplyToUnit, p.ej. cuando Blizzard repinta la barra por
-                -- su cuenta). UpdateNamePlate ya tiene fallback para snapshot=nil.
-                HealthBarColor:UpdateNamePlate(unit, nameplate, nil)
+            local lastColor = nameplate and nameplate.MinimizerLastAppliedColor
+            if lastColor then
+                -- Reaplicacion barata: NO se recalcula eliteType/absorb/
+                -- aggro/cast aqui. Ese trabajo ya lo hizo el ultimo pase
+                -- real (evento estructural) y quedo guardado en
+                -- MinimizerLastAppliedColor. Este hook solo defiende ese
+                -- color contra el repintado nativo de Blizzard, que dispara
+                -- en cada delta de vida sin relacion con nuestro estado.
+                Minimizer.Utils.GuardedCall(healthBar, "MinimizerHealthColorApplying", function()
+                    healthBar:SetStatusBarColor(lastColor[1], lastColor[2], lastColor[3])
+                end)
+                return
             end
+            -- Sin color guardado todavia (nameplate recien creada, aun no
+            -- paso por un pase real): no reaplicar nada. NAME_PLATE_UNIT_ADDED
+            -- ya dispara un ApplyToUnit real inmediatamente despues, que
+            -- rellenara MinimizerLastAppliedColor.
         end)
     end
 end
@@ -177,6 +191,7 @@ end
 HookIndicator = function(indicator, healthBar)
     if not indicator or indicator.MinimizerAbsorbHooked then return end
     indicator.MinimizerAbsorbHooked = true
+    -- (no debug markings)
     if hooksecurefunc then
         local function triggerUpdate()
             if healthBar.MinimizerHealthColorApplying then return end
@@ -203,6 +218,7 @@ function HealthBarColor:OnNamePlateRemoved(_, nameplate)
         nameplate.MinimizerPersistentCastColor = nil
         nameplate.MinimizerPersistentCastColorKind = nil
         nameplate.MinimizerHasAbsorb = nil
+        nameplate.MinimizerLastAppliedColor = nil
     end
 end
 

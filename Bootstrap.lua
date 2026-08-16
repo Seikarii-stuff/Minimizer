@@ -26,4 +26,7 @@ bootstrapFrame:SetScript("OnEvent", function(_, event, name)
     if Minimizer.Config and Minimizer.Config.Initialize then
         Minimizer.Config.Initialize()
     end
+    if Minimizer.Core and Minimizer.Core.StartSafetyNet then
+        Minimizer.Core.StartSafetyNet()
+    end
 end)

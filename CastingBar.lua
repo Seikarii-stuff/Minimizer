@@ -84,10 +84,11 @@ function CastingBar:EnsureVisuals(castBar)
         hooksecurefunc(castBar, "SetStatusBarColor", function()
             local bar = castBar
             if bar.MinimizerApplyingColor then return end
-            local unit = bar.MinimizerCastUnit
-            if unit and UnitExists(unit) and not Minimizer.Utils.IsPvPUnit(unit) then
-                local isCasting, _, uninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
-                CastingBar:ApplyCastColor(bar, unit, isCasting, isChanneling, Minimizer.Interrupt.IsReady(), uninterruptible)
+            local lastColor = bar.MinimizerLastCastColor
+            if lastColor then
+                Minimizer.Utils.GuardedCall(bar, "MinimizerApplyingColor", function()
+                    bar:SetStatusBarColor(lastColor[1], lastColor[2], lastColor[3], lastColor[4])
+                end)
             end
         end)
     end
@@ -115,6 +116,10 @@ function CastingBar:ApplyCastColor(castBar, unit, isCasting, isChanneling, ready
         r, g, b = Minimizer.Utils.EvaluateColorRGB(uninterruptible, _scratchCurrentColor, _scratchDangerColor)
         a = 1
     end
+
+    castBar.MinimizerLastCastColor = castBar.MinimizerLastCastColor or {}
+    local lc = castBar.MinimizerLastCastColor
+    lc[1], lc[2], lc[3], lc[4] = r, g, b, a or 1
 
     Minimizer.Utils.GuardedCall(castBar, "MinimizerApplyingColor", function()
         castBar:SetStatusBarColor(r, g, b, a or 1)
@@ -157,6 +162,7 @@ function CastingBar:OnNamePlateRemoved(_, nameplate)
         visuals.targetContainer:Hide()
     end
     castBar.MinimizerCastUnit = nil
+    castBar.MinimizerLastCastColor = nil
 end
 
 Minimizer.Core.RegisterModule("CastingBar", CastingBar)

@@ -14,6 +14,42 @@ function Minimizer.Core.GetPlateGeneration(token)
     return Minimizer.Core.plateGeneration[token] or 0
 end
 
+-- ============================================================================
+-- Red de seguridad: ApplyToAll periodico de bajo coste.
+--
+-- Motivo: la arquitectura es 100% event-driven (threat, absorb, cast,
+-- lifecycle de nameplate). Si por lo que sea un evento no llega a una
+-- nameplate concreta (visto en pulls de 80+ mobs con varios escudos activos
+-- a la vez, aun sin poder confirmar la causa exacta -- posible perdida de
+-- UNIT_ABSORB_AMOUNT_CHANGED bajo carga, hook que no llega a instalarse a
+-- tiempo, etc.) esa nameplate se queda con el color base indefinidamente:
+-- no hay ningun otro trigger que la vuelva a tocar. Este timer es ese
+-- "segundo intento": no reemplaza a los triggers instantaneos, los
+-- respalda con una cota maxima de tiempo hasta que cualquier estado se
+-- corrija solo.
+--
+-- Coste: segun benchmark, ~0.045ms promedio por ApplyToUnit. Con las
+-- nameplates realmente visibles en pantalla (no las 80 del pull, solo las
+-- que WoW renderiza a la vez), un ApplyToAll cada SAFETY_NET_INTERVAL
+-- segundos es coste despreciable comparado con el volumen de eventos de
+-- combate real.
+-- ============================================================================
+local SAFETY_NET_INTERVAL = 2.0
+local _safetyNetStarted = false
+
+local function ScheduleSafetyNet()
+    C_Timer.After(SAFETY_NET_INTERVAL, function()
+        Minimizer.Core.ApplyToAll(false)
+        ScheduleSafetyNet()
+    end)
+end
+
+function Minimizer.Core.StartSafetyNet()
+    if _safetyNetStarted then return end
+    _safetyNetStarted = true
+    ScheduleSafetyNet()
+end
+
 function Minimizer.Core.IncrementPlateGeneration(token)
     if not token then return end
     local g = Minimizer.Core.plateGeneration
@@ -71,11 +107,22 @@ local function BuildSnapshot(unit, nameplate)
     s.hasAbsorb = Minimizer.Absorb.HasAbsorb(unit, nameplate)
     s.hasAggro = Minimizer.Threat.PlayerHasAggro(unit)
     s.isCasting, s.isUninterruptible, s.rawUninterruptible, s.isChanneling = Minimizer.Cast.GetState(unit)
-    -- displayKind: prioridad focus > aggro > absorb > eliteType.
-    -- Delegar la logica a la funcion publica ComputeDisplayKind para que otros
-    -- módulos (p.ej. HealthBarColor hook fallback) puedan reutilizarla sin
-    -- duplicar la prioridad y divergirse en el futuro.
-    s.displayKind = Minimizer.Core.ComputeDisplayKind(unit, nameplate)
+
+    -- Prioridad focus > aggro > absorb > eliteType, calculada inline
+    -- reutilizando lo que ya se acaba de leer arriba. NO llamar aqui a
+    -- ComputeDisplayKind: esa funcion existe para los callers que NO tienen
+    -- snapshot (fallback de hooks de repintado nativo en HealthBarColor.lua),
+    -- y volveria a llamar a HasAbsorb/PlayerHasAggro desde cero -- doblando
+    -- el coste de cada pase normal.
+    if UnitIsUnit(unit, "focus") then
+        s.displayKind = "focus"
+    elseif s.hasAggro then
+        s.displayKind = "aggro"
+    elseif s.hasAbsorb then
+        s.displayKind = "absorb"
+    else
+        s.displayKind = s.eliteType
+    end
     return s
 end
 
