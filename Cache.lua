@@ -6,6 +6,20 @@ Minimizer.Cache = Minimizer.Cache or {}
 local Cache = Minimizer.Cache
 Cache.units = Cache.units or {}
 
+-- Prefijos precalculados para los `kind` conocidos usados en InvalidateUnit/
+-- InvalidateAll, para no concatenar "kind .. ':'" en cada llamada (se
+-- dispara por cada UNIT_THREAT_SITUATION_UPDATE/UNIT_THREAT_LIST_UPDATE).
+-- Si se añade un `kind` nuevo en el futuro, agregar su entrada aqui; el
+-- fallback (`kind .. ':'` inline) se mantiene por si el kind no esta en esta
+-- tabla, asi que no rompe nada si alguien olvida actualizarla.
+local _KNOWN_PREFIXES = {
+    threat = "threat:",
+}
+
+local function GetPrefixForKind(kind)
+    return _KNOWN_PREFIXES[kind] or (kind .. ":")
+end
+
 function Cache.GetUnitState(unit)
     if not unit then return nil end
     local state = Cache.units[unit]
@@ -55,7 +69,7 @@ function Cache.InvalidateUnit(unit, kind)
     local state = Cache.units[unit]
     if not state then return end
     if kind then
-        local prefix = kind .. ":"
+        local prefix = GetPrefixForKind(kind)
         for k in pairs(state) do
             if k == kind or k:sub(1, #prefix) == prefix then
                 state[k] = nil
@@ -68,7 +82,7 @@ end
 
 function Cache.InvalidateAll(kind)
     if kind then
-        local prefix = kind .. ":"
+        local prefix = GetPrefixForKind(kind)
         for _, state in pairs(Cache.units) do
             for k in pairs(state) do
                 if k == kind or k:sub(1, #prefix) == prefix then
