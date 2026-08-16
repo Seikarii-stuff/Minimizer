@@ -50,10 +50,20 @@ function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
         return false, "temporal"
     end
 
-    local hasAbsorb = snapshot and snapshot.hasAbsorb
-    if hasAbsorb == nil then hasAbsorb = Minimizer.Absorb.HasAbsorb(unit, nameplate) end
-    if hasAbsorb then
-        return false, "temporal"
+    -- Temporada de shields: la dessimplificacion por escudo ahora es
+    -- PERSISTENTE (igual que boss/miniboss), no solo "mientras el
+    -- indicador este visible". Usamos snapshot.hasHadAbsorb (persistente,
+    -- gen-gated en Core.MarkAbsorbSeen), NO snapshot.hasAbsorb (vivo).
+    local hasHadAbsorb = snapshot and snapshot.hasHadAbsorb
+    if hasHadAbsorb == nil then
+        local liveAbsorb = snapshot and snapshot.hasAbsorb
+        if liveAbsorb == nil then
+            liveAbsorb = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
+        end
+        hasHadAbsorb = Minimizer.Core and Minimizer.Core.MarkAbsorbSeen and Minimizer.Core.MarkAbsorbSeen(unit, nameplate, liveAbsorb)
+    end
+    if hasHadAbsorb then
+        return false, "no simp"
     end
 
     local isCasting, isUninterruptible, _, isChanneling

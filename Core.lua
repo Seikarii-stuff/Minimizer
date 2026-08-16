@@ -15,8 +15,12 @@ function Minimizer.Core.GetPlateGeneration(token)
 end
 
 -- Temporada de shields: marcar persistentemente si una nameplate mostro
--- alguna vez un shield para que el color (no la simplificacion) no se
--- pierda cuando Blizzard ocultara el indicador. SOLO afecta color.
+-- alguna vez un shield. Usado por HealthBarColor.lua (color rosa
+-- persistente) Y por Decision.lua (dessimplificacion persistente) --
+-- ambos DEBEN coincidir, o el plate se simplifica y el color
+-- persistente deja de verse (Blizzard controla el render de un plate
+-- simplificado). Core.MarkAbsorbSeen gestiona una generación por token
+-- para evitar fugas entre reciclajes.
 function Minimizer.Core.MarkAbsorbSeen(unit, nameplate, hasAbsorbNow)
     if not nameplate then return hasAbsorbNow == true end
     local currentGen = Minimizer.Core.GetPlateGeneration(unit)

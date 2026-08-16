@@ -28,7 +28,9 @@ local function EnsureOvershieldBar(healthBar)
     bar:SetStatusBarColor(1, 1, 1, OVERSHIELD_ALPHA)
     bar:SetOrientation("HORIZONTAL")
     bar:SetReverseFill(true)
-    bar:EnableMouse(false)
+    if type(bar.EnableMouse) == "function" then
+        bar:EnableMouse(false)
+    end
     bar:Hide()
 
     healthBar.MinimizerOvershieldBar = bar
@@ -123,18 +125,38 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
 
     local isActiveCastOrChannel = isCasting == true or isChanneling == true
 
-    -- Sobreescudo: la magnitud SOLO se pasa como sink directo, nunca se
-    -- compara. El booleano (hasAbsorbNow) sigue siendo la unica fuente
-    -- segura para decidir mostrar/ocultar.
-    local hasAbsorbNow = snapshot and snapshot.hasAbsorb
-    if hasAbsorbNow == nil then
-        hasAbsorbNow = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
+    -- Gate COMPLETO detras de hasHadAbsorb (persistente): la gran mayoria
+    -- de mobs de un pull NUNCA tienen shield, asi que para esos no tocamos
+    -- healthBar.MinimizerOvershieldBar en absoluto -- ni se crea el frame,
+    -- ni se llama a Hide() cada pase. Esto mantiene el coste acotado a los
+    -- mobs realmente escudados.
+    local hasHadAbsorb = snapshot and snapshot.hasHadAbsorb
+    if hasHadAbsorb == nil then
+        local liveAbsorb = (snapshot and snapshot.hasAbsorb)
+        if liveAbsorb == nil then
+            liveAbsorb = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
+        end
+        hasHadAbsorb = Minimizer.Core and Minimizer.Core.MarkAbsorbSeen and Minimizer.Core.MarkAbsorbSeen(unit, nameplate, liveAbsorb)
     end
-    local overshieldBar = EnsureOvershieldBar(healthBar)
-    if hasAbsorbNow and UnitGetTotalAbsorbs then
-        UpdateOvershieldBar(overshieldBar, UnitGetTotalAbsorbs(unit), UnitHealthMax(unit))
-    else
-        overshieldBar:Hide()
+
+    if hasHadAbsorb then
+        local hasAbsorbNow = snapshot and snapshot.hasAbsorb
+        if hasAbsorbNow == nil then
+            hasAbsorbNow = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
+        end
+        local overshieldBar = EnsureOvershieldBar(healthBar)
+        if hasAbsorbNow and UnitGetTotalAbsorbs then
+            UpdateOvershieldBar(overshieldBar, UnitGetTotalAbsorbs(unit), UnitHealthMax(unit))
+        elseif overshieldBar:IsShown() then
+            overshieldBar:Hide()
+        end
+    elseif healthBar.MinimizerOvershieldBar then
+        -- Defensivo: el plate se reciclo a una unidad SIN historial de
+        -- shield mientras el bar del healthBar (que persiste entre unidades
+        -- del mismo pool) seguia visible de la unidad anterior. En teoria
+        -- OnNamePlateRemoved ya lo oculta al reciclar el token, esto es
+        -- solo una segunda red por si acaso.
+        healthBar.MinimizerOvershieldBar:Hide()
     end
 
     --[[
