@@ -48,12 +48,13 @@ function Markers:UpdateNamePlate(unit, nameplate)
         return 
     end
 
-    local isTarget = (MinimizerDB.enableTargetMarkers ~= false) and UnitIsUnit(token, "target")
-    local isFocus  = (MinimizerDB.enableFocusMarkers ~= false) and UnitIsUnit(token, "focus")
+    local db = MinimizerDB or {}
+    local isTarget = (db.enableTargetMarkers ~= false) and UnitIsUnit(token, "target")
+    local isFocus  = (db.enableFocusMarkers ~= false) and UnitIsUnit(token, "focus")
 
     markers.targetLeft:SetShown(isTarget == true)
     markers.targetRight:SetShown(isTarget == true)
-    local showFocusArrows = MinimizerDB.enableFocusArrows == true
+    local showFocusArrows = db.enableFocusArrows == true
     markers.focusLeft:SetShown(isFocus == true and showFocusArrows)
     markers.focusRight:SetShown(isFocus == true and showFocusArrows)
 end

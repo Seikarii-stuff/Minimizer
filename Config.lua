@@ -13,7 +13,7 @@ Minimizer.Config.DEFAULTS = {
     enableTargetMarkers = true,
     enableFocusMarkers = true,
     enableFocusFace = true,
-    enableFocusArrows = false,
+    enableFocusArrows = true,
     menuPosition = {
         point = "CENTER",
         relativePoint = "CENTER",
@@ -64,7 +64,7 @@ function Minimizer.Config.Initialize()
         MinimizerDB.enableFocusFace = true
     end
     if MinimizerDB.enableFocusArrows == nil then
-        MinimizerDB.enableFocusArrows = false
+        MinimizerDB.enableFocusArrows = true
     end
 
     local version = tonumber(MinimizerDB.version) or 0

@@ -37,7 +37,7 @@ function Minimizer.Core.RegisterModule(name, module)
 
     Minimizer.Modules[name] = module
     module.MinimizerModuleName = name
-    Minimizer.Core.ApplyToAll()
+
 end
 
 function Minimizer.Core.UpdateModules(unit, nameplate, snapshot)
