@@ -442,8 +442,11 @@ do
         "TEST A1: channel secreto ininterrumpible pinta gris mientras dura")
     do
         local p = np.MinimizerPersistentCastColor
-        check(p == nil,
-            "TEST A2: channel secreto ininterrumpible NO fija persistencia")
+        check(p ~= nil and math.abs(p[1] - addonTable.Constants.HealthColors.superiorUninterruptible[1]) < 0.01 and
+              math.abs(p[2] - addonTable.Constants.HealthColors.superiorUninterruptible[2]) < 0.01 and
+              math.abs(p[3] - addonTable.Constants.HealthColors.superiorUninterruptible[3]) < 0.01 and
+              np.MinimizerPersistentCastColorKind == nil,
+            "TEST A2: channel secreto ininterrumpible FIJA persistencia de color pero NO el Kind")
     end
 
     -- Terminar channel
@@ -451,11 +454,12 @@ do
     addonTable.Cast.InvalidateState(token)
     addonTable.Core.ApplyToUnit(token)
 
-    local r2, g2, b2 = addonTable.Utils.GetHealthBar(np):GetStatusBarColor()
-    check(math.abs(r2 - addonTable.Constants.HealthColors.melee[1]) < 0.01 and
-          math.abs(g2 - addonTable.Constants.HealthColors.melee[2]) < 0.01 and
-          math.abs(b2 - addonTable.Constants.HealthColors.melee[3]) < 0.01,
-        "TEST A3: despues del channel, sin persistencia, vuelve a color base")
+        local r2, g2, b2 = addonTable.Utils.GetHealthBar(np):GetStatusBarColor()
+        check(math.abs(r2 - addonTable.Constants.HealthColors.superiorUninterruptible[1]) < 0.01 and
+                    math.abs(g2 - addonTable.Constants.HealthColors.superiorUninterruptible[2]) < 0.01 and
+                    math.abs(b2 - addonTable.Constants.HealthColors.superiorUninterruptible[3]) < 0.01 and
+                    np.MinimizerPersistentCastColor ~= nil,
+                "TEST A3: despues del channel, el COLOR persiste (gris) aunque el estado era secreto; el Kind no se fija")
 end
 
 -- Test B: cast secreto que REALMENTE es interruptible debe fijar persistencia
@@ -476,8 +480,11 @@ do
         "TEST B1: cast secreto interrumpible pinta verde")
     do
         local p = np.MinimizerPersistentCastColor
-        check(p == nil,
-            "TEST B2: cast secreto interrumpible NO fija persistencia (secreto no resuelto)")
+        check(p ~= nil and math.abs(p[1] - addonTable.Constants.HealthColors.castInterruptible[1]) < 0.01 and
+              math.abs(p[2] - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
+              math.abs(p[3] - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01 and
+              np.MinimizerPersistentCastColorKind == nil,
+            "TEST B2: cast secreto interrumpible FIJA persistencia de color (verde) pero NO el Kind")
     end
 
     -- Terminar cast pero persiste
@@ -485,8 +492,11 @@ do
     addonTable.Cast.InvalidateState(token)
     addonTable.Core.ApplyToUnit(token)
 
-    check(np.MinimizerPersistentCastColorKind == nil,
-        "TEST B3: despues del cast secreto interrumpible, NO persiste verde")
+    check(np.MinimizerPersistentCastColor ~= nil and math.abs(np.MinimizerPersistentCastColor[1] - addonTable.Constants.HealthColors.castInterruptible[1]) < 0.01 and
+          math.abs(np.MinimizerPersistentCastColor[2] - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
+          math.abs(np.MinimizerPersistentCastColor[3] - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01 and
+          np.MinimizerPersistentCastColorKind == nil,
+        "TEST B3: despues del cast secreto interrumpible, el COLOR persiste (verde) y el Kind no queda fijado")
 end
 
 -- --- TEST GROUP 5: HealthBarColor — Leyenda M+ ---
@@ -563,13 +573,13 @@ do
     check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01,
         "HealthBarColor: inferior channeling ininterrumpible -> gris TEMPORAL")
 
-    -- 3c. Inferior termina cast ininterrumpible -> vuelve a su color base (no persiste)
+    -- 3c. Inferior termina cast ininterrumpible -> el COLOR persiste (gris), la desimplificacion sigue siendo temporal
     Mocks.units["nameplate14"].cast = nil
     addonTable.Cast.InvalidateState("nameplate14")
     addonTable.Core.ApplyToUnit("nameplate14")
     r, g, b = hbMeleeUnint:GetStatusBarColor()
-    check(math.abs(r - 1.00) < 0.01 and math.abs(g - 1.00) < 0.01 and math.abs(b - 1.00) < 0.01,
-        "HealthBarColor: inferior termina cast ininterrumpible -> vuelve blanco (no persiste)")
+    check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01,
+        "HealthBarColor: inferior termina cast ininterrumpible -> el COLOR persiste gris (desimplificacion sigue siendo temporal)")
 
     -- 4. Boss casteando ininterrumpible -> gris TEMPORAL
     Mocks.CreateTestUnit("nameplate11", {
