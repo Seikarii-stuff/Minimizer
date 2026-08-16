@@ -297,7 +297,7 @@ Definiciones:
 - **Superior**: `boss` o `miniboss` (morado). Determinado por nivel skull / worldboss / elite + 2 niveles (`Classification.lua` → `GetSuperiorKind`).
 - **Inferior**: cualquier unidad que no sea superior — melee (blanco), caster/hasmana (azul), trivial (negro), esbirros, menores.
 - **Los azules (caster/hasmana) NO siguen las reglas de cast** — solo cambian de color por aggro, focus o shield. Esto es intencional (ver rationale abajo).
-- **Persistente**: una vez una unitad ha mostrado absorb, el color rosa y la desimplificación quedan fijados para esa nameplate hasta que se recicla el token o desaparece la plate. El flag de absorb es gen-gated en `Core.MarkAbsorbSeen`.
+- **Persistente**: el flag/color permanece incluso después de que termine el cast o el escudo.
 - **Temporal**: el flag/color desaparece en cuanto desaparece la condición.
 
 **Rationale M+:** en Mythic+, cualquier inferior que castee algo interrumpible ES wipe potencial si no se para. El verde persistente le dice al grupo que esa unidad ya demostró capacidad de castear y hay que priorizarla incluso después del cast actual. El gris (ininterrumpible) es peligroso pero no interrumpible — no hace falta mantenerlo desimplificado una vez termina. Cuando una unidad ya mostró absorb, se considera parte del historial visual de esa plate: tanto el color rosa como la desimplificación quedan persistentes para evitar que el significado del shield se pierda al reciclar la plate o al pasar por un repintado nativo. Los superiores son siempre peligrosos (morado); su color no depende de si su cast es o no interrumpible porque el grupo ya sabe que hay que interrumpirlos si pueden.
