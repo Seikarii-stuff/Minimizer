@@ -132,6 +132,19 @@ do
     Mocks.CreateTestUnit("t_melee", { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
     check(addonTable.Classification.GetEliteType("t_melee") == "melee",
         "Classification: sin mana y sin elite/trivial = melee")
+
+    local realUnitClassification = _G.UnitClassification
+    local unitClassificationCalls = 0
+    _G.UnitClassification = function(unit)
+        unitClassificationCalls = unitClassificationCalls + 1
+        return realUnitClassification(unit)
+    end
+    Mocks.CreateTestUnit("t_cache_gen", { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
+    addonTable.Classification.GetEliteType("t_cache_gen")
+    addonTable.Classification.GetEliteType("t_cache_gen")
+    check(unitClassificationCalls == 1,
+        "Classification: memoiza la clasificacion dentro de la misma generacion")
+    _G.UnitClassification = realUnitClassification
 end
 
 -- --- TEST GROUP 2A: Utils.IsSpellKnownByPlayer / Widgets.GetCDSpellID override ---
@@ -283,6 +296,26 @@ do
     Mocks.CreateTestUnit("th_zero", { level = 70, faction = "Horde", threatSituation = 0 })
     check(addonTable.Threat.PlayerHasAggro("th_zero") == false,
         "Threat: situacion 0 NO debe tratarse como aggro (cuidado con truthiness)")
+
+    Mocks.units["player"].role = "TANK"
+    local realRefreshPlayerTankCache = addonTable.Threat.RefreshPlayerTankCache
+    local refreshCalls = 0
+    addonTable.Threat.RefreshPlayerTankCache = function()
+        refreshCalls = refreshCalls + 1
+        return realRefreshPlayerTankCache()
+    end
+    addonTable.Threat.InvalidatePlayerTankCache()
+    check(addonTable.Threat.IsPlayerTank() == true,
+        "Threat: rol de tank del jugador se cachea y se lee correctamente")
+    check(addonTable.Threat.IsPlayerTank() == true,
+        "Threat: el rol de tank no vuelve a consultar la API en la misma generacion")
+    check(refreshCalls == 1,
+        "Threat: la evaluacion del tank se memoiza en una sola llamada")
+    Mocks.units["player"].role = "DAMAGER"
+    if addonTable.Threat.InvalidatePlayerTankCache then
+        addonTable.Threat.InvalidatePlayerTankCache()
+    end
+    addonTable.Threat.RefreshPlayerTankCache = realRefreshPlayerTankCache
 end
 
 -- --- TEST GROUP 5A: Config migration from legacy focusIndicator ---

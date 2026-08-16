@@ -353,6 +353,26 @@ function _G.UnitCanAttack(unit1, unit2)
     return u1.faction ~= u2.faction
 end
 
+function _G.UnitAffectingCombat(unit)
+    local u = getUnit(unit)
+    if not u then return false end
+    return u.inCombat == true
+end
+
+function _G.UnitGroupRolesAssigned(unit)
+    local u = getUnit(unit)
+    if not u then return nil end
+    return u.role or "NONE"
+end
+
+function _G.IsInRaid()
+    return false
+end
+
+function _G.IsInGroup()
+    return false
+end
+
 function _G.UnitIsUnit(unit1, unit2)
     if unit1 == unit2 then return true end
     local u1 = getUnit(unit1)

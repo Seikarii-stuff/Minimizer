@@ -17,6 +17,9 @@ local GetSpecialization = GetSpecialization
 local GetSpecializationRole = GetSpecializationRole
 local C_SpecializationInfo = C_SpecializationInfo
 
+local playerTankCache
+local playerTankCacheValid = false
+
 function Minimizer.Threat.RefreshTankTokens()
     local tokens = Minimizer.Threat.tankTokens
     wipe(tokens)
@@ -38,22 +41,36 @@ function Minimizer.Threat.RefreshTankTokens()
     end
 end
 
+function Minimizer.Threat.RefreshPlayerTankCache()
+    local isTank = false
+    if UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK" then
+        isTank = true
+    else
+        local specialization = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
+            and C_SpecializationInfo.GetSpecialization()
+        if specialization and C_SpecializationInfo.GetSpecializationInfo then
+            local _, _, _, _, role = C_SpecializationInfo.GetSpecializationInfo(specialization)
+            isTank = role == "TANK"
+        elseif GetSpecialization and GetSpecializationRole then
+            specialization = GetSpecialization()
+            isTank = specialization ~= nil and GetSpecializationRole(specialization) == "TANK"
+        end
+    end
+    playerTankCache = isTank
+    playerTankCacheValid = true
+    return playerTankCache
+end
+
+function Minimizer.Threat.InvalidatePlayerTankCache()
+    playerTankCache = nil
+    playerTankCacheValid = false
+end
 
 function Minimizer.Threat.IsPlayerTank()
-    if UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK" then
-        return true
+    if playerTankCacheValid then
+        return playerTankCache
     end
-    local specialization = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
-        and C_SpecializationInfo.GetSpecialization()
-    if specialization and C_SpecializationInfo.GetSpecializationInfo then
-        local _, _, _, _, role = C_SpecializationInfo.GetSpecializationInfo(specialization)
-        return role == "TANK"
-    end
-    if GetSpecialization and GetSpecializationRole then
-        specialization = GetSpecialization()
-        return specialization ~= nil and GetSpecializationRole(specialization) == "TANK"
-    end
-    return false
+    return Minimizer.Threat.RefreshPlayerTankCache()
 end
 
 function Minimizer.Threat.GetSituation(unit, source)

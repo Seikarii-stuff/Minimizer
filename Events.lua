@@ -98,6 +98,9 @@ local function HandleRosterOrSpecChange(self, event)
     if Minimizer.Threat and Minimizer.Threat.RefreshTankTokens then
         Minimizer.Threat.RefreshTankTokens()
     end
+    if Minimizer.Threat and Minimizer.Threat.RefreshPlayerTankCache then
+        Minimizer.Threat.RefreshPlayerTankCache()
+    end
     if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then
         Minimizer.Widgets.InvalidateCDSpellCache()
     end
