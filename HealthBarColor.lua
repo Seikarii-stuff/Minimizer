@@ -117,22 +117,24 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
         -- Regla 5 & 6: CUALQUIER inferior (melee, caster ya excluido arriba
         -- por isSpecial, trivial, etc.)
         if isActiveCastOrChannel then
-            if safeUninterruptible == true then
-                r, g, b = COLORS.superiorUninterruptible[1], COLORS.superiorUninterruptible[2], COLORS.superiorUninterruptible[3]
-                nameplate.MinimizerPersistentCastColor = nil
-                nameplate.MinimizerPersistentCastColorKind = nil
-            else
-                r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
+                -- Resolver color usando rawUninterruptible COMO SINK (no comparar secretos).
+                if safeUninterruptible == true then
+                    r, g, b = COLORS.superiorUninterruptible[1], COLORS.superiorUninterruptible[2], COLORS.superiorUninterruptible[3]
+                else
+                    r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
+                end
+                -- Persistir siempre el color que ya se aplicó (verde o gris). No
+                -- dependemos de comparar el valor secreto: guardamos el RGB final.
+                nameplate.MinimizerPersistentCastColor = nameplate.MinimizerPersistentCastColor or {}
+                local p = nameplate.MinimizerPersistentCastColor
+                p[1], p[2], p[3] = r, g, b
+                -- Solo el "kind" mantiene semántica adicional cuando sabemos que
+                -- era explícitamente interruptible (safeUninterruptible == false).
                 if safeUninterruptible == false then
-                    nameplate.MinimizerPersistentCastColor = nameplate.MinimizerPersistentCastColor or {}
-                    local p = nameplate.MinimizerPersistentCastColor
-                    p[1], p[2], p[3] = r, g, b
                     nameplate.MinimizerPersistentCastColorKind = "castInterruptible"
                 else
-                    nameplate.MinimizerPersistentCastColor = nil
                     nameplate.MinimizerPersistentCastColorKind = nil
                 end
-            end
         elseif nameplate.MinimizerPersistentCastColor then
             local p = nameplate.MinimizerPersistentCastColor
             r, g, b = p[1], p[2], p[3]
