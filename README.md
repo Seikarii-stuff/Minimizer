@@ -389,6 +389,8 @@ más plates simultáneas ni para priorizar qué unidad recibe una. No
 
 ## 9. Optimización pendiente
 
+**Nota (2026-08-17):** Desde 2026-08-17, `HealthBarColor` y `CastingBar` también saltan unidades amistosas (no solo PvP). Esto alinea el comportamiento con la política del parche 12.1 de Blizzard, que gestiona nativamente las nameplates amistosas y evita tocar sus barras.
+
 Esta es la única área de trabajo activo en el proyecto aparte de benchmarking continuo. No hay bugs funcionales conocidos fuera de §8.
 
 - **`C_NamePlate.GetNamePlates()` aloca una tabla nueva en cada llamada** (comentario explícito en `Utils.lua`). Se llama en el camino lento de `GetNamePlateForUnit`, en `Core.ApplyToAll`, y en `Events.lua` (`HandleFullRefreshEvent` para limpiar flags persistentes en `PLAYER_REGEN_ENABLED`). Candidato a revisar cuántas de estas llamadas son realmente necesarias por pase vs. cuántas podrían compartir un único snapshot de la lista de plates activas.

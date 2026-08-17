@@ -77,6 +77,7 @@ end
 local C_NamePlate = C_NamePlate
 local C_NamePlateManager = C_NamePlateManager
 local UnitIsUnit = UnitIsUnit
+local UnitCanAttack = UnitCanAttack
 local type = type
 local pcall = pcall
 local GetTime = GetTime
@@ -127,6 +128,7 @@ local function BuildSnapshot(unit, nameplate)
     s.hasHadAbsorb = Minimizer.Core.MarkAbsorbSeen(unit, nameplate, s.hasAbsorb)
     s.hasAggro = Minimizer.Threat.PlayerHasAggro(unit)
     s.isPvP = Minimizer.Utils.IsPvPUnit(unit)
+    s.isFriendly = UnitCanAttack and not UnitCanAttack("player", unit) or false
     s.isCasting, s.isUninterruptible, s.rawUninterruptible, s.isChanneling = Minimizer.Cast.GetState(unit)
 
     -- Prioridad focus > aggro > absorb > eliteType, calculada inline

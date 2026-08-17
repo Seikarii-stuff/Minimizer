@@ -12,6 +12,7 @@ Minimizer.CastingBar = CastingBar
 local COLORS = Minimizer.Constants.CastColors
 local UnitExists = UnitExists
 local UnitIsUnit = UnitIsUnit
+local UnitCanAttack = UnitCanAttack
 local type = type
 
 -- Tablas scratch reutilizadas para evitar allocar 2 tablas por llamada en
@@ -132,6 +133,12 @@ function CastingBar:UpdateNamePlate(unit, nameplate, snapshot)
     local isPvP = snapshot and snapshot.isPvP
     if isPvP == nil then isPvP = Minimizer.Utils.IsPvPUnit(unit) end
     if isPvP then return end
+    -- Política del proyecto (parche 12.1): NO tocar nameplates amistosas;
+    -- Blizzard las gestiona nativamente mejor que nosotros. Filtrar también
+    -- unidades amistosas (no solo PvP) para evitar tocar castbars nativas.
+    local isFriendly = snapshot and snapshot.isFriendly
+    if isFriendly == nil then isFriendly = UnitCanAttack and not UnitCanAttack("player", unit) end
+    if isFriendly then return end
     local castBar = self:GetCastBar(nameplate)
     if not castBar or type(castBar.SetStatusBarColor) ~= "function" then return end
 

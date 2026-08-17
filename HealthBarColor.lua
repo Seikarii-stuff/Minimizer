@@ -12,6 +12,7 @@ local COLORS = Minimizer.Constants.HealthColors
 local UnitExists = UnitExists
 local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
 local UnitHealthMax = UnitHealthMax
+local UnitCanAttack = UnitCanAttack
 local type = type
 
 local OVERSHIELD_ALPHA = 1
@@ -74,6 +75,12 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     local isPvP = snapshot and snapshot.isPvP
     if isPvP == nil then isPvP = Minimizer.Utils.IsPvPUnit(unit) end
     if isPvP then return end
+    -- Política del proyecto (parche 12.1): NO tocar nameplates amistosas;
+    -- Blizzard las gestiona nativamente mejor que nosotros. Filtrar también
+    -- unidades amistosas (no solo PvP) para evitar tocar barras nativas.
+    local isFriendly = snapshot and snapshot.isFriendly
+    if isFriendly == nil then isFriendly = UnitCanAttack and not UnitCanAttack("player", unit) end
+    if isFriendly then return end
     local healthBar = self:GetHealthBar(nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
     HookHealthBar(healthBar)

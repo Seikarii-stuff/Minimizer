@@ -404,6 +404,46 @@ end
 
 -- --- GAP 1: HealthBarColor persistent cast flag invalidates on token recycle ---
 -- --- TEST GROUP: Cache.InvalidateUnit / InvalidateAll (prefix matching) ---
+-- --- TEST GROUP: unidades amistosas no se tocan (HealthBarColor/CastingBar) ---
+do
+    -- Asegurar jugador en Alliance para que UnitCanAttack devuelva false
+    Mocks.CreateTestUnit("player", { name = "Player", health = 100, healthMax = 100, level = 70, faction = "Alliance", isPlayer = true, class = "WARRIOR", guid = "player_guid" })
+
+    local token = "friendly_unit1"
+    Mocks.CreateTestUnit(token, {
+        name = "Friendly NPC",
+        health = 50,
+        healthMax = 100,
+        level = 10,
+        faction = "Alliance",
+        isPlayer = false,
+        classification = "normal",
+        cast = { name = "VendorFlavor", startTime = 0, endTime = 2000, uninterruptible = false },
+    })
+    local np = Mocks.CreateTestNameplate(token)
+
+    -- Ejecutar ApplyToUnit como lo haria el core
+    addonTable.Core.ApplyToUnit(token)
+
+    -- HealthBar NO debe haberse hookeado ni cambiado de color
+    local hb = addonTable.Utils.GetHealthBar(np)
+    check(hb.MinimizerHealthColorHooked ~= true,
+        "Friendly: HealthBar NO debe quedar hookeada por Minimizer")
+    local r, g, b = hb:GetStatusBarColor()
+    check(math.abs(r - 1) < 0.01 and math.abs(g - 1) < 0.01 and math.abs(b - 1) < 0.01,
+        "Friendly: HealthBar mantiene color default (1,1,1)")
+
+    -- CastingBar NO debe haber sido pintada por Minimizer
+    local castBar = np.UnitFrame.castBar
+    check(castBar.MinimizerLastCastColor == nil,
+        "Friendly: CastingBar no debe ser pintada (MinimizerLastCastColor nil)")
+
+    -- Decision debe seguir reportando reason == 'friendly'
+    local simplify, reason = addonTable.Decision.ShouldSimplifyUnit(token, nil)
+    check(reason == "friendly",
+        "Decision: unidad amiga sigue devolviendo reason == 'friendly'")
+end
+
 do
     local unit = "nameplate70"
     addonTable.Cache.SetUnitKeyWithGeneration(unit, "threat:player", 3)
