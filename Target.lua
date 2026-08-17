@@ -34,6 +34,12 @@ function Target:UpdateTargetCDs()
         Minimizer.Widgets.UpdateHalo(offFrame, offID)
         offFrame:ClearAllPoints()
         offFrame:SetPoint("CENTER", plate, "TOP", 0, 10 + (HALO_SIZE / 2))
+        -- Poner el halo justo por encima del portrait (nivel relativo a la placa)
+        local plateLevel = (plate:GetFrameLevel() or 0)
+        offFrame:SetFrameLevel(plateLevel + 2)
+        if defPip then
+            defPip:SetFrameLevel((offFrame:GetFrameLevel() or 0) + 5)
+        end
     else
         offFrame:Hide()
     end

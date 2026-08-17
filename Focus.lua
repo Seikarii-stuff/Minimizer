@@ -95,6 +95,10 @@ function Focus:UpdateFace()
     SetPortraitTexture(portrait, "player")
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", plate, "TOP", 0, 10 + (HALO_SIZE / 2))
+    -- Asegurar nivel de frame relativo a la placa para que los pips/overlays
+    -- se posicionen correctamente por encima del retrato.
+    local plateLevel = (plate:GetFrameLevel() or 0)
+    frame:SetFrameLevel(plateLevel + 1)
     frame:Show()
     UpdateCooldown()
 
@@ -102,6 +106,9 @@ function Focus:UpdateFace()
         local overrideSpell = MinimizerCharDB and MinimizerCharDB.focusCC
         local ccID = Minimizer.Widgets.GetCDSpellID(Minimizer.Data.MASS_CC_SPELLS, overrideSpell)
         Minimizer.Widgets.UpdatePip(ccPip, ccID)
+    end
+    if ccPip then
+        ccPip:SetFrameLevel((frame:GetFrameLevel() or 0) + 5)
     end
 end
 
