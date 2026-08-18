@@ -10,7 +10,7 @@ Minimizer.Focus = Focus
 local HALO_SIZE = 46
 local PORTRAIT_RADIUS = 18
 local frame = CreateFrame("Frame", "MinimizerFocusPortrait", UIParent)
-frame:SetSize(40, 40)
+frame:SetSize(36, 36)
 frame:SetFrameStrata("HIGH")
 frame:Hide()
 
