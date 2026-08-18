@@ -206,7 +206,7 @@ function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
             C_NamePlateManager.SetNamePlateSimplified(npToken, shouldSimplify)
             nameplate.MinimizerState = shouldSimplify
             if Minimizer.HitTest and Minimizer.HitTest.Sync then
-                Minimizer.HitTest.Sync(npToken)
+                Minimizer.HitTest.Sync(npToken, nameplate)
             end
         end
     end

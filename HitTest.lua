@@ -27,16 +27,30 @@ Minimizer.HitTest = Minimizer.HitTest or {}
 local MAX_RETRY_TICKS = 6
 local RETRY_INTERVAL = 0.05
 local pendingRetries = {}
+local _hit_test_log_throttle = 0
+
+local function LogHitTestError(err)
+    if Minimizer.Utils and Minimizer.Utils.LogGuardedError then
+        Minimizer.Utils.LogGuardedError("hitTest", err)
+        return
+    end
+
+    local now = GetTime and GetTime() or 0
+    if (now - _hit_test_log_throttle) < 10 then return end
+    _hit_test_log_throttle = now
+    print("|cffff4444Minimizer|r: Error in hit-test sync: " .. tostring(err))
+end
 
 local function CanChangeHitTestPoints(nameplate)
     if not nameplate or type(nameplate.CanChangeHitTestPoints) ~= "function" then
         return false, false
     end
-    local canChange = false
-    local ok = pcall(function()
-        canChange = nameplate:CanChangeHitTestPoints()
-    end)
-    return ok, ok and canChange
+
+    local ok, canChange = pcall(nameplate.CanChangeHitTestPoints, nameplate)
+    if not ok then
+        LogHitTestError(canChange)
+    end
+    return ok, ok and canChange == true
 end
 
 local function ScheduleRetry(unit)
@@ -63,10 +77,10 @@ end
 -- Sincroniza la región de clic de `unit` con su healthBar real.
 -- Devuelve true si se aplicó, false si Blizzard aún no permite mutar el
 -- hit-test para esta nameplate (en cuyo caso queda un reintento encolado).
-function Minimizer.HitTest.Sync(unit)
+function Minimizer.HitTest.Sync(unit, nameplate)
     if not unit then return false end
 
-    local nameplate = Minimizer.Utils.GetNamePlateForUnit(unit)
+    nameplate = nameplate or Minimizer.Utils.GetNamePlateForUnit(unit)
     if not nameplate or type(nameplate.SetAllHitTestPoints) ~= "function" then
         -- Cliente sin esta API (o nameplate no resuelta todavía): nada que
         -- sincronizar. No es un error -- simplemente no aplica.
