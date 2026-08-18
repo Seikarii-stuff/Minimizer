@@ -94,7 +94,7 @@ function Focus:UpdateFace()
 
     SetPortraitTexture(portrait, "player")
     frame:ClearAllPoints()
-    frame:SetPoint("CENTER", plate, "TOP", 0, 10 + (HALO_SIZE / 2))
+    frame:SetPoint("CENTER", plate, "BOTTOM", 0, 10 + (HALO_SIZE / 2))
     -- Asegurar nivel de frame relativo a la placa para que los pips/overlays
     -- se posicionen correctamente por encima del retrato.
     local plateLevel = (plate:GetFrameLevel() or 0)
