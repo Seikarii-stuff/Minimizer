@@ -73,6 +73,22 @@ local function LetBlizzardPaint(healthBar, nameplate)
     end
 end
 
+-- Match Platynator's threat model: the important distinction is whether this
+-- tank (or another tank) is securely tanking the unit. We intentionally use
+-- Minimizer's cached/sanitised threat API here instead of indexing any table
+-- with raw/secret threat values.
+local function ShouldLetBlizzardPaint(unit)
+    if not Minimizer.Threat or not Minimizer.Threat.IsPlayerTank then
+        return false
+    end
+    if not Minimizer.Threat.IsPlayerTank() then
+        return false
+    end
+
+    local tankSituation = Minimizer.Threat.GetTankSituation and Minimizer.Threat.GetTankSituation(unit)
+    return tankSituation == nil or tankSituation == 0
+end
+
 function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     if not unit or not UnitExists(unit) then return end
 
@@ -87,11 +103,7 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     local healthBar = self:GetHealthBar(nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
 
-    -- Only tank players get this delegation. If another tank has aggro, the
-    -- normal Minimizer legend continues. We only hand the bar back to Blizzard
-    -- when no tank in the group has full aggro on the unit.
-    if Minimizer.Threat and Minimizer.Threat.ShouldLetBlizzardHandleHealthColor
-        and Minimizer.Threat.ShouldLetBlizzardHandleHealthColor(unit) then
+    if ShouldLetBlizzardPaint(unit) then
         LetBlizzardPaint(healthBar, nameplate)
         return
     end
@@ -115,6 +127,11 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
         baseKind = snapshot.displayKind
     else
         baseKind = Minimizer.Core and Minimizer.Core.ComputeDisplayKind and Minimizer.Core.ComputeDisplayKind(unit, nameplate) or Minimizer.Classification.GetEliteType(unit)
+    end
+
+    -- Never use a raw/secret value as a key into the color table.
+    if Minimizer.Utils.IsSecretValue(baseKind) or type(baseKind) ~= "string" then
+        baseKind = "melee"
     end
 
     nameplate.MinimizerHasAbsorb = baseKind == "absorb"
