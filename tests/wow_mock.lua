@@ -144,6 +144,10 @@ function FrameMixin:GetParent()
     return rawget(self, "parent")
 end
 
+function FrameMixin:SetAllHitTestPoints(clickRegion)
+    self.MinimizerHitTestRegion = clickRegion
+end
+
 function FrameMixin:GetChildren()
     local ch = rawget(self, "_children")
     if not ch or #ch == 0 then return end

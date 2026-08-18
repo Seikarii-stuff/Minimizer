@@ -205,6 +205,9 @@ function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
         if forceUpdate or nameplate.MinimizerState ~= shouldSimplify then
             C_NamePlateManager.SetNamePlateSimplified(npToken, shouldSimplify)
             nameplate.MinimizerState = shouldSimplify
+            if Minimizer.HitTest and Minimizer.HitTest.Sync then
+                Minimizer.HitTest.Sync(npToken)
+            end
         end
     end
 
@@ -233,6 +236,9 @@ function Minimizer.Core.ClearNeverSimplify(unit)
     end
     if Minimizer.Cast and Minimizer.Cast.InvalidateState then
         Minimizer.Cast.InvalidateState(unit)
+    end
+    if Minimizer.HitTest and Minimizer.HitTest.CancelRetry then
+        Minimizer.HitTest.CancelRetry(unit)
     end
     local nameplate = Minimizer.ActiveNameplates[unit] or Minimizer.Utils.GetNamePlateForUnit(unit)
     if nameplate then

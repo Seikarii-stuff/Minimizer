@@ -10,6 +10,7 @@
 Bootstrap.lua
 Utils.lua
 Widgets.lua
+HitTest.lua
 Config.lua
 Constants.lua
 data\SpellData.lua

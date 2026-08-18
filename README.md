@@ -53,6 +53,7 @@ Orden de carga tal como aparece en `Minimizer.toc`:
 Bootstrap.lua       Minimizer (inicialización global, ADDON_LOADED)
 Utils.lua           Minimizer.Utils (helpers puros, guardas de secretos, debounce/throttle, tokens)
 Widgets.lua         Minimizer.Widgets (búsqueda de castbars, halos, pips, cooldowns)
+HitTest.lua         Minimizer.HitTest (sincroniza hit-test con la healthBar real y reintenta si Blizzard aún no permite mutar el click region)
 Config.lua          Minimizer.Config (SavedVariables MinimizerDB, defaults, migraciones)
 Constants.lua       Minimizer.Constants (paletas de color de salud/cast/pips)
 data/SpellData.lua  Minimizer.Data (spellIDs por clase: interrupts, CDs of./def., CC masivo)
@@ -101,7 +102,19 @@ C_NamePlateManager.SetNamePlateSimplified(unitToken, bool)
 - Se llama **solo cuando cambia el estado deseado** (`nameplate.MinimizerState ~= shouldSimplify`), o cuando se pide `forceUpdate` explícito.
 - Disponibilidad comprobada primero con `Minimizer.Utils.IsSimplifiedAvailable()` (`C_NamePlateManager and type(...) == "function"`). **Nunca** se llama sin este guard.
 
-### 3.2 Resolución de nameplate por unit token
+### 3.2 Sincronización del hit-test con la healthbar
+
+```lua
+nameplate:SetAllHitTestPoints(healthBar)
+nameplate:CanChangeHitTestPoints()
+```
+
+- Verificado en `HitTest.lua`, `Minimizer.HitTest.Sync`.
+- Se llama justo después de `C_NamePlateManager.SetNamePlateSimplified` para que la región de clic siga a la healthbar visual real del nameplate.
+- Blizzard no siempre permite mutar el hit-test inmediatamente tras `NAME_PLATE_UNIT_ADDED`; por eso `Sync` comprueba `CanChangeHitTestPoints()` y reintenta con `C_Timer.After` hasta 6 veces a 0.05s.
+- Si la API aún no está disponible, no se fuerza nada: se deja el reintento en cola, no se queda el click region desincronizado con la barra visible.
+
+### 3.3 Resolución de nameplate por unit token
 
 ```lua
 Minimizer.Utils.GetNamePlateForUnit(unit)
@@ -111,7 +124,7 @@ Minimizer.Utils.GetNamePlateForUnit(unit)
 - Camino lento (para `target`, `focus`, `bossN`, etc.): itera `C_NamePlate.GetNamePlates()` (⚠️ aloca una tabla nueva cada vez, ver §9) y compara con `UnitIsUnit(token, unit)`.
 - Para `target`/`focus` específicamente, `Target.lua`/`Focus.lua` llaman directo a `C_NamePlate.GetNamePlateForUnit("target"/"focus")` en vez de pasar por este camino lento.
 
-### 3.3 Ciclo de vida de nameplates: eventos + un único hook seguro
+### 3.3b Ciclo de vida de nameplates: eventos + un único hook seguro
 
 ```lua
 -- Events.lua

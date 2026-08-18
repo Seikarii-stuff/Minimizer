@@ -567,6 +567,46 @@ do
         "GAP2: el estado simplificado se recalcula para la nueva unidad")
 end
 
+-- --- GAP 3: hit-test track follows active healthBar and retries until Blizzard permits mutation ---
+do
+    local token = "nameplate60"
+    local np1 = Mocks.CreateTestNameplate(token)
+    local hb1 = addonTable.Utils.GetHealthBar(np1)
+    Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde" })
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
+    addonTable.Core.ApplyToUnit(token)
+
+    check(np1.MinimizerHitTestRegion == hb1,
+        "GAP3: el hit-test de la primera nameplate apunta al healthBar actual")
+
+    Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde" })
+    local npRecycled = Mocks.CreateTestNameplate(token)
+    local hbRecycled = addonTable.Utils.GetHealthBar(npRecycled)
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
+    addonTable.Core.ApplyToUnit(token)
+
+    check(npRecycled.MinimizerHitTestRegion == hbRecycled,
+        "GAP3: al reciclar el token, el hit-test se sincroniza con la nueva healthBar")
+    check(np1.MinimizerHitTestRegion ~= hb1 or np1.MinimizerHitTestRegion == hb1,
+        "GAP3: la referencia vieja no invalida la nueva asignacion")
+
+    local tokenRetry = "nameplate61"
+    local np3 = Mocks.CreateTestNameplate(tokenRetry)
+    local hb3 = addonTable.Utils.GetHealthBar(np3)
+    Mocks.CreateTestUnit(tokenRetry, { level = 70, classification = "normal", faction = "Horde" })
+    np3.CanChangeHitTestPoints = function() return false end
+    local first = addonTable.HitTest.Sync(tokenRetry)
+    check(first == false,
+        "GAP3: Sync devuelve false si Blizzard aun no permite cambiar el hit-test")
+    check(np3.MinimizerHitTestRegion == nil,
+        "GAP3: Sync no aplica el hit-test mientras Blizzard lo deniega")
+
+    np3.CanChangeHitTestPoints = function() return true end
+    Mocks.AdvanceTime(0.05)
+    check(np3.MinimizerHitTestRegion == hb3,
+        "GAP3: el retry reintenta y aplica el hit-test cuando Blizzard habilita la mutacion")
+end
+
 -- === TESTS: Secrets handling for persistencia verde ===
 -- Test A: channel ininterrumpible enviado como secreto NO debe fijar persistencia
 do
