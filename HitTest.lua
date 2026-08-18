@@ -2,22 +2,7 @@
 -- Minimizer - HitTest.lua
 -- Mantiene la región de clic (hit-test) de la nameplate sincronizada con el
 -- healthBar real.
---
--- Root cause del bug original: C_NamePlateManager.SetNamePlateSimplified
--- redimensiona visualmente el healthBar (Core.lua -> ApplyToUnit), pero
--- Blizzard NO recalcula el hit-test solo. Sin esta llamada explícita, la
--- región de clic se queda pegada al tamaño que tenía la ÚLTIMA vez que algo
--- tocó el hit-test (normalmente el tamaño no-simplificado inicial), y el
--- healthbar visible deja de coincidir con donde realmente puedes hacer clic.
---
--- Verificado contra Platynator (Display/Initialize.lua, UpdateClickRegion /
--- GetCanChangeHitTestPoints): usan nameplate:SetAllHitTestPoints(frame) +
--- nameplate:CanChangeHitTestPoints() con reintento corto, porque justo tras
--- NAME_PLATE_UNIT_ADDED Blizzard a veces aún no permite mutar el hit-test.
--- Minimizer replica el mismo patrón pero apuntando directo al healthBar
--- nativo en vez de construir un clickRegion con tamaño calculado -- no lo
--- necesitamos porque no hacemos escalado propio, solo el toggle binario de
--- SetNamePlateSimplified.
+
 -- ============================================================================
 local _, Minimizer = ...
 if not Minimizer then return end

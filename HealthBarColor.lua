@@ -73,7 +73,7 @@ local function LetBlizzardPaint(healthBar, nameplate)
     end
 end
 
--- Match Platynator's threat model: the important distinction is whether this
+-- threat model: the important distinction is whether this
 -- tank (or another tank) is securely tanking the unit. We intentionally use
 -- Minimizer's cached/sanitised threat API here instead of indexing any table
 -- with raw/secret threat values.
