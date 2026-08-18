@@ -10,9 +10,9 @@ if not Minimizer then return end
 -- The `name` field is authoritative for display in UI dropdowns; the order of
 -- the entries is significant and must match the ordering used in the
 -- additional documentation shipped with this addon (see README or the
--- SpellData documentation block). When possible, prefer the table form so
--- the UI shows human-readable spell names while code still uses numeric IDs
--- for API calls.
+-- SpellData documentation block). When possible, prefer the table form so the
+-- UI shows human-readable spell names while code still uses numeric IDs for
+-- API calls.
 -- ============================================================================
 
 Minimizer.Data = Minimizer.Data or {}
@@ -45,7 +45,13 @@ Minimizer.Data.OFFENSIVE_CDS = {
     WARLOCK = { { id = 1122, name = "Infernal" }, { id = 205180, name = "Darkglare" }, { id = 265187, name = "Demonic Tyrant" } },
     MONK = { { id = 137639, name = "Storm, Earth, and Fire" }, { id = 123904, name = "Invoke Xuen" }, { id = 132578, name = "Niuzao" }, { id = 322118, name = "Yu'lon" } },
     DRUID = { { id = 102558, name = "Incarnation" }, { id = 194223, name = "Celestial Alignment" }, { id = 323764, name = "Convoke" } },
-    DEMONHUNTER = { { id = 191427, name = "Metamorphosis" }, { id = 200166, name = "Nemesis" } },
+    DEMONHUNTER = {
+        { id = 191427, name = "Metamorphosis (Havoc)" },
+        { id = 187827, name = "Metamorphosis (Vengeance)" },
+        { id = 1217605, name = "Void Metamorphosis (Devourer)" },
+        { id = 191427, name = "Metamorphosis" },
+        { id = 200166, name = "Nemesis" },
+    },
     EVOKER = { { id = 375087, name = "Dragonrage" }, { id = 370960, name = "Emerald Communion" } },
 }
 
