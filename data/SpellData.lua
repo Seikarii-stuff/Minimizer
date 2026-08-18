@@ -49,7 +49,6 @@ Minimizer.Data.OFFENSIVE_CDS = {
         { id = 191427, name = "Metamorphosis (Havoc)" },
         { id = 187827, name = "Metamorphosis (Vengeance)" },
         { id = 1217605, name = "Void Metamorphosis (Devourer)" },
-        { id = 191427, name = "Metamorphosis" },
         { id = 200166, name = "Nemesis" },
     },
     EVOKER = { { id = 375087, name = "Dragonrage" }, { id = 370960, name = "Emerald Communion" } },
