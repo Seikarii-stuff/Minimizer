@@ -60,17 +60,15 @@ end
 local HookHealthBar
 local HookIndicator
 
-local function LetBlizzardPaint(healthBar, nameplate)
+-- IMPORTANT: when the aggro flow says Blizzard owns the color, do not call
+-- CompactUnitFrame_UpdateHealthColor ourselves. That function is Blizzard's
+-- internal renderer and its health-color tables are not secret-key safe.
+-- Platynator's pattern is to stop applying our color and let Blizzard's own
+-- update path run normally; it does not force-call the CompactUnitFrame helper.
+local function LetBlizzardPaint(_, nameplate)
     nameplate.MinimizerLastAppliedColor = nil
     nameplate.MinimizerHealthBarColorKind = nil
     nameplate.MinimizerPersistentCastColor = nil
-
-    local unitFrame = nameplate and nameplate.UnitFrame
-    if unitFrame and CompactUnitFrame_UpdateHealthColor then
-        unitFrame.MinimizerLetBlizzardHealthColor = true
-        CompactUnitFrame_UpdateHealthColor(unitFrame)
-        unitFrame.MinimizerLetBlizzardHealthColor = nil
-    end
 end
 
 local function ShouldLetBlizzardPaint(unit)
@@ -81,15 +79,16 @@ local function ShouldLetBlizzardPaint(unit)
         return false
     end
 
-    local tankSituation = Minimizer.Threat.GetTankSituation and Minimizer.Threat.GetTankSituation(unit)
-    return tankSituation == nil or tankSituation == 0
+    if Minimizer.Threat.ShouldLetBlizzardPaint then
+        return Minimizer.Threat.ShouldLetBlizzardPaint(unit)
+    end
+
+    return false
 end
 
 local function GetSafeHealthColor(kind)
-    -- Do not ever use a possibly-secret value as a table key. This is deliberately
-    -- written as explicit comparisons, matching the secret-value-safe pattern used
-    -- by Blizzard/Platynator rather than relying on a secret-taint predicate before
-    -- a dynamic table lookup.
+    -- Never use a possibly-secret value as a table key. All keys here are
+    -- literal strings, matching the secret-safe pattern used by Platynator.
     if kind == "trivial" then return COLORS.trivial end
     if kind == "melee" then return COLORS.melee end
     if kind == "caster" then return COLORS.caster end
