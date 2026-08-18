@@ -61,7 +61,7 @@ Minimizer.Data.DEFENSIVE_CDS = {
     WARLOCK = { { id = 104773, name = "Unending Resolve" } },
     MONK = { { id = 122470, name = "Touch of Karma" }, { id = 115203, name = "Fortifying Brew" } },
     DRUID = { { id = 61336, name = "Survival Instincts" }, { id = 22812, name = "Barkskin" } },
-    DEMONHUNTER = { { id = 198589, name = "Blur" }, { id = 212800, name = "Netherwalk" } },
+    DEMONHUNTER = { { id = 198589, name = "Blur" }, { id = 212800, name = "Netherwalk" }, { id = 204021, name = "Fiery Brand" } },
     EVOKER = { { id = 363916, name = "Obsidian Scales" } },
 }
 
