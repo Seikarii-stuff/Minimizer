@@ -28,5 +28,6 @@ CastingBar.lua
 Focus.lua
 Target.lua
 Menu.lua
+Options.lua
 Events.lua
 SlashCommands.lua
