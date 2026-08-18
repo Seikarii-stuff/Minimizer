@@ -51,7 +51,7 @@ Minimizer.Data.OFFENSIVE_CDS = {
 
 Minimizer.Data.DEFENSIVE_CDS = {
     WARRIOR = { { id = 871, name = "Shield Wall" }, { id = 118038, name = "Die by the Sword" }, { id = 184364, name = "Enraged Regeneration" } },
-    PALADIN = { { id = 642, name = "Divine Shield" }, { id = 31224, name = "Ardent Defender" }, { id = 86659, name = "Guardian of Ancient Kings" } },
+    PALADIN = { { id = 642, name = "Divine Shield" }, { id = 31224, name = "Ardent Defender" }, { id = 86659, name = "Guardian of Ancient Kings" }, { id = 498, name = "Divine Protection" } },
     HUNTER = { { id = 186265, name = "Turtle" }, { id = 264735, name = "Survival of the Fittest" } },
     ROGUE = { { id = 31224, name = "Cloak of Shadows" }, { id = 5277, name = "Evasion" }, { id = 1966, name = "Feint" } },
     PRIEST = { { id = 47585, name = "Dispersion" }, { id = 33206, name = "Pain Suppression" }, { id = 19236, name = "Desperate Prayer" } },
