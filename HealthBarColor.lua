@@ -73,10 +73,6 @@ local function LetBlizzardPaint(healthBar, nameplate)
     end
 end
 
--- threat model: the important distinction is whether this
--- tank (or another tank) is securely tanking the unit. We intentionally use
--- Minimizer's cached/sanitised threat API here instead of indexing any table
--- with raw/secret threat values.
 local function ShouldLetBlizzardPaint(unit)
     if not Minimizer.Threat or not Minimizer.Threat.IsPlayerTank then
         return false
@@ -87,6 +83,22 @@ local function ShouldLetBlizzardPaint(unit)
 
     local tankSituation = Minimizer.Threat.GetTankSituation and Minimizer.Threat.GetTankSituation(unit)
     return tankSituation == nil or tankSituation == 0
+end
+
+local function GetSafeHealthColor(kind)
+    -- Do not ever use a possibly-secret value as a table key. This is deliberately
+    -- written as explicit comparisons, matching the secret-value-safe pattern used
+    -- by Blizzard/Platynator rather than relying on a secret-taint predicate before
+    -- a dynamic table lookup.
+    if kind == "trivial" then return COLORS.trivial end
+    if kind == "melee" then return COLORS.melee end
+    if kind == "caster" then return COLORS.caster end
+    if kind == "boss" then return COLORS.boss end
+    if kind == "miniboss" then return COLORS.miniboss end
+    if kind == "focus" then return COLORS.focus end
+    if kind == "absorb" then return COLORS.absorb end
+    if kind == "aggro" then return COLORS.aggro end
+    return COLORS.melee
 end
 
 function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
@@ -129,13 +141,8 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
         baseKind = Minimizer.Core and Minimizer.Core.ComputeDisplayKind and Minimizer.Core.ComputeDisplayKind(unit, nameplate) or Minimizer.Classification.GetEliteType(unit)
     end
 
-    -- Never use a raw/secret value as a key into the color table.
-    if Minimizer.Utils.IsSecretValue(baseKind) or type(baseKind) ~= "string" then
-        baseKind = "melee"
-    end
-
     nameplate.MinimizerHasAbsorb = baseKind == "absorb"
-    local color = COLORS[baseKind] or COLORS.melee
+    local color = GetSafeHealthColor(baseKind)
     local r, g, b = color[1], color[2], color[3]
 
     local isCasting, isChanneling, safeUninterruptible, rawUninterruptible
