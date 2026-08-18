@@ -116,6 +116,29 @@ function Minimizer.Threat.GetTankSituation(unit)
     return best
 end
 
+-- Returns true only when the player is a tank and NO tank currently has full
+-- aggro on the unit. In that situation the healthbar should be handed back to
+-- Blizzard instead of keeping Minimizer's custom legend color. If another tank
+-- owns aggro, we deliberately return false so the normal legend remains.
+function Minimizer.Threat.ShouldLetBlizzardHandleHealthColor(unit)
+    if not Minimizer.Threat.IsPlayerTank() then
+        return false
+    end
+
+    local playerSituation = Minimizer.Threat.GetSituation(unit, "player")
+    if playerSituation == 3 then
+        return false
+    end
+
+    for _, token in ipairs(Minimizer.Threat.tankTokens) do
+        if Minimizer.Threat.GetSituation(unit, token) == 3 then
+            return false
+        end
+    end
+
+    return true
+end
+
 function Minimizer.Threat.ShouldUnsimplify(unit)
     if Minimizer.Threat.IsPlayerTank() then
         if not UnitAffectingCombat(unit) then return false end

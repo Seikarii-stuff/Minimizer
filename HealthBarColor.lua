@@ -1,6 +1,3 @@
--- Minimizer - HealthBarColor.lua
--- Healthbar colors applied directly to Blizzard's StatusBar.
-
 local _, Minimizer = ...
 if not Minimizer or not Minimizer.Core then return end
 
@@ -17,9 +14,6 @@ local type = type
 
 local OVERSHIELD_ALPHA = 1
 
--- Overlay propio (no el indicator nativo). Mismo patron que
--- BloodShieldOverlay/AbsorbIndicator.lua: StatusBar encima de la
--- healthBar, con el numero de absorb pasado DIRECTO a SetValue como sink.
 local function EnsureOvershieldBar(healthBar)
     local bar = healthBar.MinimizerOvershieldBar
     if bar then return bar end
@@ -66,23 +60,42 @@ end
 local HookHealthBar
 local HookIndicator
 
+local function LetBlizzardPaint(healthBar, nameplate)
+    nameplate.MinimizerLastAppliedColor = nil
+    nameplate.MinimizerHealthBarColorKind = nil
+    nameplate.MinimizerPersistentCastColor = nil
+
+    local unitFrame = nameplate and nameplate.UnitFrame
+    if unitFrame and CompactUnitFrame_UpdateHealthColor then
+        unitFrame.MinimizerLetBlizzardHealthColor = true
+        CompactUnitFrame_UpdateHealthColor(unitFrame)
+        unitFrame.MinimizerLetBlizzardHealthColor = nil
+    end
+end
+
 function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     if not unit or not UnitExists(unit) then return end
-    -- En PvP dejamos la healthbar de Blizzard sin modificar.
-    -- isPvP viene del snapshot compartido (Core.BuildSnapshot) en el pase
-    -- normal; fallback a calculo directo solo si nos llaman sin snapshot
-    -- (hooks de repintado nativo, igual que baseKind mas abajo en esta func).
+
     local isPvP = snapshot and snapshot.isPvP
     if isPvP == nil then isPvP = Minimizer.Utils.IsPvPUnit(unit) end
     if isPvP then return end
-    -- Política del proyecto (parche 12.1): NO tocar nameplates amistosas;
-    -- Blizzard las gestiona nativamente mejor que nosotros. Filtrar también
-    -- unidades amistosas (no solo PvP) para evitar tocar barras nativas.
+
     local isFriendly = snapshot and snapshot.isFriendly
     if isFriendly == nil then isFriendly = UnitCanAttack and not UnitCanAttack("player", unit) end
     if isFriendly then return end
+
     local healthBar = self:GetHealthBar(nameplate)
     if not healthBar or type(healthBar.SetStatusBarColor) ~= "function" then return end
+
+    -- Only tank players get this delegation. If another tank has aggro, the
+    -- normal Minimizer legend continues. We only hand the bar back to Blizzard
+    -- when no tank in the group has full aggro on the unit.
+    if Minimizer.Threat and Minimizer.Threat.ShouldLetBlizzardHandleHealthColor
+        and Minimizer.Threat.ShouldLetBlizzardHandleHealthColor(unit) then
+        LetBlizzardPaint(healthBar, nameplate)
+        return
+    end
+
     HookHealthBar(healthBar)
 
     local indicator = healthBar.totalAbsorbOverlay or healthBar.totalAbsorb
@@ -90,8 +103,6 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
         HookIndicator(indicator, healthBar)
     end
 
-    -- Las nameplates se reutilizan; resetear el color persistente si cambia la unidad
-    -- o si el token fue reciclado y la generacion del plate cambio.
     local currentGen = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
     if nameplate.MinimizerHealthBarColorGen ~= currentGen or nameplate.MinimizerHealthBarColorUnit ~= unit then
         nameplate.MinimizerHealthBarColorUnit = unit
@@ -99,17 +110,10 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
         nameplate.MinimizerPersistentCastColor = nil
     end
 
-    -- Fallback defensivo: si por alguna razon se llama sin snapshot (no
-    -- deberia pasar tras la Fase 3, pero por si acaso algun caller viejo
-    -- queda suelto), recalcula localmente en vez de crashear.
     local baseKind
     if snapshot then
         baseKind = snapshot.displayKind
     else
-        -- Use the shared ComputeDisplayKind helper from Core so the fallback
-        -- replicates the same priority logic (focus > aggro > absorb > eliteType)
-        -- and does not accidentally ignore absorb/aggro/focus when called
-        -- from native Blizzard repaints (SetStatusBarColor hooks).
         baseKind = Minimizer.Core and Minimizer.Core.ComputeDisplayKind and Minimizer.Core.ComputeDisplayKind(unit, nameplate) or Minimizer.Classification.GetEliteType(unit)
     end
 
@@ -121,27 +125,17 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     if snapshot then
         isCasting = snapshot.isCasting
         isChanneling = snapshot.isChanneling
-        safeUninterruptible = snapshot.isUninterruptible -- nil | bool (NUNCA secreto)
-        rawUninterruptible = snapshot.rawUninterruptible   -- posible secreto: SOLO para pasar a Evaluate*
+        safeUninterruptible = snapshot.isUninterruptible
+        rawUninterruptible = snapshot.rawUninterruptible
     else
         isCasting, safeUninterruptible, rawUninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
     end
-    -- rawUninterruptible SOLO se pasa a EvaluateColorRGB (sink directo).
-    -- NUNCA se compara ni se le aplica EvaluateBoolean()==N: ambas formas de
-    -- "leer" un secreto siguen devolviendo un valor tainted y Lua revienta
-    -- (attempt to compare ... tainted) en cuanto se intenta un if/== sobre
-    -- ese resultado. Ver seccion "Persistent Green Fix (v2)" en el README.
 
     local isActiveCastOrChannel = isCasting == true or isChanneling == true
 
-    -- Gate COMPLETO detras de hasHadAbsorb (persistente): la gran mayoria
-    -- de mobs de un pull NUNCA tienen shield, asi que para esos no tocamos
-    -- healthBar.MinimizerOvershieldBar en absoluto -- ni se crea el frame,
-    -- ni se llama a Hide() cada pase. Esto mantiene el coste acotado a los
-    -- mobs realmente escudados.
     local hasHadAbsorb = snapshot and snapshot.hasHadAbsorb
     if hasHadAbsorb == nil then
-        local liveAbsorb = (snapshot and snapshot.hasAbsorb)
+        local liveAbsorb = snapshot and snapshot.hasAbsorb
         if liveAbsorb == nil then
             liveAbsorb = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
         end
@@ -160,86 +154,29 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
             overshieldBar:Hide()
         end
     elseif healthBar.MinimizerOvershieldBar then
-        -- Defensivo: el plate se reciclo a una unidad SIN historial de
-        -- shield mientras el bar del healthBar (que persiste entre unidades
-        -- del mismo pool) seguia visible de la unidad anterior. En teoria
-        -- OnNamePlateRemoved ya lo oculta al reciclar el token, esto es
-        -- solo una segunda red por si acaso.
         healthBar.MinimizerOvershieldBar:Hide()
     end
 
-    --[[
-        LEYENDA M+ (v2 -- ver README para el porque del cambio):
-        Prioridad descendente — la primera regla que aplica gana:
-          1. Focus    → amarillo, sin cambio de simplificacion.
-          2. Aggro    → rojo gestionado por Blizzard, dessimp TEMPORAL.
-          3. Shield   → rosa (absorb), dessimp TEMPORAL.
-          4. Superior (boss/miniboss) → SIEMPRE morado, NUNCA cambia de color
-                      por cast/channel (DEPRECATED desde v2: antes se ponia
-                      gris temporal si el cast era ininterrumpible; se quito
-                      porque forzaba a comparar un booleano potencialmente
-                      secreto y ademas ya es obvio en pantalla cuando un
-                      superior esta casteando). La desimplificacion SIGUE
-                      siendo "no simp" persistente para superiores, eso no
-                      cambia -- solo se toca el color.
-          5. Inferior (cualquier no-superior) casteando interrumpible o canalizando
-                      → verde PERSISTENTE (el color persiste tal y como salio
-                      del ultimo EvaluateColorRGB, ver Utils mas abajo).
-          6. Inferior casteando ininterrumpible → gris, TAMBIEN PERSISTENTE
-                      en color (ver nota "Cambio de contrato" mas abajo);
-                      la DESIMPLIFICACION sigue siendo TEMPORAL para este caso
-                      (vuelve a poder simplificarse en cuanto termina el cast).
-        Los azules (caster/hasmana) NO siguen estas mismas reglas de cast, SOLO CAMBIA DE COLOR CON AGRO,FOCUS O SHIELD.
-
-        NOTA -- Cambio de contrato de "persistente" para el COLOR (v2):
-        Antes solo el verde persistia (via un flag "kind"); el gris volvia al
-        color base del bicho al terminar el cast. Eso obligaba a decidir en
-        Lua "¿el ultimo cast fue interrumpible o no?" comparando un valor que
-        casi siempre llega como secreto -> de ahi el bug historico donde un
-        bicho que SOLO casteaba gris terminaba pintado de verde persistente.
-        Ahora el color que se persiste es EXACTAMENTE el que ya se renderizo
-        (gris o verde, lo que haya calculado EvaluateColorRGB), sin comparar
-        nada. Consecuencia aceptada: el gris tambien queda persistente en el
-        COLOR de la barra (antes era temporal). La DESIMPLIFICACION del gris
-        sigue siendo temporal (eso vive en Decision.lua, sin cambios) -- solo
-        el color de la barra se queda pegado hasta que el bicho vuelva a
-        castear algo o desaparezca la nameplate.
-    ]]
-
-    -- displayKind ya resuelve la prioridad focus > aggro > absorb > eliteType
-    -- (calculado en Core.BuildSnapshot). Aqui solo leemos el resultado.
-    -- IMPORTANTE (temporada de shields): baseKind puede ser "absorb" para
-    -- CUALQUIER unidad que alguna vez enseño el indicador, incluido un boss
-    -- o un caster azul. isSuperior/isCasterClass miran la clasificacion REAL.
     local eliteType = (snapshot and snapshot.eliteType) or Minimizer.Classification.GetEliteType(unit)
     local isSuperior = eliteType == "boss" or eliteType == "miniboss"
     local isCasterClass = eliteType == "caster"
-    -- 'absorb' YA NO esta en isSpecial: los casters siguen ignorando el cast
-    local isSpecial  = baseKind == "focus" or baseKind == "aggro" or isCasterClass
+    local isSpecial = baseKind == "focus" or baseKind == "aggro" or isCasterClass
 
     if not isSpecial and not isSuperior then
-        -- Regla 5 & 6: CUALQUIER inferior (melee, caster ya excluido arriba
-        -- por isSpecial, trivial, etc.)
         if isActiveCastOrChannel then
-                -- Resolver color usando rawUninterruptible COMO SINK (no comparar secretos).
-                if safeUninterruptible == true then
-                    r, g, b = COLORS.superiorUninterruptible[1], COLORS.superiorUninterruptible[2], COLORS.superiorUninterruptible[3]
-                else
-                    r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
-                end
-                -- Persistir siempre el color que ya se aplicó (verde o gris). No
-                -- dependemos de comparar el valor secreto: guardamos el RGB final.
-                nameplate.MinimizerPersistentCastColor = nameplate.MinimizerPersistentCastColor or {}
-                local p = nameplate.MinimizerPersistentCastColor
-                p[1], p[2], p[3] = r, g, b
+            if safeUninterruptible == true then
+                r, g, b = COLORS.superiorUninterruptible[1], COLORS.superiorUninterruptible[2], COLORS.superiorUninterruptible[3]
+            else
+                r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
+            end
+            nameplate.MinimizerPersistentCastColor = nameplate.MinimizerPersistentCastColor or {}
+            local p = nameplate.MinimizerPersistentCastColor
+            p[1], p[2], p[3] = r, g, b
         elseif nameplate.MinimizerPersistentCastColor then
             local p = nameplate.MinimizerPersistentCastColor
             r, g, b = p[1], p[2], p[3]
         end
     end
-    -- isSuperior: sin rama de color por cast/channel. Se queda con el color
-    -- base (COLORS.boss / COLORS.miniboss) siempre, cast o no. Ver nota
-    -- "DEPRECATED desde v2" arriba.
 
     nameplate.MinimizerLastAppliedColor = nameplate.MinimizerLastAppliedColor or {}
     local lc = nameplate.MinimizerLastAppliedColor
@@ -260,21 +197,10 @@ HookHealthBar = function(healthBar)
             local nameplate = Minimizer.Utils.GetNameplateFromHealthBar(healthBar)
             local lastColor = nameplate and nameplate.MinimizerLastAppliedColor
             if lastColor then
-                -- Reaplicacion barata: NO se recalcula eliteType/absorb/
-                -- aggro/cast aqui. Ese trabajo ya lo hizo el ultimo pase
-                -- real (evento estructural) y quedo guardado en
-                -- MinimizerLastAppliedColor. Este hook solo defiende ese
-                -- color contra el repintado nativo de Blizzard, que dispara
-                -- en cada delta de vida sin relacion con nuestro estado.
                 Minimizer.Utils.GuardedCall(healthBar, "MinimizerHealthColorApplying", function()
                     healthBar:SetStatusBarColor(lastColor[1], lastColor[2], lastColor[3])
                 end)
-                return
             end
-            -- Sin color guardado todavia (nameplate recien creada, aun no
-            -- paso por un pase real): no reaplicar nada. NAME_PLATE_UNIT_ADDED
-            -- ya dispara un ApplyToUnit real inmediatamente despues, que
-            -- rellenara MinimizerLastAppliedColor.
         end)
     end
 end
@@ -282,7 +208,6 @@ end
 HookIndicator = function(indicator, healthBar)
     if not indicator or indicator.MinimizerAbsorbHooked then return end
     indicator.MinimizerAbsorbHooked = true
-    -- (no debug markings)
     if hooksecurefunc then
         local function triggerUpdate()
             if healthBar.MinimizerHealthColorApplying then return end
@@ -307,7 +232,6 @@ function HealthBarColor:OnNamePlateRemoved(_, nameplate)
         nameplate.MinimizerHealthBarColorUnit = nil
         nameplate.MinimizerHealthBarColorGen = nil
         nameplate.MinimizerPersistentCastColor = nil
-        
         nameplate.MinimizerHasAbsorb = nil
         nameplate.MinimizerLastAppliedColor = nil
         local healthBar = self:GetHealthBar(nameplate)
