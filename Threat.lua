@@ -156,10 +156,14 @@ end
 
 -- Canonical Platynator-style decision for the special Blizzard-owned color
 -- path: for a tank, hand the healthbar back only when the player has no threat
--- (0/nil) AND no other tank owns the mob. If another tank has aggro, Minimizer
--- stays in its normal legend path instead of delegating the color to Blizzard.
+-- (0/nil) AND no other tank owns the mob. This path is only valid while the
+-- unit is in combat; out of combat we keep Minimizer's normal classification
+-- colors instead of exposing Blizzard's default hostile red.
 function Minimizer.Threat.ShouldLetBlizzardPaint(unit)
     if not Minimizer.Threat.IsPlayerTank() then
+        return false
+    end
+    if not UnitAffectingCombat(unit) then
         return false
     end
 
