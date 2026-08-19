@@ -14,7 +14,7 @@ local function ToggleMenu()
     print("|cff33ff99Minimizer|r: menú no disponible en esta sesión")
 end
 
-SLASH_MINIMIZER1 = "/simp"
+SLASH_MINIMIZER1 = "/mini"
 SlashCmdList["MINIMIZER"] = function(msg)
     msg = (msg or ""):lower():match("^%s*(.-)%s*$")
 
@@ -69,13 +69,10 @@ SlashCmdList["MINIMIZER"] = function(msg)
     end
 
     if not value then
-        print("|cff33ff99Minimizer|r: uso /simp menu, /simp on, /simp off, /simp <0-100>, /simp face, /simp arrows, /simp noface, /simp noarrows")
+        print("|cff33ff99Minimizer|r: uso /mini menu, /mini on, /mini off, /mini <0-100>, /mini face, /mini arrows, /mini noface, /mini noarrows")
         return
     end
 
-    -- Compatibilidad legacy: se sigue aceptando /simp <0-100> por si algún
-    -- usuario tiene el hábito o un perfil/macro viejo, pero internamente
-    -- SIEMPRE se traduce a booleano y NUNCA se vuelve a escribir simplifyPercent.
     value = ClampSimplifyPercent(value)
     if not MinimizerDB then MinimizerDB = {} end
     MinimizerDB.simplifyEnabled = (value > 0)
