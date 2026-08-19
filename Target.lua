@@ -11,16 +11,45 @@ local PORTRAIT_RADIUS = 18
 local offFrame = Minimizer.Widgets.CreateHalo("MinimizerTargetHalo", nil, HALO_SIZE)
 local defPip = Minimizer.Widgets.CreatePip("MinimizerTargetDefensivePip", offFrame, "defensive", "TOPLEFT", PORTRAIT_RADIUS)
 
+-- Solo el número de cuenta atrás del corte de Focus. No dibuja swipe/halo:
+-- reutiliza exactamente el mismo spellID y la misma fuente de cooldown que Focus.
+local interruptCountdown = CreateFrame("Cooldown", "MinimizerTargetInterruptCountdown", offFrame, "CooldownFrameTemplate")
+interruptCountdown:SetAllPoints()
+Minimizer.Widgets.ConfigureCooldownFrame(interruptCountdown, {
+    drawEdge = false,
+    useCircularEdge = false,
+    drawSwipe = false,
+    drawBling = false,
+    reverse = false,
+    hideCountdownNumbers = false,
+})
+interruptCountdown:SetFrameLevel((offFrame:GetFrameLevel() or 0) + 10)
+
+local function UpdateInterruptCountdown()
+    local interruptSpellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
+        and Minimizer.Interrupt.GetSpellID()
+
+    if not interruptSpellID or not Minimizer.Widgets.ApplyCooldownDuration then
+        interruptCountdown:Hide()
+        return
+    end
+
+    Minimizer.Widgets.ApplyCooldownDuration(interruptCountdown, interruptSpellID)
+    interruptCountdown:Show()
+end
+
 function Target:UpdateTargetCDs()
     if not UnitExists("target") or UnitIsDead("target") then 
         offFrame:Hide()
-        return 
+        interruptCountdown:Hide()
+        return
     end
     
     local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit("target")
     if not plate then 
         offFrame:Hide()
-        return 
+        interruptCountdown:Hide()
+        return
     end
 
     local offOverride = MinimizerCharDB and MinimizerCharDB.targetOffensive
@@ -40,8 +69,11 @@ function Target:UpdateTargetCDs()
         if defPip then
             defPip:SetFrameLevel((offFrame:GetFrameLevel() or 0) + 5)
         end
+        interruptCountdown:SetFrameLevel((offFrame:GetFrameLevel() or 0) + 10)
+        UpdateInterruptCountdown()
     else
         offFrame:Hide()
+        interruptCountdown:Hide()
     end
 end
 
