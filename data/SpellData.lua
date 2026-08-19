@@ -72,11 +72,11 @@ Minimizer.Data.OFFENSIVE_CDS = {
     WARLOCK = { { id = 1122, name = "Infernal" }, { id = 205180, name = "Darkglare" }, { id = 265187, name = "Demonic Tyrant" } },
     MONK = { { id = 137639, name = "Storm, Earth, and Fire" }, { id = 123904, name = "Invoke Xuen" }, { id = 132578, name = "Niuzao" }, { id = 322118, name = "Yu'lon" } },
     DRUID = { { id = 102558, name = "Incarnation" }, { id = 194223, name = "Celestial Alignment" }, { id = 323764, name = "Convoke" } },
-       DEMONHUNTER = {
+    DEMONHUNTER = {
         { id = 191427, name = "Metamorphosis (Havoc)" },
         { id = 187827, name = "Metamorphosis (Vengeance)" },
         { id = 1217605, name = "Void Metamorphosis (Devourer)" },
-        { id = 200166, name = "Nemesis" },    },
+    },
     EVOKER = {
         { id = 375087, name = "Dragonrage" },
         { id = 370960, name = "Emerald Communion" },
@@ -97,7 +97,7 @@ Minimizer.Data.DEFENSIVE_CDS = {
         { id = 642, name = "Divine Shield" },
         { id = 31850, name = "Ardent Defender" }, -- corregido: antes tenía 31224 (colisión con Cloak of Shadows)
         { id = 86659, name = "Guardian of Ancient Kings" },
-        { id = 498, name = "Divine Protection" } },
+        { id = 498, name = "Divine Protection" },
     },
     HUNTER = { { id = 186265, name = "Turtle" }, { id = 264735, name = "Survival of the Fittest" } },
     ROGUE = { { id = 31224, name = "Cloak of Shadows" }, { id = 5277, name = "Evasion" }, { id = 1966, name = "Feint" } },
