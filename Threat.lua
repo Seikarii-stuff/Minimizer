@@ -3,7 +3,6 @@ if not Minimizer then return end
 
 Minimizer.Threat = Minimizer.Threat or {}
 Minimizer.Threat.tankTokens = Minimizer.Threat.tankTokens or {}
-
 local UnitExists = UnitExists
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local UnitThreatSituation = UnitThreatSituation
@@ -21,7 +20,6 @@ local GetTime = GetTime
 
 local NIL_SPECIAL_CONFIRM = 1.0
 local NIL_SPECIAL_UNSIMPLIFY_DELAY = 0.5
-
 local playerTankCache
 local playerTankCacheValid = false
 local nilState = {}
@@ -29,21 +27,13 @@ local nilState = {}
 function Minimizer.Threat.RefreshTankTokens()
     local tokens = Minimizer.Threat.tankTokens
     wipe(tokens)
-
     local prefix, count
-    if IsInRaid and IsInRaid() then
-        prefix, count = "raid", 40
-    elseif IsInGroup and IsInGroup() then
-        prefix, count = "party", 4
-    else
-        return
-    end
-
+    if IsInRaid and IsInRaid() then prefix, count = "raid", 40
+    elseif IsInGroup and IsInGroup() then prefix, count = "party", 4
+    else return end
     for index = 1, count do
         local token = prefix .. index
-        if UnitExists(token) and UnitGroupRolesAssigned(token) == "TANK" then
-            tokens[#tokens + 1] = token
-        end
+        if UnitExists(token) and UnitGroupRolesAssigned(token) == "TANK" then tokens[#tokens + 1] = token end
     end
 end
 
@@ -52,8 +42,7 @@ function Minimizer.Threat.RefreshPlayerTankCache()
     if UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK" then
         isTank = true
     else
-        local specialization = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
-            and C_SpecializationInfo.GetSpecialization()
+        local specialization = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization and C_SpecializationInfo.GetSpecialization()
         if specialization and C_SpecializationInfo.GetSpecializationInfo then
             local _, _, _, _, role = C_SpecializationInfo.GetSpecializationInfo(specialization)
             isTank = role == "TANK"
@@ -73,26 +62,17 @@ function Minimizer.Threat.InvalidatePlayerTankCache()
 end
 
 function Minimizer.Threat.IsPlayerTank()
-    if playerTankCacheValid then
-        return playerTankCache
-    end
+    if playerTankCacheValid then return playerTankCache end
     return Minimizer.Threat.RefreshPlayerTankCache()
 end
 
 local function UpdateNilState(unit, result, generation)
     local now = GetTime()
     local state = nilState[unit]
-
     if not state or state.generation ~= generation then
-        state = {
-            generation = generation,
-            nilSince = nil,
-            nilSpecial = false,
-            nilSpecialReady = false,
-        }
+        state = { generation = generation, nilSince = nil, nilSpecial = false, nilSpecialReady = false }
         nilState[unit] = state
     end
-
     if result.situation == nil then
         if not state.nilSince then
             state.nilSince = now
@@ -101,9 +81,7 @@ local function UpdateNilState(unit, result, generation)
         elseif not state.nilSpecial and (now - state.nilSince) >= NIL_SPECIAL_CONFIRM then
             state.nilSpecial = true
         end
-
-        if state.nilSpecial and not state.nilSpecialReady
-            and (now - state.nilSince) >= (NIL_SPECIAL_CONFIRM + NIL_SPECIAL_UNSIMPLIFY_DELAY) then
+        if state.nilSpecial and not state.nilSpecialReady and (now - state.nilSince) >= (NIL_SPECIAL_CONFIRM + NIL_SPECIAL_UNSIMPLIFY_DELAY) then
             state.nilSpecialReady = true
         end
     else
@@ -111,7 +89,6 @@ local function UpdateNilState(unit, result, generation)
         state.nilSpecial = false
         state.nilSpecialReady = false
     end
-
     result.nilSince = state.nilSince
     result.nilSpecial = state.nilSpecial
     result.nilSpecialReady = state.nilSpecialReady
@@ -120,24 +97,15 @@ end
 
 function Minimizer.Threat.GetThreatDetails(unit)
     if not unit or not UnitExists(unit) then return nil end
-
     local cacheKey = "threat:details"
     if Minimizer.Cache and Minimizer.Cache.GetUnitKeyWithGeneration then
         local cached = Minimizer.Cache.GetUnitKeyWithGeneration(unit, cacheKey)
         if cached ~= nil then
-            local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration
-                and Minimizer.Core.GetPlateGeneration(unit) or 0
+            local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
             return UpdateNilState(unit, cached, generation)
         end
     end
-
-    local result = {
-        situation = UnitThreatSituation("player", unit),
-        otherTankAggro = false,
-    }
-
-    -- Match Platynator: the off-tank check is only meaningful when we are not
-    -- already in states 2/3. Equality checks are secret-safe.
+    local result = { situation = UnitThreatSituation("player", unit), otherTankAggro = false }
     if result.situation ~= 3 and result.situation ~= 2 and Minimizer.Threat.IsPlayerTank() then
         for _, tankUnit in ipairs(Minimizer.Threat.tankTokens) do
             if UnitThreatSituation(tankUnit, unit) == 3 then
@@ -146,36 +114,22 @@ function Minimizer.Threat.GetThreatDetails(unit)
             end
         end
     end
-
-    local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration
-        and Minimizer.Core.GetPlateGeneration(unit) or 0
+    local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
     result = UpdateNilState(unit, result, generation)
-
-    if Minimizer.Cache and Minimizer.Cache.SetUnitKeyWithGeneration then
-        Minimizer.Cache.SetUnitKeyWithGeneration(unit, cacheKey, result)
-    end
+    if Minimizer.Cache and Minimizer.Cache.SetUnitKeyWithGeneration then Minimizer.Cache.SetUnitKeyWithGeneration(unit, cacheKey, result) end
     return result
 end
 
 function Minimizer.Threat.Invalidate(unit)
     if not unit then return end
-    if Minimizer.Cache and Minimizer.Cache.InvalidateUnit then
-        Minimizer.Cache.InvalidateUnit(unit, "threat")
-    end
+    if Minimizer.Cache and Minimizer.Cache.InvalidateUnit then Minimizer.Cache.InvalidateUnit(unit, "threat") end
 end
 
 function Minimizer.Threat.IsInCombatWith(unit, threatDetails)
     if not unit or not UnitExists(unit) then return false end
-
-    if UnitAffectingCombat(unit) then
-        return true
-    end
-
+    if UnitAffectingCombat(unit) then return true end
     local details = threatDetails or Minimizer.Threat.GetThreatDetails(unit)
-    if details and details.situation ~= nil then
-        return true
-    end
-
+    if details and details.situation ~= nil then return true end
     local target = unit .. "target"
     return UnitInParty and UnitInParty(target) == true or false
 end
@@ -183,17 +137,13 @@ end
 function Minimizer.Threat.GetSituation(unit, source)
     if not unit or not UnitExists(unit) then return nil end
     source = source or "player"
-
     local cacheKey = "threat:" .. source
     if Minimizer.Cache and Minimizer.Cache.GetUnitKeyWithGeneration then
         local cached = Minimizer.Cache.GetUnitKeyWithGeneration(unit, cacheKey)
         if cached ~= nil then return cached end
     end
-
     local situation = UnitThreatSituation(source, unit)
-    if Minimizer.Cache and Minimizer.Cache.SetUnitKeyWithGeneration then
-        Minimizer.Cache.SetUnitKeyWithGeneration(unit, cacheKey, situation)
-    end
+    if Minimizer.Cache and Minimizer.Cache.SetUnitKeyWithGeneration then Minimizer.Cache.SetUnitKeyWithGeneration(unit, cacheKey, situation) end
     return situation
 end
 
@@ -201,22 +151,11 @@ function Minimizer.Threat.PlayerHasAggro(unit)
     if Minimizer.Threat.IsPlayerTank() then
         local threatDetails = Minimizer.Threat.GetThreatDetails(unit)
         if not threatDetails then return false end
-
-        if not Minimizer.Threat.IsInCombatWith(unit, threatDetails) then
-            return false
-        end
-
-        if threatDetails.otherTankAggro then
-            return false
-        end
-
-        -- For tanks this means "the plate needs an aggro change". A nil
-        -- situation is therefore still the normal red state until it has
-        -- matured into the separate nil-special priority state.
+        if not Minimizer.Threat.IsInCombatWith(unit, threatDetails) then return false end
+        if threatDetails.otherTankAggro then return false end
         local situation = threatDetails.situation
         return situation == nil or situation == 0 or situation == 1 or situation == 2
     end
-
     return Minimizer.Threat.GetSituation(unit, "player") == 3
 end
 
@@ -236,15 +175,10 @@ function Minimizer.Threat.IsNilSpecialReady(unit)
 end
 
 function Minimizer.Threat.ShouldLetBlizzardPaint(unit)
-    if not Minimizer.Threat.IsPlayerTank() then
-        return false
-    end
-
+    if not Minimizer.Threat.IsPlayerTank() then return false end
     local details = Minimizer.Threat.GetThreatDetails(unit)
-    if not details or not Minimizer.Threat.IsInCombatWith(unit, details) then
-        return false
-    end
-
+    if not details or not Minimizer.Threat.IsInCombatWith(unit, details) then return false end
+    if details.nilSpecial then return false end
     local situation = details.situation
     return (situation == 0 or situation == nil) and not details.otherTankAggro
 end
@@ -252,23 +186,17 @@ end
 function Minimizer.Threat.ShouldUnsimplify(unit)
     if Minimizer.Threat.IsPlayerTank() then
         local details = Minimizer.Threat.GetThreatDetails(unit)
-        if not details or not Minimizer.Threat.IsInCombatWith(unit, details) then
-            return false
-        end
-        if details.otherTankAggro then return false end
-
-        local situation = details.situation
-        if situation == nil then
+        if not details then return false end
+        if details.situation == nil then
             return details.nilSpecialReady == true
         end
-        return situation == 0
+        if not Minimizer.Threat.IsInCombatWith(unit, details) then return false end
+        if details.otherTankAggro then return false end
+        return details.situation == 0
     end
     return Minimizer.Threat.GetSituation(unit, "player") == 3
 end
 
--- --------------------------------------------------------------------------
--- Platynator-style polling safety net
--- --------------------------------------------------------------------------
 local monitorFrame
 local monitorElapsed = 0
 local monitorStep = 1
@@ -293,15 +221,11 @@ local function RebuildMonitorUnits()
             monitorUnits[monitorCount] = unit
         end
     end
-    if monitorStep > monitorCount then
-        monitorStep = 1
-    end
+    if monitorStep > monitorCount then monitorStep = 1 end
 end
 
 function Minimizer.Threat.TrackUnit(unit)
-    if IsNameplateToken(unit) then
-        monitorDirty = true
-    end
+    if IsNameplateToken(unit) then monitorDirty = true end
 end
 
 function Minimizer.Threat.ForgetUnit(unit)
@@ -321,14 +245,11 @@ local function ProcessMonitoredUnit(unit)
         return
     end
     if not UnitExists(unit) then return end
-
     Minimizer.Threat.Invalidate(unit)
     local details = Minimizer.Threat.GetThreatDetails(unit)
     local combat = Minimizer.Threat.IsInCombatWith(unit, details)
-    local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration
-        and Minimizer.Core.GetPlateGeneration(unit) or 0
+    local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
     local previous = monitorState[unit]
-
     local changed = not previous
         or previous.generation ~= generation
         or previous.situation ~= details.situation
@@ -336,7 +257,6 @@ local function ProcessMonitoredUnit(unit)
         or previous.combat ~= combat
         or previous.nilSpecial ~= details.nilSpecial
         or previous.nilSpecialReady ~= details.nilSpecialReady
-
     monitorState[unit] = {
         generation = generation,
         situation = details.situation,
@@ -345,15 +265,11 @@ local function ProcessMonitoredUnit(unit)
         nilSpecial = details.nilSpecial,
         nilSpecialReady = details.nilSpecialReady,
     }
-
-    if changed and Minimizer.Core and Minimizer.Core.ApplyToUnit then
-        Minimizer.Core.ApplyToUnit(unit)
-    end
+    if changed and Minimizer.Core and Minimizer.Core.ApplyToUnit then Minimizer.Core.ApplyToUnit(unit) end
 end
 
 function Minimizer.Threat.StartMonitor()
     if monitorFrame then return end
-
     RebuildMonitorUnits()
     monitorFrame = CreateFrame("Frame")
     monitorFrame:SetScript("OnUpdate", function(_, elapsed)
@@ -362,12 +278,10 @@ function Minimizer.Threat.StartMonitor()
             monitorElapsed = 0
             return
         end
-
         monitorElapsed = monitorElapsed + elapsed
         local interval = 0.25 / monitorCount
         if monitorElapsed < interval then return end
         monitorElapsed = monitorElapsed - interval
-
         if monitorStep > monitorCount then monitorStep = 1 end
         local unit = monitorUnits[monitorStep]
         monitorStep = monitorStep + 1
