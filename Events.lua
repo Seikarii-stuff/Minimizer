@@ -74,8 +74,6 @@ handlers["NAME_PLATE_UNIT_ADDED"] = function(self, event, unit)
         if Minimizer.Threat and Minimizer.Threat.Invalidate then
             Minimizer.Threat.Invalidate(unit)
         end
-        -- Do the first threat/combat sample immediately. The monitor then
-        -- owns subsequent state transitions for this plate.
         Minimizer.Core.ApplyToUnit(unit)
         UpdateNameplates()
     end
@@ -119,8 +117,6 @@ local function HandleRosterOrSpecChange(self, event)
     if Minimizer.Threat and Minimizer.Threat.RefreshPlayerTankCache then
         Minimizer.Threat.RefreshPlayerTankCache()
     end
-    -- otherTankAggro depends on the current tank roster. Never reuse a threat
-    -- result computed before the roster/spec changed.
     InvalidateAllThreat()
     if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then
         Minimizer.Widgets.InvalidateCDSpellCache()
@@ -240,9 +236,6 @@ EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_STOP")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_UPDATE")
 EventFrame:SetScript("OnEvent", OnEvent)
 
--- Start only after Core and the active-nameplate registry exist. The monitor
--- mirrors Platynator's polled combat/threat cache and complements, rather than
--- replaces, the event-driven path above.
 if Minimizer.Threat and Minimizer.Threat.StartMonitor then
     Minimizer.Threat.StartMonitor()
 end
