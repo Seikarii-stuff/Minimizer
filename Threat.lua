@@ -138,8 +138,6 @@ function Minimizer.Threat.IsInCombatWith(unit, threatDetails)
     return UnitInParty and UnitInParty(target) == true or false
 end
 
--- Kept for callers that need the player's raw threat situation. The secret
--- value is returned unchanged, exactly like Platynator's Cache:Get(...).
 function Minimizer.Threat.GetSituation(unit, source)
     if not unit or not UnitExists(unit) then return nil end
     source = source or "player"
@@ -216,24 +214,43 @@ end
 -- --------------------------------------------------------------------------
 -- Platynator-style polling safety net
 -- --------------------------------------------------------------------------
--- Threat events are the primary path. This monitor is deliberately separate
--- from the generic 2s Core safety net: Blizzard can transiently miss/coalesce
--- threat updates around spawned units and encounter mechanics. We poll the
--- active nameplates at 4Hz, distributed across the visible pool, just like
--- Platynator's polled cache. A callback is only issued when threat/combat
--- actually changes, so this does not repaint every plate every tick.
+-- Threat events are the primary path. Combat is polled because there is no
+-- single reliable per-nameplate combat event that covers all of the spawn /
+-- encounter transitions we care about. The cadence mirrors Platynator's cache:
+-- approximately four monitored units per second, distributed across the
+-- active nameplates. A poll only repaints when threat/combat actually changes.
 local monitorFrame
 local monitorElapsed = 0
 local monitorStep = 1
+local monitorUnits = {}
+local monitorCount = 0
 local monitorState = {}
 
 local function IsNameplateToken(unit)
     return type(unit) == "string" and unit:match("^nameplate%d+$") ~= nil
 end
 
+local function RebuildMonitorUnits()
+    wipe(monitorUnits)
+    monitorCount = 0
+    if not Minimizer.ActiveNameplates then return end
+    for unit in pairs(Minimizer.ActiveNameplates) do
+        if IsNameplateToken(unit) then
+            monitorCount = monitorCount + 1
+            monitorUnits[monitorCount] = unit
+        end
+    end
+    if monitorStep > monitorCount then
+        monitorStep = 1
+    end
+end
+
 function Minimizer.Threat.ForgetUnit(unit)
     if unit then
         monitorState[unit] = nil
+        -- Rebuild is intentionally deferred to the next polling slice. The
+        -- active-nameplate registry is authoritative and avoids doing table
+        -- surgery inside Blizzard's nameplate removal callbacks.
     end
 end
 
@@ -275,35 +292,25 @@ end
 function Minimizer.Threat.StartMonitor()
     if monitorFrame then return end
 
+    RebuildMonitorUnits()
     monitorFrame = CreateFrame("Frame")
     monitorFrame:SetScript("OnUpdate", function(_, elapsed)
-        local active = Minimizer.ActiveNameplates
-        if not active then return end
-
-        local units = {}
-        for unit in pairs(active) do
-            if IsNameplateToken(unit) then
-                units[#units + 1] = unit
-            end
-        end
-
-        local length = #units
-        if length == 0 then
-            monitorStep = 1
+        RebuildMonitorUnits()
+        if monitorCount == 0 then
             monitorElapsed = 0
             return
         end
 
         monitorElapsed = monitorElapsed + elapsed
-        -- Four complete passes per second, matching Platynator's polling rate.
-        if monitorElapsed < 0.25 then return end
-        monitorElapsed = 0
+        -- Platynator's scheduler processes roughly four units per second,
+        -- regardless of whether 5 or 80 plates are visible.
+        local interval = 0.25 / monitorCount
+        if monitorElapsed < interval then return end
+        monitorElapsed = monitorElapsed - interval
 
-        if monitorStep > length then monitorStep = 1 end
-        for i = 1, length do
-            local index = ((monitorStep + i - 2) % length) + 1
-            ProcessMonitoredUnit(units[index])
-        end
-        monitorStep = (monitorStep % length) + 1
+        if monitorStep > monitorCount then monitorStep = 1 end
+        local unit = monitorUnits[monitorStep]
+        monitorStep = monitorStep + 1
+        ProcessMonitoredUnit(unit)
     end)
 end
