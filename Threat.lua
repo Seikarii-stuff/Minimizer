@@ -72,10 +72,11 @@ function Minimizer.Threat.IsPlayerTank()
     return Minimizer.Threat.RefreshPlayerTankCache()
 end
 
--- This deliberately follows Platynator's threat representation:
--- keep UnitThreatSituation's value as a VALUE inside a normal table and only
--- access it through literal keys. Never use a threat result as a table key and
--- never turn a secret threat value into a Lua number by filtering it.
+-- Keep the Blizzard threat value opaque. This mirrors Platynator's threat
+-- cache: the UnitThreatSituation result is stored as a value in a table and
+-- only compared with literal threat states. In particular, never coerce it
+-- with arithmetic/relational operators because Midnight can return secret
+-- threat-state values on restricted execution paths.
 function Minimizer.Threat.GetThreatDetails(unit)
     if not unit or not UnitExists(unit) then return nil end
 
@@ -92,7 +93,9 @@ function Minimizer.Threat.GetThreatDetails(unit)
         otherTankAggro = false,
     }
 
-    if result.situation ~= 3 and Minimizer.Threat.IsPlayerTank() then
+    -- Match Platynator's semantics: an off-tank check is only meaningful when
+    -- we are not already in states 2/3. Literal equality checks are secret-safe.
+    if result.situation ~= 3 and result.situation ~= 2 and Minimizer.Threat.IsPlayerTank() then
         for _, tankUnit in ipairs(Minimizer.Threat.tankTokens) do
             if UnitThreatSituation(tankUnit, unit) == 3 then
                 result.otherTankAggro = true
@@ -140,15 +143,17 @@ function Minimizer.Threat.PlayerHasAggro(unit)
         end
 
         local situation = threatDetails.situation
-        return situation == nil or situation < 3
+        -- Do NOT use `situation < 3`: threat state can be secret on Midnight.
+        -- Literal equality checks preserve Platynator's secret-safe pattern.
+        return situation == nil or situation == 0 or situation == 1 or situation == 2
     end
 
     return Minimizer.Threat.GetSituation(unit, "player") == 3
 end
 
--- Compatibility helper. It returns the player's situation unless another
--- tank has definite aggro, in which case the caller can use otherTankAggro
--- from GetThreatDetails() to distinguish the off-tank case.
+-- Compatibility helper. It returns the player's situation unless another tank
+-- has definite aggro, in which case the caller can use otherTankAggro from
+-- GetThreatDetails() to distinguish the off-tank case.
 function Minimizer.Threat.GetTankSituation(unit)
     local details = Minimizer.Threat.GetThreatDetails(unit)
     return details and details.situation or nil
