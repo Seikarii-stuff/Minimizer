@@ -17,9 +17,14 @@ local GetSpecialization = GetSpecialization
 local GetSpecializationRole = GetSpecializationRole
 local C_SpecializationInfo = C_SpecializationInfo
 local CreateFrame = CreateFrame
+local GetTime = GetTime
+
+local NIL_SPECIAL_CONFIRM = 1.0
+local NIL_SPECIAL_UNSIMPLIFY_DELAY = 0.5
 
 local playerTankCache
 local playerTankCacheValid = false
+local nilState = {}
 
 function Minimizer.Threat.RefreshTankTokens()
     local tokens = Minimizer.Threat.tankTokens
@@ -74,10 +79,45 @@ function Minimizer.Threat.IsPlayerTank()
     return Minimizer.Threat.RefreshPlayerTankCache()
 end
 
--- Keep Blizzard threat values opaque. This mirrors Platynator's cache: the
--- UnitThreatSituation result is stored unchanged and only compared with
--- literal threat states. Never coerce it with arithmetic or relational
--- operators because Midnight can expose secret threat-state values.
+local function UpdateNilState(unit, result, generation)
+    local now = GetTime()
+    local state = nilState[unit]
+
+    if not state or state.generation ~= generation then
+        state = {
+            generation = generation,
+            nilSince = nil,
+            nilSpecial = false,
+            nilSpecialReady = false,
+        }
+        nilState[unit] = state
+    end
+
+    if result.situation == nil then
+        if not state.nilSince then
+            state.nilSince = now
+            state.nilSpecial = false
+            state.nilSpecialReady = false
+        elseif not state.nilSpecial and (now - state.nilSince) >= NIL_SPECIAL_CONFIRM then
+            state.nilSpecial = true
+        end
+
+        if state.nilSpecial and not state.nilSpecialReady
+            and (now - state.nilSince) >= (NIL_SPECIAL_CONFIRM + NIL_SPECIAL_UNSIMPLIFY_DELAY) then
+            state.nilSpecialReady = true
+        end
+    else
+        state.nilSince = nil
+        state.nilSpecial = false
+        state.nilSpecialReady = false
+    end
+
+    result.nilSince = state.nilSince
+    result.nilSpecial = state.nilSpecial
+    result.nilSpecialReady = state.nilSpecialReady
+    return result
+end
+
 function Minimizer.Threat.GetThreatDetails(unit)
     if not unit or not UnitExists(unit) then return nil end
 
@@ -85,7 +125,9 @@ function Minimizer.Threat.GetThreatDetails(unit)
     if Minimizer.Cache and Minimizer.Cache.GetUnitKeyWithGeneration then
         local cached = Minimizer.Cache.GetUnitKeyWithGeneration(unit, cacheKey)
         if cached ~= nil then
-            return cached
+            local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration
+                and Minimizer.Core.GetPlateGeneration(unit) or 0
+            return UpdateNilState(unit, cached, generation)
         end
     end
 
@@ -105,6 +147,10 @@ function Minimizer.Threat.GetThreatDetails(unit)
         end
     end
 
+    local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration
+        and Minimizer.Core.GetPlateGeneration(unit) or 0
+    result = UpdateNilState(unit, result, generation)
+
     if Minimizer.Cache and Minimizer.Cache.SetUnitKeyWithGeneration then
         Minimizer.Cache.SetUnitKeyWithGeneration(unit, cacheKey, result)
     end
@@ -118,9 +164,6 @@ function Minimizer.Threat.Invalidate(unit)
     end
 end
 
--- Platynator deliberately treats combat as a polled state instead of relying
--- on a single combat event. Threat itself can be the evidence that a unit is
--- in a combat relationship even when UnitAffectingCombat() is not yet true.
 function Minimizer.Threat.IsInCombatWith(unit, threatDetails)
     if not unit or not UnitExists(unit) then return false end
 
@@ -159,9 +202,6 @@ function Minimizer.Threat.PlayerHasAggro(unit)
         local threatDetails = Minimizer.Threat.GetThreatDetails(unit)
         if not threatDetails then return false end
 
-        -- Do not hide a threat state merely because UnitAffectingCombat() is
-        -- temporarily false during a spawn/encounter transition. Platynator's
-        -- combat predicate considers threat itself evidence of combat.
         if not Minimizer.Threat.IsInCombatWith(unit, threatDetails) then
             return false
         end
@@ -170,6 +210,9 @@ function Minimizer.Threat.PlayerHasAggro(unit)
             return false
         end
 
+        -- For tanks this means "the plate needs an aggro change". A nil
+        -- situation is therefore still the normal red state until it has
+        -- matured into the separate nil-special priority state.
         local situation = threatDetails.situation
         return situation == nil or situation == 0 or situation == 1 or situation == 2
     end
@@ -180,6 +223,16 @@ end
 function Minimizer.Threat.GetTankSituation(unit)
     local details = Minimizer.Threat.GetThreatDetails(unit)
     return details and details.situation or nil
+end
+
+function Minimizer.Threat.IsNilSpecial(unit)
+    local details = Minimizer.Threat.GetThreatDetails(unit)
+    return details and details.nilSpecial == true or false
+end
+
+function Minimizer.Threat.IsNilSpecialReady(unit)
+    local details = Minimizer.Threat.GetThreatDetails(unit)
+    return details and details.nilSpecialReady == true or false
 end
 
 function Minimizer.Threat.ShouldLetBlizzardPaint(unit)
@@ -205,7 +258,10 @@ function Minimizer.Threat.ShouldUnsimplify(unit)
         if details.otherTankAggro then return false end
 
         local situation = details.situation
-        return situation == nil or situation == 0
+        if situation == nil then
+            return details.nilSpecialReady == true
+        end
+        return situation == 0
     end
     return Minimizer.Threat.GetSituation(unit, "player") == 3
 end
@@ -213,11 +269,6 @@ end
 -- --------------------------------------------------------------------------
 -- Platynator-style polling safety net
 -- --------------------------------------------------------------------------
--- Threat events are the primary path. Combat is polled because there is no
--- single reliable per-nameplate combat event that covers all of the spawn /
--- encounter transitions we care about. The cadence mirrors Platynator's cache:
--- approximately four monitored units per second, distributed across the
--- active nameplates. A poll only repaints when threat/combat actually changes.
 local monitorFrame
 local monitorElapsed = 0
 local monitorStep = 1
@@ -256,6 +307,7 @@ end
 function Minimizer.Threat.ForgetUnit(unit)
     if unit then
         monitorState[unit] = nil
+        nilState[unit] = nil
         monitorDirty = true
     end
 end
@@ -264,13 +316,12 @@ local function ProcessMonitoredUnit(unit)
     if not IsNameplateToken(unit) then return end
     if not Minimizer.ActiveNameplates or not Minimizer.ActiveNameplates[unit] then
         monitorState[unit] = nil
+        nilState[unit] = nil
         monitorDirty = true
         return
     end
     if not UnitExists(unit) then return end
 
-    -- The event path normally invalidates this. The polling path must do so
-    -- itself, otherwise a missed event would only observe the stale cache.
     Minimizer.Threat.Invalidate(unit)
     local details = Minimizer.Threat.GetThreatDetails(unit)
     local combat = Minimizer.Threat.IsInCombatWith(unit, details)
@@ -283,12 +334,16 @@ local function ProcessMonitoredUnit(unit)
         or previous.situation ~= details.situation
         or previous.otherTankAggro ~= details.otherTankAggro
         or previous.combat ~= combat
+        or previous.nilSpecial ~= details.nilSpecial
+        or previous.nilSpecialReady ~= details.nilSpecialReady
 
     monitorState[unit] = {
         generation = generation,
         situation = details.situation,
         otherTankAggro = details.otherTankAggro,
         combat = combat,
+        nilSpecial = details.nilSpecial,
+        nilSpecialReady = details.nilSpecialReady,
     }
 
     if changed and Minimizer.Core and Minimizer.Core.ApplyToUnit then
@@ -309,8 +364,6 @@ function Minimizer.Threat.StartMonitor()
         end
 
         monitorElapsed = monitorElapsed + elapsed
-        -- Platynator's scheduler processes roughly four units per second,
-        -- regardless of whether 5 or 80 plates are visible.
         local interval = 0.25 / monitorCount
         if monitorElapsed < interval then return end
         monitorElapsed = monitorElapsed - interval
