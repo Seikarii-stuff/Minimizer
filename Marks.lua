@@ -12,9 +12,8 @@ local PARTY_TOKENS = { "party1", "party2", "party3", "party4" }
 
 local function IsMouseoverPartyUnit(unit)
     if not unit or not UnitExists(unit) then return false end
-    local mouseover = "mouseover"
-    if not UnitExists(mouseover) then return false end
-    return UnitIsUnit(mouseover, unit) == true
+    if not UnitExists("mouseover") then return false end
+    return UnitIsUnit("mouseover", unit) == true
 end
 
 local function EnsureMarker(nameplate)
@@ -40,28 +39,23 @@ local function EnsureMarker(nameplate)
     return marker
 end
 
-local function HideAll()
-    for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
-        local marker = nameplate.MinimizerMarksSquare
-        if marker then marker:Hide() end
-    end
-end
-
-local function FindPartyTokenForMouseover()
+local function FindMouseoverPartyUnit()
     if not UnitExists("mouseover") then return nil end
+
     for i = 1, #PARTY_TOKENS do
         local unit = PARTY_TOKENS[i]
         if IsMouseoverPartyUnit(unit) then
             return unit
         end
     end
+
     return nil
 end
 
 local function Update()
     if not active then return end
 
-    local partyUnit = FindPartyTokenForMouseover()
+    local partyUnit = FindMouseoverPartyUnit()
     if not partyUnit then return end
 
     local nameplate = C_NamePlate.GetNamePlateForUnit(partyUnit)
@@ -83,7 +77,6 @@ function Marks:Start()
         ticker = nil
     end
 
-    HideAll()
     Update()
 
     ticker = C_Timer.NewTicker(0.05, function()
@@ -93,24 +86,29 @@ function Marks:Start()
 
     C_Timer.After(5, function()
         if myGeneration ~= generation then return end
+
         active = false
         if ticker then
             ticker:Cancel()
             ticker = nil
         end
-        -- Intentionally do NOT hide existing markers: once found during the
-        -- five-second scan, the white square remains permanently visible.
+
+        -- Los cuadrados ya colocados NO se ocultan: son permanentes.
+        -- Desde aquí no se vuelve a comprobar el mouseover.
     end)
 end
 
-SLASH_MINIMIZERMARKS1 = "/mini"
+-- /mini ya existe en SlashCommands.lua. Lo envolvemos para añadir únicamente
+-- el subcomando "marks" sin romper los comandos existentes.
 local previousSlashHandler = SlashCmdList["MINIMIZER"]
 SlashCmdList["MINIMIZER"] = function(msg)
     msg = (msg or ""):lower():match("^%s*(.-)%s*$")
+
     if msg == "marks" then
         Marks:Start()
         return
     end
+
     if previousSlashHandler then
         previousSlashHandler(msg)
     end
