@@ -121,7 +121,6 @@ end
 -- Platynator deliberately treats combat as a polled state instead of relying
 -- on a single combat event. Threat itself can be the evidence that a unit is
 -- in a combat relationship even when UnitAffectingCombat() is not yet true.
--- This matters for newly spawned adds and boss mechanics.
 function Minimizer.Threat.IsInCombatWith(unit, threatDetails)
     if not unit or not UnitExists(unit) then return false end
 
@@ -225,12 +224,15 @@ local monitorStep = 1
 local monitorUnits = {}
 local monitorCount = 0
 local monitorState = {}
+local monitorDirty = true
 
 local function IsNameplateToken(unit)
     return type(unit) == "string" and unit:match("^nameplate%d+$") ~= nil
 end
 
 local function RebuildMonitorUnits()
+    if not monitorDirty then return end
+    monitorDirty = false
     wipe(monitorUnits)
     monitorCount = 0
     if not Minimizer.ActiveNameplates then return end
@@ -245,12 +247,16 @@ local function RebuildMonitorUnits()
     end
 end
 
+function Minimizer.Threat.TrackUnit(unit)
+    if IsNameplateToken(unit) then
+        monitorDirty = true
+    end
+end
+
 function Minimizer.Threat.ForgetUnit(unit)
     if unit then
         monitorState[unit] = nil
-        -- Rebuild is intentionally deferred to the next polling slice. The
-        -- active-nameplate registry is authoritative and avoids doing table
-        -- surgery inside Blizzard's nameplate removal callbacks.
+        monitorDirty = true
     end
 end
 
@@ -258,6 +264,7 @@ local function ProcessMonitoredUnit(unit)
     if not IsNameplateToken(unit) then return end
     if not Minimizer.ActiveNameplates or not Minimizer.ActiveNameplates[unit] then
         monitorState[unit] = nil
+        monitorDirty = true
         return
     end
     if not UnitExists(unit) then return end
