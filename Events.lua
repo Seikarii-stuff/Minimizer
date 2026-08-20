@@ -10,6 +10,12 @@ local function UpdateNameplates()
     end
 end
 
+local function InvalidateAllThreat()
+    if Minimizer.Cache and Minimizer.Cache.InvalidateAll then
+        Minimizer.Cache.InvalidateAll("threat")
+    end
+end
+
 local handlers = {}
 
 local function HandleFullRefreshEvent(self, event)
@@ -20,11 +26,19 @@ local function HandleFullRefreshEvent(self, event)
                 nameplate.MinimizerDesimplifiedPersistentGen = nil
             end
         end
+        InvalidateAllThreat()
+    end
+    if event == "PLAYER_REGEN_DISABLED" then
+        InvalidateAllThreat()
     end
     if event == "PLAYER_ENTERING_WORLD" then
         if Minimizer.Threat and Minimizer.Threat.RefreshTankTokens then
             Minimizer.Threat.RefreshTankTokens()
         end
+        if Minimizer.Threat and Minimizer.Threat.InvalidatePlayerTankCache then
+            Minimizer.Threat.InvalidatePlayerTankCache()
+        end
+        InvalidateAllThreat()
     end
     UpdateNameplates()
 end
@@ -44,7 +58,7 @@ end
 handlers["PLAYER_FOCUS_CHANGED"] = function(self, event)
     HandleFullRefreshEvent(self, event)
     if Minimizer.Focus and Minimizer.Focus.UpdateFace then
-        Minimizer.Focus:UpdateFace()
+        Minimizer.Focus.UpdateFace()
     end
 end
 
@@ -53,6 +67,15 @@ handlers["NAME_PLATE_UNIT_ADDED"] = function(self, event, unit)
         if Minimizer.Core.IncrementPlateGeneration then
             Minimizer.Core.IncrementPlateGeneration(unit)
         end
+        if Minimizer.Threat and Minimizer.Threat.ForgetUnit then
+            Minimizer.Threat.ForgetUnit(unit)
+            Minimizer.Threat.TrackUnit(unit)
+        end
+        if Minimizer.Threat and Minimizer.Threat.Invalidate then
+            Minimizer.Threat.Invalidate(unit)
+        end
+        -- Do the first threat/combat sample immediately. The monitor then
+        -- owns subsequent state transitions for this plate.
         Minimizer.Core.ApplyToUnit(unit)
         UpdateNameplates()
     end
@@ -72,20 +95,22 @@ handlers["UNIT_ABSORB_AMOUNT_CHANGED"] = function(self, event, unit)
     end
 end
 
-handlers["UNIT_THREAT_SITUATION_UPDATE"] = function(self, event, unit)
+local function HandleThreatEvent(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then
-        if Minimizer.Cache.InvalidateUnit then
+        if Minimizer.Threat and Minimizer.Threat.Invalidate then
+            Minimizer.Threat.Invalidate(unit)
+        elseif Minimizer.Cache and Minimizer.Cache.InvalidateUnit then
             Minimizer.Cache.InvalidateUnit(unit, "threat")
         end
         Minimizer.Core.ApplyToUnit(unit)
     else
-        if Minimizer.Cache.InvalidateAll then
-            Minimizer.Cache.InvalidateAll("threat")
-        end
+        InvalidateAllThreat()
         UpdateNameplates()
     end
 end
-handlers["UNIT_THREAT_LIST_UPDATE"] = handlers["UNIT_THREAT_SITUATION_UPDATE"]
+
+handlers["UNIT_THREAT_SITUATION_UPDATE"] = HandleThreatEvent
+handlers["UNIT_THREAT_LIST_UPDATE"] = HandleThreatEvent
 
 local function HandleRosterOrSpecChange(self, event)
     if Minimizer.Threat and Minimizer.Threat.RefreshTankTokens then
@@ -94,6 +119,9 @@ local function HandleRosterOrSpecChange(self, event)
     if Minimizer.Threat and Minimizer.Threat.RefreshPlayerTankCache then
         Minimizer.Threat.RefreshPlayerTankCache()
     end
+    -- otherTankAggro depends on the current tank roster. Never reuse a threat
+    -- result computed before the roster/spec changed.
+    InvalidateAllThreat()
     if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then
         Minimizer.Widgets.InvalidateCDSpellCache()
     end
@@ -154,18 +182,21 @@ handlers["NAME_PLATE_UNIT_ADDED"] = function(self, event, unit)
         end
     end
     if Minimizer.Focus and Minimizer.Focus.UpdateFace then
-        Minimizer.Focus:UpdateFace()
+        Minimizer.Focus.UpdateFace()
     end
 end
 
 handlers["NAME_PLATE_UNIT_REMOVED"] = function(self, event, unit)
+    if Minimizer.Threat and Minimizer.Threat.ForgetUnit then
+        Minimizer.Threat.ForgetUnit(unit)
+    end
     if Minimizer.Target and Minimizer.Target.UpdateTargetCDs then
         if not unit or UnitIsUnit(unit, "target") then
             Minimizer.Target:UpdateTargetCDs()
         end
     end
     if Minimizer.Focus and Minimizer.Focus.UpdateFace then
-        Minimizer.Focus:UpdateFace()
+        Minimizer.Focus.UpdateFace()
     end
 end
 
@@ -208,6 +239,13 @@ EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_START")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_STOP")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_UPDATE")
 EventFrame:SetScript("OnEvent", OnEvent)
+
+-- Start only after Core and the active-nameplate registry exist. The monitor
+-- mirrors Platynator's polled combat/threat cache and complements, rather than
+-- replaces, the event-driven path above.
+if Minimizer.Threat and Minimizer.Threat.StartMonitor then
+    Minimizer.Threat.StartMonitor()
+end
 
 if NamePlateDriverFrame then
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit)

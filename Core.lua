@@ -3,26 +3,22 @@ if not Minimizer then return end
 
 Minimizer.Core = {}
 Minimizer.Modules = Minimizer.Modules or {}
--- Array paralelo a Minimizer.Modules para iteracion numerica en hot-path
 Minimizer.ModuleList = Minimizer.ModuleList or {}
 Minimizer.ActiveNameplates = Minimizer.ActiveNameplates or {}
--- Monotonic generation counter por token de nameplate. Se incrementa cuando
--- una unidad LLEGA al token (NAME_PLATE_UNIT_ADDED / OnNamePlateAdded hook).
--- Las entradas no se limpian: el espacio es bounded por el pool fijo de tokens.
 Minimizer.Core.plateGeneration = Minimizer.Core.plateGeneration or {}
+
+local C_NamePlateManager = C_NamePlateManager
+local UnitIsUnit = UnitIsUnit
+local UnitCanAttack = UnitCanAttack
+local type = type
+local pcall = pcall
+local GetTime = GetTime
 
 function Minimizer.Core.GetPlateGeneration(token)
     if not token then return 0 end
     return Minimizer.Core.plateGeneration[token] or 0
 end
 
--- Temporada de shields: marcar persistentemente si una nameplate mostro
--- alguna vez un shield. Usado por HealthBarColor.lua (color rosa
--- persistente) Y por Decision.lua (dessimplificacion persistente) --
--- ambos DEBEN coincidir, o el plate se simplifica y el color
--- persistente deja de verse (Blizzard controla el render de un plate
--- simplificado). Core.MarkAbsorbSeen gestiona una generación por token
--- para evitar fugas entre reciclajes.
 function Minimizer.Core.MarkAbsorbSeen(unit, nameplate, hasAbsorbNow)
     if not nameplate then return hasAbsorbNow == true end
     local currentGen = Minimizer.Core.GetPlateGeneration(unit)
@@ -30,41 +26,16 @@ function Minimizer.Core.MarkAbsorbSeen(unit, nameplate, hasAbsorbNow)
         nameplate.MinimizerAbsorbPersistentGen = currentGen
         nameplate.MinimizerHasHadAbsorb = nil
     end
-    if hasAbsorbNow then
-        nameplate.MinimizerHasHadAbsorb = true
-    end
+    if hasAbsorbNow then nameplate.MinimizerHasHadAbsorb = true end
     return nameplate.MinimizerHasHadAbsorb == true
 end
 
--- ============================================================================
--- Red de seguridad: ApplyToAll periodico de bajo coste.
---
--- Motivo: la arquitectura es 100% event-driven (threat, absorb, cast,
--- lifecycle de nameplate). Si por lo que sea un evento no llega a una
--- nameplate concreta (visto en pulls de 80+ mobs con varios escudos activos
--- a la vez, aun sin poder confirmar la causa exacta -- posible perdida de
--- UNIT_ABSORB_AMOUNT_CHANGED bajo carga, hook que no llega a instalarse a
--- tiempo, etc.) esa nameplate se queda con el color base indefinidamente:
--- no hay ningun otro trigger que la vuelva a tocar. Este timer es ese
--- "segundo intento": no reemplaza a los triggers instantaneos, los
--- respalda con una cota maxima de tiempo hasta que cualquier estado se
--- corrija solo.
---
--- Coste: segun benchmark, ~0.045ms promedio por ApplyToUnit. Con las
--- nameplates realmente visibles en pantalla (no las 80 del pull, solo las
--- que WoW renderiza a la vez), un ApplyToAll cada SAFETY_NET_INTERVAL
--- segundos es coste despreciable comparado con el volumen de eventos de
--- combate real.
--- ============================================================================
 local SAFETY_NET_INTERVAL = 2.0
 local _safetyNetStarted = false
-
 function Minimizer.Core.StartSafetyNet()
     if _safetyNetStarted then return end
     _safetyNetStarted = true
-    C_Timer.NewTicker(SAFETY_NET_INTERVAL, function()
-        Minimizer.Core.ApplyToAll(false)
-    end)
+    C_Timer.NewTicker(SAFETY_NET_INTERVAL, function() Minimizer.Core.ApplyToAll(false) end)
 end
 
 function Minimizer.Core.IncrementPlateGeneration(token)
@@ -74,26 +45,12 @@ function Minimizer.Core.IncrementPlateGeneration(token)
     return g[token]
 end
 
-local C_NamePlate = C_NamePlate
-local C_NamePlateManager = C_NamePlateManager
-local UnitIsUnit = UnitIsUnit
-local UnitCanAttack = UnitCanAttack
-local type = type
-local pcall = pcall
-local GetTime = GetTime
-
 local _module_error_throttle = {}
 local _MODULE_ERROR_THROTTLE_SECONDS = 10
-
--- Table reutilizado para el snapshot de cada unidad. Se sobreescribe en cada
--- llamada a ApplyToUnit; NUNCA guardes una referencia a este table mas alla
--- de la duracion de esa llamada (no lo metas en nameplate.algo, no lo pases
--- a codigo asincrono).
 local scratchSnapshot = {}
 
 function Minimizer.Core.RegisterModule(name, module)
     if type(name) ~= "string" or type(module) ~= "table" then return end
-
     Minimizer.Modules[name] = module
     module.MinimizerModuleName = name
     Minimizer.ModuleList[#Minimizer.ModuleList + 1] = module
@@ -118,27 +75,27 @@ function Minimizer.Core.UpdateModules(unit, nameplate, snapshot)
     end
 end
 
--- Rellena scratchSnapshot con los datos calculados UNA sola vez para esta
--- unidad. Se llama siempre, con o sin fast-path.
 local function BuildSnapshot(unit, nameplate)
     local s = scratchSnapshot
     s.eliteType = Minimizer.Classification.GetEliteType(unit)
     s.hasAbsorb = Minimizer.Absorb.HasAbsorb(unit, nameplate)
-    -- persistente para color; Decision.lua sigue leyendo s.hasAbsorb vivo
     s.hasHadAbsorb = Minimizer.Core.MarkAbsorbSeen(unit, nameplate, s.hasAbsorb)
+
+    local details = Minimizer.Threat.GetThreatDetails(unit)
+    s.threatSituation = details and details.situation or nil
+    s.otherTankAggro = details and details.otherTankAggro or false
+    s.isNilSpecial = details and details.nilSpecial == true or false
+    s.isNilSpecialReady = details and details.nilSpecialReady == true or false
     s.hasAggro = Minimizer.Threat.PlayerHasAggro(unit)
+
     s.isPvP = Minimizer.Utils.IsPvPUnit(unit)
     s.isFriendly = UnitCanAttack and not UnitCanAttack("player", unit) or false
     s.isCasting, s.isUninterruptible, s.rawUninterruptible, s.isChanneling = Minimizer.Cast.GetState(unit)
 
-    -- Prioridad focus > aggro > absorb > eliteType, calculada inline
-    -- reutilizando lo que ya se acaba de leer arriba. NO llamar aqui a
-    -- ComputeDisplayKind: esa funcion existe para los callers que NO tienen
-    -- snapshot (fallback de hooks de repintado nativo en HealthBarColor.lua),
-    -- y volveria a llamar a HasAbsorb/PlayerHasAggro desde cero -- doblando
-    -- el coste de cada pase normal.
     if UnitIsUnit(unit, "focus") then
         s.displayKind = "focus"
+    elseif s.isNilSpecial then
+        s.displayKind = "priority"
     elseif s.hasAggro then
         s.displayKind = "aggro"
     elseif s.hasHadAbsorb then
@@ -151,36 +108,24 @@ end
 
 function Minimizer.Core.ComputeDisplayKind(unit, nameplate)
     if not unit then return nil end
-    -- Note: nameplate is optional but passed through to HasAbsorb where needed
-    if UnitIsUnit(unit, "focus") then
-        return "focus"
-    end
-    if Minimizer.Threat and Minimizer.Threat.PlayerHasAggro and Minimizer.Threat.PlayerHasAggro(unit) then
-        return "aggro"
-    end
+    if UnitIsUnit(unit, "focus") then return "focus" end
+    if Minimizer.Threat and Minimizer.Threat.IsNilSpecial and Minimizer.Threat.IsNilSpecial(unit) then return "priority" end
+    if Minimizer.Threat and Minimizer.Threat.PlayerHasAggro and Minimizer.Threat.PlayerHasAggro(unit) then return "aggro" end
     local hasAbsorbNow = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
-    if Minimizer.Core and Minimizer.Core.MarkAbsorbSeen and Minimizer.Core.MarkAbsorbSeen(unit, nameplate, hasAbsorbNow) then
-        return "absorb"
-    end
-    if Minimizer.Classification and Minimizer.Classification.GetEliteType then
-        return Minimizer.Classification.GetEliteType(unit)
-    end
+    if Minimizer.Core.MarkAbsorbSeen(unit, nameplate, hasAbsorbNow) then return "absorb" end
+    if Minimizer.Classification and Minimizer.Classification.GetEliteType then return Minimizer.Classification.GetEliteType(unit) end
     return nil
 end
 
 function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
     if not unit then return end
-
     local nameplate = Minimizer.Utils.GetNamePlateForUnit(unit)
     if not nameplate then return end
-
     local npToken = Minimizer.Utils.GetValidNamePlateToken(unit, nameplate)
     if not npToken then return end
     Minimizer.ActiveNameplates[npToken] = nameplate
 
-    -- El snapshot se calcula SIEMPRE, fast-path o no.
     local snapshot = BuildSnapshot(npToken, nameplate)
-
     local shouldSimplify = false
     local reason = ""
     local currentGen = Minimizer.Core.GetPlateGeneration(npToken)
@@ -205,47 +150,31 @@ function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
         if forceUpdate or nameplate.MinimizerState ~= shouldSimplify then
             C_NamePlateManager.SetNamePlateSimplified(npToken, shouldSimplify)
             nameplate.MinimizerState = shouldSimplify
-            if Minimizer.HitTest and Minimizer.HitTest.Sync then
-                Minimizer.HitTest.Sync(npToken, nameplate)
-            end
+            if Minimizer.HitTest and Minimizer.HitTest.Sync then Minimizer.HitTest.Sync(npToken, nameplate) end
         end
     end
-
     Minimizer.Core.UpdateModules(npToken, nameplate, snapshot)
 end
 
 function Minimizer.Core.ApplyToAll(forceUpdate)
-    -- Refrescar el estado global "interrupcion lista" UNA vez por pase,
-    -- nunca dentro del loop de nameplates.
-    if Minimizer.Interrupt and Minimizer.Interrupt.RefreshReadyCache then
-        Minimizer.Interrupt.RefreshReadyCache()
-    end
-    -- Iterar el registro propio de nameplates activas en vez de pedirle a
-    -- Blizzard una tabla nueva por llamada (C_NamePlate.GetNamePlates alocaba).
-    for token in pairs(Minimizer.ActiveNameplates) do
-        Minimizer.Core.ApplyToUnit(token, forceUpdate)
-    end
+    if Minimizer.Interrupt and Minimizer.Interrupt.RefreshReadyCache then Minimizer.Interrupt.RefreshReadyCache() end
+    for token in pairs(Minimizer.ActiveNameplates) do Minimizer.Core.ApplyToUnit(token, forceUpdate) end
 end
 
 Minimizer.Core.RequestApplyToAll = Minimizer.Utils.Debounce(function() Minimizer.Core.ApplyToAll(true) end)
 
 function Minimizer.Core.ClearNeverSimplify(unit)
     if not unit then return end
-    if Minimizer.Cache and Minimizer.Cache.InvalidateUnit then
-        Minimizer.Cache.InvalidateUnit(unit)
-    end
-    if Minimizer.Cast and Minimizer.Cast.InvalidateState then
-        Minimizer.Cast.InvalidateState(unit)
-    end
-    if Minimizer.HitTest and Minimizer.HitTest.CancelRetry then
-        Minimizer.HitTest.CancelRetry(unit)
-    end
+    if Minimizer.Cache and Minimizer.Cache.InvalidateUnit then Minimizer.Cache.InvalidateUnit(unit) end
+    if Minimizer.Cast and Minimizer.Cast.InvalidateState then Minimizer.Cast.InvalidateState(unit) end
+    if Minimizer.HitTest and Minimizer.HitTest.CancelRetry then Minimizer.HitTest.CancelRetry(unit) end
+    if Minimizer.Threat and Minimizer.Threat.ForgetUnit then Minimizer.Threat.ForgetUnit(unit) end
     local nameplate = Minimizer.ActiveNameplates[unit] or Minimizer.Utils.GetNamePlateForUnit(unit)
     if nameplate then
         for name, module in pairs(Minimizer.Modules) do
-                if type(module.OnNamePlateRemoved) == "function" then
-                    local ok, err = pcall(module.OnNamePlateRemoved, module, unit, nameplate)
-                    if not ok then
+            if type(module.OnNamePlateRemoved) == "function" then
+                local ok, err = pcall(module.OnNamePlateRemoved, module, unit, nameplate)
+                if not ok then
                     local now = GetTime and GetTime() or 0
                     local last = _module_error_throttle[name]
                     if not last or (now - last) >= _MODULE_ERROR_THROTTLE_SECONDS then
@@ -255,7 +184,6 @@ function Minimizer.Core.ClearNeverSimplify(unit)
                 end
             end
         end
-        
         nameplate.MinimizerDesimplifiedPersistent = nil
         nameplate.MinimizerDesimplifiedPersistentGen = nil
         nameplate.MinimizerState = nil

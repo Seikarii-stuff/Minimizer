@@ -17,7 +17,6 @@ local OVERSHIELD_ALPHA = 1
 local function EnsureOvershieldBar(healthBar)
     local bar = healthBar.MinimizerOvershieldBar
     if bar then return bar end
-
     bar = CreateFrame("StatusBar", nil, healthBar)
     bar:SetAllPoints(healthBar)
     bar:SetFrameLevel((healthBar:GetFrameLevel() or 0) + 1)
@@ -25,11 +24,8 @@ local function EnsureOvershieldBar(healthBar)
     bar:SetStatusBarColor(1, 1, 1, OVERSHIELD_ALPHA)
     bar:SetOrientation("HORIZONTAL")
     bar:SetReverseFill(true)
-    if type(bar.EnableMouse) == "function" then
-        bar:EnableMouse(false)
-    end
+    if type(bar.EnableMouse) == "function" then bar:EnableMouse(false) end
     bar:Hide()
-
     healthBar.MinimizerOvershieldBar = bar
     return bar
 end
@@ -38,16 +34,13 @@ local function UpdateOvershieldBar(bar, absorb, maxHealth)
     local absorbIsSecret = Minimizer.Utils.IsSecretValue(absorb)
     local maxHealthIsSecret = Minimizer.Utils.IsSecretValue(maxHealth)
     if not absorbIsSecret and not maxHealthIsSecret then
-        if bar:IsShown() and bar.MinimizerLastAbsorb == absorb and bar.MinimizerLastMaxHealth == maxHealth then
-            return
-        end
+        if bar:IsShown() and bar.MinimizerLastAbsorb == absorb and bar.MinimizerLastMaxHealth == maxHealth then return end
         bar.MinimizerLastAbsorb = absorb
         bar.MinimizerLastMaxHealth = maxHealth
     else
         bar.MinimizerLastAbsorb = nil
         bar.MinimizerLastMaxHealth = nil
     end
-
     bar:SetMinMaxValues(0, maxHealth)
     bar:SetValue(absorb)
     bar:Show()
@@ -60,11 +53,6 @@ end
 local HookHealthBar
 local HookIndicator
 
--- IMPORTANT: when the aggro flow says Blizzard owns the color, do not call
--- CompactUnitFrame_UpdateHealthColor ourselves. That function is Blizzard's
--- internal renderer and its health-color tables are not secret-key safe.
--- Platynator's pattern is to stop applying our color and let Blizzard's own
--- update path run normally; it does not force-call the CompactUnitFrame helper.
 local function LetBlizzardPaint(_, nameplate)
     nameplate.MinimizerLastAppliedColor = nil
     nameplate.MinimizerHealthBarColorKind = nil
@@ -72,23 +60,18 @@ local function LetBlizzardPaint(_, nameplate)
 end
 
 local function ShouldLetBlizzardPaint(unit)
-    if not Minimizer.Threat or not Minimizer.Threat.IsPlayerTank then
+    if not Minimizer.Threat or not Minimizer.Threat.IsPlayerTank then return false end
+    if not Minimizer.Threat.IsPlayerTank() then return false end
+    if Minimizer.Threat.IsNilSpecial and Minimizer.Threat.IsNilSpecial(unit) then
         return false
     end
-    if not Minimizer.Threat.IsPlayerTank() then
-        return false
-    end
-
     if Minimizer.Threat.ShouldLetBlizzardPaint then
         return Minimizer.Threat.ShouldLetBlizzardPaint(unit)
     end
-
     return false
 end
 
 local function GetSafeHealthColor(kind)
-    -- Never use a possibly-secret value as a table key. All keys here are
-    -- literal strings, matching the secret-safe pattern used by Platynator.
     if kind == "trivial" then return COLORS.trivial end
     if kind == "melee" then return COLORS.melee end
     if kind == "caster" then return COLORS.caster end
@@ -97,16 +80,15 @@ local function GetSafeHealthColor(kind)
     if kind == "focus" then return COLORS.focus end
     if kind == "absorb" then return COLORS.absorb end
     if kind == "aggro" then return COLORS.aggro end
+    if kind == "priority" then return COLORS.priority end
     return COLORS.melee
 end
 
 function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     if not unit or not UnitExists(unit) then return end
-
     local isPvP = snapshot and snapshot.isPvP
     if isPvP == nil then isPvP = Minimizer.Utils.IsPvPUnit(unit) end
     if isPvP then return end
-
     local isFriendly = snapshot and snapshot.isFriendly
     if isFriendly == nil then isFriendly = UnitCanAttack and not UnitCanAttack("player", unit) end
     if isFriendly then return end
@@ -120,11 +102,8 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     end
 
     HookHealthBar(healthBar)
-
     local indicator = healthBar.totalAbsorbOverlay or healthBar.totalAbsorb
-    if indicator then
-        HookIndicator(indicator, healthBar)
-    end
+    if indicator then HookIndicator(indicator, healthBar) end
 
     local currentGen = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
     if nameplate.MinimizerHealthBarColorGen ~= currentGen or nameplate.MinimizerHealthBarColorUnit ~= unit then
@@ -153,23 +132,18 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     else
         isCasting, safeUninterruptible, rawUninterruptible, isChanneling = Minimizer.Cast.GetState(unit)
     end
-
     local isActiveCastOrChannel = isCasting == true or isChanneling == true
 
     local hasHadAbsorb = snapshot and snapshot.hasHadAbsorb
     if hasHadAbsorb == nil then
         local liveAbsorb = snapshot and snapshot.hasAbsorb
-        if liveAbsorb == nil then
-            liveAbsorb = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
-        end
+        if liveAbsorb == nil then liveAbsorb = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate) end
         hasHadAbsorb = Minimizer.Core and Minimizer.Core.MarkAbsorbSeen and Minimizer.Core.MarkAbsorbSeen(unit, nameplate, liveAbsorb)
     end
 
     if hasHadAbsorb then
         local hasAbsorbNow = snapshot and snapshot.hasAbsorb
-        if hasAbsorbNow == nil then
-            hasAbsorbNow = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
-        end
+        if hasAbsorbNow == nil then hasAbsorbNow = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate) end
         local overshieldBar = EnsureOvershieldBar(healthBar)
         if hasAbsorbNow and UnitGetTotalAbsorbs then
             UpdateOvershieldBar(overshieldBar, UnitGetTotalAbsorbs(unit), UnitHealthMax(unit))
@@ -183,7 +157,7 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     local eliteType = (snapshot and snapshot.eliteType) or Minimizer.Classification.GetEliteType(unit)
     local isSuperior = eliteType == "boss" or eliteType == "miniboss"
     local isCasterClass = eliteType == "caster"
-    local isSpecial = baseKind == "focus" or baseKind == "aggro" or isCasterClass
+    local isSpecial = baseKind == "focus" or baseKind == "aggro" or baseKind == "priority" or isCasterClass
 
     if not isSpecial and not isSuperior then
         if isActiveCastOrChannel then
