@@ -52,13 +52,39 @@ local function FindMouseoverPartyUnit()
     return nil
 end
 
+-- C_NamePlate.GetNamePlateForUnit() rechaza party/raid tokens.
+-- Por eso buscamos entre las nameplates visibles y comparamos su unidad.
+local function FindNamePlateForPartyUnit(partyUnit)
+    if not partyUnit then return nil end
+
+    local plates = C_NamePlate.GetNamePlates()
+    for i = 1, #plates do
+        local nameplate = plates[i]
+        local token = nameplate and nameplate.namePlateUnitToken
+
+        if token and UnitExists(token) and UnitIsUnit(token, partyUnit) == true then
+            return nameplate
+        end
+
+        -- Fallback para clientes/layouts donde el token no está expuesto
+        -- directamente en namePlateUnitToken.
+        local unitFrame = nameplate and nameplate.UnitFrame
+        local frameToken = unitFrame and unitFrame.unit
+        if frameToken and UnitExists(frameToken) and UnitIsUnit(frameToken, partyUnit) == true then
+            return nameplate
+        end
+    end
+
+    return nil
+end
+
 local function Update()
     if not active then return end
 
     local partyUnit = FindMouseoverPartyUnit()
     if not partyUnit then return end
 
-    local nameplate = C_NamePlate.GetNamePlateForUnit(partyUnit)
+    local nameplate = FindNamePlateForPartyUnit(partyUnit)
     if not nameplate then return end
 
     local marker = EnsureMarker(nameplate)
