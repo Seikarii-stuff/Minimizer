@@ -7,6 +7,7 @@ local UnitExists = UnitExists
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local UnitThreatSituation = UnitThreatSituation
 local UnitAffectingCombat = UnitAffectingCombat
+local UnitCanAttack = UnitCanAttack
 local UnitInParty = UnitInParty
 local wipe = wipe
 local ipairs = ipairs
@@ -73,7 +74,14 @@ local function UpdateNilState(unit, result, generation, inCombat)
         nilState[unit] = state
     end
 
-    if result.situation == nil and inCombat then
+    -- nilSpecial is reserved for non-attackable combat units (e.g. totems).
+    -- Attack-capable units can legitimately expose nil threat while still
+    -- being hostile/active; do not turn that API limitation into the orange
+    -- nilSpecial state.
+    local canAttackPlayer = UnitCanAttack and UnitCanAttack(unit, "player")
+    local isNilSpecialCandidate = canAttackPlayer == false
+
+    if result.situation == nil and inCombat and isNilSpecialCandidate then
         if not state.nilSince then
             state.nilSince = now
         elseif not state.nilSpecial and (now - state.nilSince) >= NIL_SPECIAL_CONFIRM then
