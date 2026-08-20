@@ -67,9 +67,6 @@ handlers["NAME_PLATE_UNIT_ADDED"] = function(self, event, unit)
         if Minimizer.Core.IncrementPlateGeneration then
             Minimizer.Core.IncrementPlateGeneration(unit)
         end
-        if Minimizer.Threat and Minimizer.Threat.TrackUnit then
-            Minimizer.Threat.TrackUnit(unit)
-        end
         if Minimizer.Threat and Minimizer.Threat.ForgetUnit then
             Minimizer.Threat.ForgetUnit(unit)
             Minimizer.Threat.TrackUnit(unit)
