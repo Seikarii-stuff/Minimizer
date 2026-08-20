@@ -184,17 +184,22 @@ function Minimizer.Threat.ShouldLetBlizzardPaint(unit)
 end
 
 function Minimizer.Threat.ShouldUnsimplify(unit)
+    local details = Minimizer.Threat.GetThreatDetails(unit)
+    if not details then return false end
+
+    -- nilSpecial is a universal priority target: role-independent.
+    -- Once it has remained nil long enough, it stays unsimplified until
+    -- threat resolves to a non-nil situation.
+    if details.situation == nil then
+        return details.nilSpecialReady == true
+    end
+
     if Minimizer.Threat.IsPlayerTank() then
-        local details = Minimizer.Threat.GetThreatDetails(unit)
-        if not details then return false end
-        if details.situation == nil then
-            return details.nilSpecialReady == true
-        end
         if not Minimizer.Threat.IsInCombatWith(unit, details) then return false end
         if details.otherTankAggro then return false end
         return details.situation == 0
     end
-    return Minimizer.Threat.GetSituation(unit, "player") == 3
+    return details.situation == 3
 end
 
 local monitorFrame
