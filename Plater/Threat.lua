@@ -39,9 +39,7 @@ end
 
 function Minimizer.Threat.RefreshPlayerTankCache()
     local isTank = false
-    if not (IsInGroup and IsInGroup()) and not (IsInRaid and IsInRaid()) then
-        isTank = true
-    elseif UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK" then
+    if UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK" then
         isTank = true
     else
         local specialization = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization and C_SpecializationInfo.GetSpecialization()
@@ -68,6 +66,10 @@ function Minimizer.Threat.IsPlayerTank()
     return Minimizer.Threat.RefreshPlayerTankCache()
 end
 
+local function IsThreatEnabled()
+    return (IsInGroup and IsInGroup()) or (IsInRaid and IsInRaid()) or Minimizer.Threat.IsPlayerTank()
+end
+
 local function UpdateNilState(unit, result, generation, inCombat)
     local now = GetTime()
     local state = nilState[unit]
@@ -76,10 +78,6 @@ local function UpdateNilState(unit, result, generation, inCombat)
         nilState[unit] = state
     end
 
-    -- nilSpecial is reserved for non-attackable combat units (e.g. totems).
-    -- Attack-capable units can legitimately expose nil threat while still
-    -- being hostile/active; do not turn that API limitation into the orange
-    -- nilSpecial state.
     local canAttackPlayer = UnitCanAttack and UnitCanAttack(unit, "player")
     local isNilSpecialCandidate = canAttackPlayer == false
 
@@ -100,6 +98,7 @@ local function UpdateNilState(unit, result, generation, inCombat)
 end
 
 function Minimizer.Threat.GetThreatDetails(unit)
+    if not IsThreatEnabled() then return nil end
     if not unit or not UnitExists(unit) then return nil end
     local cacheKey = "threat:details"
     if Minimizer.Cache and Minimizer.Cache.GetUnitKeyWithGeneration then
@@ -137,6 +136,7 @@ function Minimizer.Threat.Invalidate(unit)
 end
 
 function Minimizer.Threat.IsInCombatWith(unit, threatDetails)
+    if not IsThreatEnabled() then return false end
     if not unit or not UnitExists(unit) then return false end
     if UnitAffectingCombat(unit) then return true end
     local details = threatDetails or Minimizer.Threat.GetThreatDetails(unit)
@@ -146,6 +146,7 @@ function Minimizer.Threat.IsInCombatWith(unit, threatDetails)
 end
 
 function Minimizer.Threat.GetSituation(unit, source)
+    if not IsThreatEnabled() then return nil end
     if not unit or not UnitExists(unit) then return nil end
     source = source or "player"
     local cacheKey = "threat:" .. source
@@ -160,6 +161,7 @@ function Minimizer.Threat.GetSituation(unit, source)
 end
 
 function Minimizer.Threat.PlayerHasAggro(unit)
+    if not IsThreatEnabled() then return false end
     if Minimizer.Threat.IsPlayerTank() then
         local threatDetails = Minimizer.Threat.GetThreatDetails(unit)
         if not threatDetails then return false end
@@ -172,17 +174,19 @@ function Minimizer.Threat.PlayerHasAggro(unit)
 end
 
 function Minimizer.Threat.GetTankSituation(unit)
+    if not IsThreatEnabled() then return nil end
     local details = Minimizer.Threat.GetThreatDetails(unit)
     return details and details.situation or nil
 end
 
 function Minimizer.Threat.IsNilSpecial(unit)
+    if not IsThreatEnabled() then return false end
     local details = Minimizer.Threat.GetThreatDetails(unit)
     return details and details.nilSpecial == true or false
 end
 
 function Minimizer.Threat.ShouldLetBlizzardPaint(unit)
-    if not Minimizer.Threat.IsPlayerTank() then return false end
+    if not IsThreatEnabled() or not Minimizer.Threat.IsPlayerTank() then return false end
     local details = Minimizer.Threat.GetThreatDetails(unit)
     if not details or not Minimizer.Threat.IsInCombatWith(unit, details) then return false end
     if details.nilSpecial then return false end
@@ -191,11 +195,10 @@ function Minimizer.Threat.ShouldLetBlizzardPaint(unit)
 end
 
 function Minimizer.Threat.ShouldUnsimplify(unit)
+    if not IsThreatEnabled() then return false end
     local details = Minimizer.Threat.GetThreatDetails(unit)
     if not details then return false end
 
-    -- A nil threat target in combat is unsimplified immediately; after 1s of
-    -- continuous nil it becomes the universal orange nilSpecial target.
     if details.situation == nil then
         return details.nilSince ~= nil and Minimizer.Threat.IsInCombatWith(unit, details)
     end
@@ -256,10 +259,8 @@ local function ProcessMonitoredUnit(unit)
         return
     end
     if not UnitExists(unit) then return end
-    -- Do NOT call Invalidate() here: the generation-keyed cache already handles
-    -- stale data from nameplate recycling, and forcing a miss on every tick
-    -- defeats the cache entirely and allocates a fresh result table 4×/sec/unit.
     local details = Minimizer.Threat.GetThreatDetails(unit)
+    if not details then return end
     local combat = Minimizer.Threat.IsInCombatWith(unit, details)
     local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
     local previous = monitorState[unit]
@@ -288,7 +289,7 @@ local function ProcessMonitoredUnit(unit)
 end
 
 function Minimizer.Threat.StartMonitor()
-    if monitorFrame then return end
+    if monitorFrame or not IsThreatEnabled() then return end
     RebuildMonitorUnits()
     monitorFrame = CreateFrame("Frame")
     monitorFrame:SetScript("OnUpdate", function(_, elapsed)
