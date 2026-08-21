@@ -398,15 +398,29 @@ local function EnsureFrame()
         end
     end)
 
-    local dropdowns = {
-        CreateDropdown(content, "MinimizerMenuTargetOffensiveDrop", "Target offensive CD", "OFFENSIVE_CDS", "targetOffensive"),
-        CreateDropdown(content, "MinimizerMenuTargetDefensiveDrop", "Target defensive CD", "DEFENSIVE_CDS", "targetDefensive"),
-        CreateDropdown(content, "MinimizerMenuFocusCCDrop", "Focus mass CC", "MASS_CC_SPELLS", "focusCC"),
+    local slots = (Minimizer.Pips and Minimizer.Pips.SLOTS) or {
+        { id = 1, name = "Pip 1" },
+        { id = 2, name = "Pip 2" },
     }
 
-    dropdowns[1]:SetPoint("TOPLEFT", arrowsToggle, "BOTTOMLEFT", 0, -20)
-    dropdowns[2]:SetPoint("TOPLEFT", dropdowns[1], "BOTTOMLEFT", 0, -18)
-    dropdowns[3]:SetPoint("TOPLEFT", dropdowns[2], "BOTTOMLEFT", 0, -18)
+    local dropdowns = {}
+    for index, slot in ipairs(slots) do
+        local slotId = slot.id or index
+        local slotName = slot.name or ("Pip " .. slotId)
+        local drop = CreateDropdown(
+            content,
+            "MinimizerMenuPip" .. slotId .. "Drop",
+            slotName,
+            "PIPS_SPELLS",
+            "pip" .. slotId
+        )
+        if #dropdowns == 0 then
+            drop:SetPoint("TOPLEFT", arrowsToggle, "BOTTOMLEFT", 0, -20)
+        else
+            drop:SetPoint("TOPLEFT", dropdowns[#dropdowns], "BOTTOMLEFT", 0, -18)
+        end
+        table.insert(dropdowns, drop)
+    end
 
     -- Columna de leyenda: aprovecha el lateral derecho, que antes quedaba
     -- vacío. Ancho = lo que sobra del frame tras la columna de controles.
