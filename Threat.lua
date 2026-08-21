@@ -39,7 +39,9 @@ end
 
 function Minimizer.Threat.RefreshPlayerTankCache()
     local isTank = false
-    if UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK" then
+    if not (IsInGroup and IsInGroup()) and not (IsInRaid and IsInRaid()) then
+        isTank = true
+    elseif UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") == "TANK" then
         isTank = true
     else
         local specialization = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization and C_SpecializationInfo.GetSpecialization()
