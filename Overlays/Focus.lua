@@ -100,7 +100,7 @@ function Focus:UpdateFace()
     UpdateCooldown()
 
     if focusPips and Minimizer.Pips then
-        Minimizer.Pips.UpdatePips(focusPips, "focus")
+        Minimizer.Pips.UpdatePips(focusPips)
         Minimizer.Pips.SetFrameLevel(focusPips, (frame:GetFrameLevel() or 0) + 5)
     end
 end

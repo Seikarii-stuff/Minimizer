@@ -27,10 +27,8 @@ Minimizer.Config.DEFAULTS = {
 -- manuales de usuario, "sin override" YA es nil por ausencia). Se documenta la
 -- lista de claves válidas aquí en vez de fingir defaults que nunca existieron.
 Minimizer.Config.CHAR_DEFAULT_KEYS = {
-    "targetPip1",
-    "targetPip2",
-    "focusPip1",
-    "focusPip2",
+    "pip1",
+    "pip2",
 }
 
 function Minimizer.Config.Initialize()
@@ -39,7 +37,7 @@ function Minimizer.Config.Initialize()
 
     -- Separación de persistencia:
     --   - MinimizerDB: preferencias de cuenta / UI globales; no dependen del personaje.
-    --   - MinimizerCharDB: selección de spell por clase/spec (override manual para pips de target/focus),
+    --   - MinimizerCharDB: selección de spell por clase/spec (override manual para pips compartidos de target/focus),
     --     además de cualquier ajuste que dependa del personaje o de la especialización actual.
     local defaults = Minimizer.Config.DEFAULTS
     for key, value in pairs(defaults) do
@@ -65,20 +63,41 @@ function Minimizer.Config.Initialize()
         MinimizerDB.enableFocusArrows = true
     end
 
-    -- Migración de pips: focusCC -> focusPip1, targetDefensive -> targetPip1,
+    -- Migración de pips: targetDefensive -> pip1, focusCC -> pip2,
     -- y eliminación de targetOffensive (el halo ahora representa el corte).
+    if MinimizerCharDB.targetDefensive ~= nil then
+        if MinimizerCharDB.pip1 == nil then
+            MinimizerCharDB.pip1 = MinimizerCharDB.targetDefensive
+        end
+        MinimizerCharDB.targetDefensive = nil
+    end
+
+    if MinimizerCharDB.targetPip1 ~= nil then
+        if MinimizerCharDB.pip1 == nil then
+            MinimizerCharDB.pip1 = MinimizerCharDB.targetPip1
+        end
+        MinimizerCharDB.targetPip1 = nil
+    end
+
     if MinimizerCharDB.focusCC ~= nil then
-        if MinimizerCharDB.focusPip1 == nil then
-            MinimizerCharDB.focusPip1 = MinimizerCharDB.focusCC
+        if MinimizerCharDB.pip2 == nil then
+            MinimizerCharDB.pip2 = MinimizerCharDB.focusCC
         end
         MinimizerCharDB.focusCC = nil
     end
 
-    if MinimizerCharDB.targetDefensive ~= nil then
-        if MinimizerCharDB.targetPip1 == nil then
-            MinimizerCharDB.targetPip1 = MinimizerCharDB.targetDefensive
+    if MinimizerCharDB.focusPip1 ~= nil then
+        if MinimizerCharDB.pip2 == nil then
+            MinimizerCharDB.pip2 = MinimizerCharDB.focusPip1
         end
-        MinimizerCharDB.targetDefensive = nil
+        MinimizerCharDB.focusPip1 = nil
+    end
+
+    if MinimizerCharDB.targetPip2 ~= nil then
+        MinimizerCharDB.targetPip2 = nil
+    end
+    if MinimizerCharDB.focusPip2 ~= nil then
+        MinimizerCharDB.focusPip2 = nil
     end
 
     if MinimizerCharDB.targetOffensive ~= nil then

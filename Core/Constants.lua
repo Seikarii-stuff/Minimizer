@@ -29,6 +29,8 @@ Minimizer.Constants.CastColors = {
 --   "swipe" del Cooldown frame), va perdiendo cobertura hasta desaparecer
 --   cuando el cooldown termina.
 Minimizer.Constants.PipColors = {
-    default = { on = {0.20, 0.55, 1.00}, off = {0.05, 0.10, 0.25} },
+    [1] = { on = {0.10, 1.00, 0.10}, off = {0.03, 0.20, 0.03} }, -- Pip 1: Verde
+    [2] = { on = {0.20, 0.55, 1.00}, off = {0.05, 0.10, 0.25} }, -- Pip 2: Azul
+    default = { on = {0.10, 1.00, 0.10}, off = {0.03, 0.20, 0.03} },
 }
 

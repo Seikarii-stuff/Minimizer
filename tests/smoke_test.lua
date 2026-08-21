@@ -360,14 +360,14 @@ do
     addonTable.Config.Initialize()
     check(MinimizerDB.enableFocusFace == false and MinimizerDB.enableFocusArrows == true,
         "Config: migracion old focusIndicator=arrows crea los booleans separados")
-    check(MinimizerCharDB.focusPip1 == 118000,
-        "Config: migracion focusCC -> focusPip1")
-    check(MinimizerCharDB.focusCC == nil,
-        "Config: migracion elimina focusCC")
-    check(MinimizerCharDB.targetPip1 == 871,
-        "Config: migracion targetDefensive -> targetPip1")
+    check(MinimizerCharDB.pip1 == 871,
+        "Config: migracion targetDefensive -> pip1 (Verde)")
     check(MinimizerCharDB.targetDefensive == nil,
         "Config: migracion elimina targetDefensive")
+    check(MinimizerCharDB.pip2 == 118000,
+        "Config: migracion focusCC -> pip2 (Azul)")
+    check(MinimizerCharDB.focusCC == nil,
+        "Config: migracion elimina focusCC")
     check(MinimizerCharDB.targetOffensive == nil,
         "Config: migracion elimina targetOffensive")
 end
@@ -914,13 +914,21 @@ do
     check(#addonTable.Pips.SLOTS == 2,
         "Pips: SLOTS define exactamente el numero de pips configurados (2)")
 
+    -- Check Pip 1 is Green and Pip 2 is Blue
+    local s1Color = addonTable.Pips.SLOTS[1].color
+    local s2Color = addonTable.Pips.SLOTS[2].color
+    check(s1Color and math.abs(s1Color.on[2] - 1.00) < 0.01 and math.abs(s1Color.on[1] - 0.10) < 0.01,
+        "Pips: Pip 1 es VERDE")
+    check(s2Color and math.abs(s2Color.on[3] - 1.00) < 0.01 and math.abs(s2Color.on[1] - 0.20) < 0.01,
+        "Pips: Pip 2 es AZUL")
+
     local createdPips = addonTable.Pips.CreatePips(parent, "TestModulePip", 23)
     check(#createdPips == #addonTable.Pips.SLOTS,
         "Pips: CreatePips crea exactamente un frame por cada slot definido")
 
-    MinimizerCharDB.targetPip1 = 118000
+    MinimizerCharDB.pip1 = 118000
     Mocks.cooldowns[118000] = { start = Mocks.time, duration = 45 }
-    addonTable.Pips.UpdatePips(createdPips, "target")
+    addonTable.Pips.UpdatePips(createdPips)
     check(createdPips[1]:IsShown() == true,
         "Pips: UpdatePips muestra el pip cuando el spell de PIPS_SPELLS está activo")
 

@@ -409,30 +409,16 @@ local function EnsureFrame()
         local slotName = slot.name or ("Pip " .. slotId)
         local drop = CreateDropdown(
             content,
-            "MinimizerMenuTargetPip" .. slotId .. "Drop",
-            "Target " .. slotName,
+            "MinimizerMenuPip" .. slotId .. "Drop",
+            slotName,
             "PIPS_SPELLS",
-            "targetPip" .. slotId
+            "pip" .. slotId
         )
         if #dropdowns == 0 then
             drop:SetPoint("TOPLEFT", arrowsToggle, "BOTTOMLEFT", 0, -20)
         else
             drop:SetPoint("TOPLEFT", dropdowns[#dropdowns], "BOTTOMLEFT", 0, -18)
         end
-        table.insert(dropdowns, drop)
-    end
-
-    for index, slot in ipairs(slots) do
-        local slotId = slot.id or index
-        local slotName = slot.name or ("Pip " .. slotId)
-        local drop = CreateDropdown(
-            content,
-            "MinimizerMenuFocusPip" .. slotId .. "Drop",
-            "Focus " .. slotName,
-            "PIPS_SPELLS",
-            "focusPip" .. slotId
-        )
-        drop:SetPoint("TOPLEFT", dropdowns[#dropdowns], "BOTTOMLEFT", 0, -18)
         table.insert(dropdowns, drop)
     end
 

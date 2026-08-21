@@ -12,18 +12,30 @@ Minimizer.Pips = Pips
 -- Definición centralizada y extensible de slots para Pips.
 -- Target y Focus consumen exclusivamente esta lista para determinar
 -- número de pips, identificador, nombre, esquina y propiedades visuales.
+-- Pip 1: Verde (TOPLEFT)
+-- Pip 2: Azul (TOPRIGHT)
 Pips.SLOTS = {
-    { id = 1, name = "Pip 1", corner = "TOPLEFT" },
-    { id = 2, name = "Pip 2", corner = "TOPRIGHT" },
+    {
+        id = 1,
+        name = "Pip 1",
+        corner = "TOPLEFT",
+        color = { on = {0.10, 1.00, 0.10}, off = {0.03, 0.20, 0.03} }, -- Verde
+    },
+    {
+        id = 2,
+        name = "Pip 2",
+        corner = "TOPRIGHT",
+        color = { on = {0.20, 0.55, 1.00}, off = {0.05, 0.10, 0.25} }, -- Azul
+    },
 }
 
 Pips.PIP_SIZE = 10
 
--- Resuelve el spellID para una unidad y slot determinado
-function Pips.GetSpellID(unitKey, slotIndex)
+-- Resuelve el spellID para un slot determinado (compartido por Target y Focus)
+function Pips.GetSpellID(slotIndex)
     local override = nil
     if MinimizerCharDB then
-        override = MinimizerCharDB[unitKey .. "Pip" .. slotIndex]
+        override = MinimizerCharDB["pip" .. slotIndex]
     end
     local spellList = Minimizer.Data and Minimizer.Data.PIPS_SPELLS
     if not spellList or not Minimizer.Widgets or not Minimizer.Widgets.GetCDSpellID then
@@ -37,9 +49,6 @@ function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
     if not parentFrame then return {} end
 
     local pips = {}
-    local colors = (Minimizer.Constants and Minimizer.Constants.PipColors and Minimizer.Constants.PipColors.default)
-        or { on = {0.20, 0.55, 1.00}, off = {0.05, 0.10, 0.25} }
-
     local parentSize = math.min(parentFrame:GetWidth() or 40, parentFrame:GetHeight() or 40)
     radius = radius or (parentSize * 0.45)
     xOff = xOff or 0
@@ -48,6 +57,11 @@ function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
     for index, slot in ipairs(Pips.SLOTS) do
         local slotId = slot.id or index
         local corner = slot.corner or "TOPRIGHT"
+        local colors = slot.color
+            or (Minimizer.Constants and Minimizer.Constants.PipColors and Minimizer.Constants.PipColors[slotId])
+            or (Minimizer.Constants and Minimizer.Constants.PipColors and Minimizer.Constants.PipColors.default)
+            or { on = {0.10, 1.00, 0.10}, off = {0.03, 0.20, 0.03} }
+
         local signX = (corner:find("RIGHT") and 1) or -1
         local signY = (corner:find("TOP") and 1) or -1
 
@@ -100,14 +114,14 @@ function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
     return pips
 end
 
--- Actualiza todos los pips de un overlay para la unidad dada
-function Pips.UpdatePips(pips, unitKey)
+-- Actualiza todos los pips de un overlay (Target o Focus comparten la misma selección)
+function Pips.UpdatePips(pips)
     if not pips or type(pips) ~= "table" then return end
 
     for index, pip in ipairs(pips) do
         local slot = Pips.SLOTS[index]
         local slotId = (slot and slot.id) or index
-        local spellID = Pips.GetSpellID(unitKey, slotId)
+        local spellID = Pips.GetSpellID(slotId)
 
         if not spellID or not pip.MinimizerPipCooldown then
             pip:Hide()

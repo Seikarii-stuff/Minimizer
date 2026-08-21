@@ -55,7 +55,7 @@ function Target:UpdateTargetCDs()
         and Minimizer.Interrupt.GetSpellID()
 
     if targetPips and Minimizer.Pips then
-        Minimizer.Pips.UpdatePips(targetPips, "target")
+        Minimizer.Pips.UpdatePips(targetPips)
     end
 
     if interruptSpellID then
