@@ -85,6 +85,7 @@ local function BuildSnapshot(unit, nameplate)
     s.threatSituation = details and details.situation or nil
     s.otherTankAggro = details and details.otherTankAggro or false
     s.isNilSpecial = details and details.nilSpecial == true or false
+    s.isNonAttackable = details and details.cannotAttackPlayer == true or false
     s.hasAggro = Minimizer.Threat.PlayerHasAggro(unit)
 
     s.isPvP = Minimizer.Utils.IsPvPUnit(unit)
@@ -93,7 +94,7 @@ local function BuildSnapshot(unit, nameplate)
 
     if UnitIsUnit(unit, "focus") then
         s.displayKind = "focus"
-    elseif s.isNilSpecial then
+    elseif s.isNilSpecial or s.isNonAttackable then
         s.displayKind = "priority"
     elseif s.hasAggro then
         s.displayKind = "aggro"
@@ -108,6 +109,7 @@ end
 function Minimizer.Core.ComputeDisplayKind(unit, nameplate)
     if not unit then return nil end
     if UnitIsUnit(unit, "focus") then return "focus" end
+    if Minimizer.Threat and Minimizer.Threat.IsNonAttackable and Minimizer.Threat.IsNonAttackable(unit) then return "priority" end
     if Minimizer.Threat and Minimizer.Threat.IsNilSpecial and Minimizer.Threat.IsNilSpecial(unit) then return "priority" end
     if Minimizer.Threat and Minimizer.Threat.PlayerHasAggro and Minimizer.Threat.PlayerHasAggro(unit) then return "aggro" end
     local hasAbsorbNow = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
