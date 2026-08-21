@@ -735,6 +735,201 @@ Sin cambios — ya son Static Data puro.
 
 ---
 
+## Migración segura recomendada (sustituye la estrategia agresiva de descomposición directa)
+
+**[PROPUESTA]** La arquitectura objetivo puede seguir siendo conceptualmente `Lifecycle → Dispatcher → Snapshot → Decision → Rendering`, pero la migración debe respetar una regla estricta:
+
+> Primero hacer explícito el ownership sin cambiar la semántica; después demostrar equivalencia; finalmente eliminar la duplicación.
+
+Esto no supone que mover código implique mantener comportamiento. En particular, durante la migración deben preservarse, sin cambios semánticos, los siguientes elementos:
+
+- timing de actualizaciones;
+- número de reprocesamientos;
+- orden de procesamiento cuando sea observable;
+- comportamiento de Threat;
+- generaciones/recycle de nameplates;
+- absorb;
+- hooks de Blizzard;
+- fallbacks cuando no existe snapshot;
+- Target/Focus;
+- cualquier comportamiento que el documento actual marque explícitamente como `BUG EXISTENTE — NO CORREGIR DURANTE MIGRACIÓN`.
+
+### Principio general
+
+La migración segura no debe asumir que un nuevo ownership implica una nueva semántica. La intención es introducir un modelo más claro sin producir un salto funcional. Por tanto, la secuencia correcta es: A) compatibilidad, B) ownership, C) equivalencia, D) eliminación de duplicación.
+
+### Fase A — Introducir la arquitectura sin cambiar comportamiento
+
+Esta fase tiene como objetivo crear `Lifecycle` y `Dispatcher` como capas/fachadas compatibles, sin cambiar el comportamiento observable del addon.
+
+- `Core.ApplyToUnit` debe seguir existiendo.
+- `Core.ApplyToAll` debe seguir existiendo.
+- Las nuevas APIs pueden delegar inicialmente en la implementación existente.
+- No eliminar funciones existentes.
+- No cambiar algoritmos.
+- No cambiar intervalos de polling.
+- No cambiar prioridades.
+- No cambiar condiciones de rendering.
+- No cambiar los hooks.
+
+La meta no es que el código “se mueva” antes, sino que el ownership exista sin que el usuario pueda notar ninguna diferencia. En esta fase el nuevo architecture debe mantenerse como una fachada sobre el comportamiento actual; no es una reescritura y no debe cambiar el orden ni la cadencia de los ciclos.
+
+### Fase B — Mover ownership, no lógica
+
+Durante esta fase, `Lifecycle` pasa a ser el responsable de:
+
+- registro de nameplates activas;
+- generaciones;
+- lifecycle/recycle;
+- detección de stale generation.
+
+Sin embargo, los mecanismos actuales deben mantenerse temporalmente como compatibilidad. `Dispatcher` se convierte progresivamente en el owner del scheduling, pero `Core.ApplyToUnit` y `Core.ApplyToAll` siguen existiendo como wrappers temporales; no desaparecen de golpe.
+
+El objetivo es desplazar la propiedad del estado y el scheduling, no reescribir la lógica subyacente. Solo cuando los consumidores y las llamadas ya no dependan del layout existente se puede empezar a retirar la duplicación.
+
+### Threat — zona de alto riesgo
+
+Threat requiere un tratamiento especial porque incorpora al mismo tiempo datos de dominio, decisiones y un scheduler propio.
+
+- No reemplazar `Threat.monitorFrame` por un mecanismo de eventos directo.
+- El polling round-robin actual debe conservar exactamente:
+  - su cadencia;
+  - `monitorStep`;
+  - `monitorCount`;
+  - orden de recorrido;
+  - comportamiento frente a cambios;
+  - el momento relativo en el que invalida/reprocesa.
+- Primero trasladar el ownership del scheduling a `Dispatcher` manteniendo ese algoritmo.
+- Solo después de demostrar equivalencia se podrá simplificar.
+
+Además, debe dejarse explícito que un `Dispatcher` que coalescee demasiado las actualizaciones puede introducir regresiones temporales. En otras palabras, el problema no es sólo “reunificar el código”, sino asegurar que la semántica temporal del actual round-robin siga siendo observada por los tests y por el flujo real del addon.
+
+### Snapshot
+
+Snapshot debe convertirse en una representación común, pero debe mantenerse inicialmente el comportamiento síncrono actual.
+
+Debe documentarse explícitamente:
+
+- el snapshot reutilizado (`scratchSnapshot`/tabla compartida) solo es válido durante el pase síncrono;
+- no debe almacenarse para trabajo diferido;
+- si `Dispatcher` difiere trabajo, ese trabajo debe copiar/congelar los datos que necesite;
+- nunca debe existir la posibilidad de que un snapshot de `unitA` sea reutilizado posteriormente mientras se procesa `unitB`.
+
+`BuildSnapshot` debe consolidarse antes de eliminar implementaciones duplicadas. La regla no es “extraer antes”, sino “consolidar y demostrar equivalencia antes de eliminar”.
+
+### Decision
+
+Decision debe consumir `Snapshot` y centralizar la decisión final de `displayKind`.
+
+Pero no se debe eliminar inmediatamente las implementaciones antiguas de:
+
+- `ComputeDisplayKind`;
+- `Threat.ShouldUnsimplify`;
+- `Threat.ShouldLetBlizzardPaint`;
+- cualquier otra lógica equivalente.
+
+La migración segura exige ejecutar ambas rutas en paralelo y comprobar equivalencia. Solo después de demostrar que el resultado final es el mismo, y que se conserva el motivo/razón de decisión cuando sea relevante, se puede eliminar duplicación.
+
+### Absorb / HealthBarColor
+
+`Absorb` y `HealthBarColor` son zonas de alto riesgo.
+
+La intención de centralizar la información de absorb es correcta, pero no debe cambiarse simultáneamente:
+
+- cuándo se consulta `UnitGetTotalAbsorbs`;
+- los guards;
+- los fallbacks;
+- el comportamiento ante secrets;
+- el momento en que se actualiza visualmente el overshield.
+
+Primero debe exponerse la información mediante una interfaz compatible con el comportamiento actual; después debe demostrarse equivalencia. Los fallbacks sin `Snapshot` deben continuar funcionando, y no debe asumirse que la nueva fuente central tiene el mismo timing que el código actual.
+
+### Hooks de Blizzard
+
+No debe obligarse a que todos los hooks pasen por `Snapshot`.
+
+`Snapshot` es la fuente preferida durante un pipeline síncrono, pero no necesariamente la única fuente válida. `HealthBarColor`, `CastingBar` y otros hooks pueden necesitar acceder a información directamente cuando Blizzard repinta fuera del pipeline normal.
+
+Esto debe quedar explícito en la arquitectura objetivo: los hooks no son redundantes ni “buggy” por naturaleza; son un caso de lectura fuera del flujo principal que debe seguir protegida por fallbacks y compatibilidad.
+
+### Target / Focus
+
+Es posible crear una interfaz o scheduler común para `Target` y `Focus`, pero no debe mezclarse artificialmente su ciclo de vida con el pipeline normal de Plater.
+
+La regla recomendada es:
+
+- primero unificar infraestructura;
+- después, si existe equivalencia demostrada, eliminar duplicación.
+
+En otras palabras, lo que debe migrarse no es “el contenido” de Target/Focus, sino la infraestructura compartida que los acompaña.
+
+### Generaciones
+
+No deben eliminarse de golpe los campos antiguos relacionados con generación.
+
+Durante la migración:
+
+- comparar el resultado del generation check antiguo con `Lifecycle.IsGenerationStale()`;
+- verificar equivalencia;
+- mantener compatibilidad mientras se migra cada consumidor;
+- eliminar los campos antiguos únicamente al final.
+
+Esto es especialmente importante por el comportamiento de:
+
+- absorb;
+- cast color;
+- no-simplify;
+- reciclado de nameplates.
+
+### Fase C — Eliminación de duplicación
+
+Solo después de tener equivalencia demostrada se debe avanzar a la eliminación de duplicación:
+
+- eliminar `ComputeDisplayKind` duplicado;
+- eliminar duplicaciones de Threat;
+- eliminar generation fields antiguos;
+- eliminar wrappers/aliases de compatibilidad;
+- retirar código antiguo de `Core`;
+- consolidar hooks comunes;
+- simplificar Target/Focus.
+
+La secuencia correcta es: “mover ownership, medir y comparar, luego simplificar”. No al revés.
+
+### Criterios de equivalencia
+
+Se debe añadir una sección de criterios de equivalencia y no basta con verificar que el resultado final sea igual. Deben comprobarse también:
+
+- mismo `displayKind`;
+- mismo motivo/razón de decisión cuando sea relevante;
+- mismo número de `ApplyToUnit`;
+- mismo número de `ApplyToAll`;
+- misma cadencia efectiva de Threat;
+- mismo comportamiento durante recycle;
+- mismo comportamiento durante cambios de target/focus;
+- mismo comportamiento de absorb;
+- mismos fallbacks de hooks;
+- mismo comportamiento cuando no hay snapshot;
+- ausencia de referencias a snapshots fuera de su vida útil.
+
+Debe tratarse como una validación funcional explícita; no como un extra opcional.
+
+### Riesgo y conclusión de la estrategia
+
+La arquitectura objetivo es correcta, pero una migración directa puede romper comportamiento que actualmente funciona porque varias partes del addon tienen semántica temporal y de lifecycle además de dependencias estructurales.
+
+Por tanto, el riesgo principal no es la arquitectura final sino hacer demasiados cambios semánticos en un único paso.
+
+La estrategia recomendada es:
+
+A) compatibilidad;
+B) mover ownership;
+C) demostrar equivalencia;
+D) eliminar duplicación.
+
+Esta secuencia es más segura que la propuesta de descomposición directa, y es la que debe seguirse en esta documentación para no convertir un refactor arquitectónico en un cambio de comportamiento no deseado.
+
+---
+
 # Plan de migración
 
 **[PROPUESTA]** Orden determinado por dependencias reales observadas en §9, no por la lista sugerida en el encargo. Cada fase es incremental, verificable con `tests/smoke_test.lua` y `tests/benchmark/benchmark.lua`, y no cambia comportamiento observable.
@@ -946,3 +1141,5 @@ Derivadas de los hallazgos de este documento, para aplicar durante toda la migra
 **Principales candidatos a migración (por impacto):** `Plater/Core.lua` (fases 1, 2, 4, 7), `Plater/Threat.lua` (fases 3, 5), la unificación de Absorb (fase 6), y la extracción del Dispatcher real (fase 7) como culminación de las fases previas.
 
 **Mayores riesgos:** (a) romper el contrato implícito de nombres de campo `nameplate.Minimizer*` que varios tests inspeccionan directamente; (b) desincronizar las 3-4 implementaciones de prioridad `displayKind` al unificarlas si no se valida exhaustivamente contra los tests de "PRIORITY" existentes; (c) que el monitor de Threat dejado de lado en Fase 3 cambie sutilmente el timing round-robin observable si no se preserva la fórmula `0.25/monitorCount`; (d) los dos puntos marcados `REQUIERE VALIDACIÓN` (`UNIT_ABSORB_AMOUNT_CHANGED` y `MinimizerLetBlizzardHealthColor`) deben confirmarse contra el repositorio real (posiblemente la rama `split-architectonico`) antes de tocar `Events.lua` en Fase 7.
+
+**Ajuste de riesgo recomendado:** la arquitectura objetivo es correcta, pero una migración directa puede romper comportamiento que actualmente funciona porque varias partes del addon tienen semántica temporal y de lifecycle además de dependencias estructurales. Por tanto, el riesgo principal no es la arquitectura final sino hacer demasiados cambios semánticos en un único paso. La recomendación técnica del documento es la misma que la de la propuesta de migración segura recién añadida: `compatibilidad → ownership → equivalencia → eliminación de duplicación`.
