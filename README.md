@@ -229,13 +229,21 @@ Minimizer.Utils.ApplyReadyShade(texture, ready)
 ### 3.9 Amenaza (threat) sin coerción de secretos
 
 ```lua
+-- GetSituation
 local situation = UnitThreatSituation(source, unit)
-if Minimizer.Utils.IsSecretValue(situation) then return nil end
-if type(situation) ~= "number" then return nil end
+if Minimizer.Utils.IsSecretValue(situation) or type(situation) ~= "number" then situation = nil end
+
+-- GetThreatDetails (player)
+local rawSituation = UnitThreatSituation("player", unit)
+local situation = (Minimizer.Utils.IsSecretValue(rawSituation) or type(rawSituation) ~= "number") and nil or rawSituation
+
+-- GetThreatDetails (cada tank token)
+local rawTankSit = UnitThreatSituation(tankUnit, unit)
+if not Minimizer.Utils.IsSecretValue(rawTankSit) and rawTankSit == 3 then ... end
 ```
 
-- Verificado en `Threat.lua` → `GetSituation`. Solo después de este doble guard se compara `situation == 3` (aggro sólido) o `situation < 3`.
-- `Threat.PlayerHasAggro` tiene rama especial para tanks (usa `ShouldUnsimplify`/`GetTankSituation`, que iteran los tokens de tank de grupo/raid vía `Threat.tankTokens`, refrescados en `RefreshTankTokens`). **No es la misma función** que `ShouldUnsimplify` — no sustituir una por otra sin revisar `Threat.lua`.
+- Aplicado en `Threat.lua` → `GetSituation` **y** `GetThreatDetails`. Solo después de este doble guard (`IsSecretValue` + `type ~= "number"`) se compara `situation == 3` (aggro sólido) o `situation < 3`.
+- `Threat.PlayerHasAggro` tiene rama especial para tanks (usa `GetThreatDetails`/`tankTokens`, refrescados en `RefreshTankTokens`). **No es la misma función** que `ShouldUnsimplify` — no sustituir una por otra sin revisar `Threat.lua`.
 
 ### 3.10 Absorb: depender EXCLUSIVAMENTE del indicador visual
 

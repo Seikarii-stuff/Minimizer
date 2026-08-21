@@ -38,13 +38,6 @@ function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
         return false, "no simp"
     end
 
-    -- A persistent nil-special is a real unsimplify reason for every role.
-    -- It becomes visible only after the threat state has remained nil for
-    -- 1.0s and the additional 0.5s grace period has elapsed.
-    if snapshot and snapshot.isNilSpecialReady then
-        return false, "temporal"
-    end
-
     if Minimizer.Threat.ShouldUnsimplify(unit) then
         return false, "temporal"
     end

@@ -85,7 +85,6 @@ local function BuildSnapshot(unit, nameplate)
     s.threatSituation = details and details.situation or nil
     s.otherTankAggro = details and details.otherTankAggro or false
     s.isNilSpecial = details and details.nilSpecial == true or false
-    s.isNilSpecialReady = details and details.nilSpecialReady == true or false
     s.hasAggro = Minimizer.Threat.PlayerHasAggro(unit)
 
     s.isPvP = Minimizer.Utils.IsPvPUnit(unit)

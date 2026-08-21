@@ -110,10 +110,15 @@ function Minimizer.Threat.GetThreatDetails(unit)
             return UpdateNilState(unit, cached, generation, combat)
         end
     end
-    local result = { situation = UnitThreatSituation("player", unit), otherTankAggro = false }
+    local rawSituation = UnitThreatSituation("player", unit)
+    local result = {
+        situation = (Minimizer.Utils.IsSecretValue(rawSituation) or type(rawSituation) ~= "number") and nil or rawSituation,
+        otherTankAggro = false,
+    }
     if result.situation ~= 3 and result.situation ~= 2 and Minimizer.Threat.IsPlayerTank() then
         for _, tankUnit in ipairs(Minimizer.Threat.tankTokens) do
-            if UnitThreatSituation(tankUnit, unit) == 3 then
+            local rawTankSit = UnitThreatSituation(tankUnit, unit)
+            if not Minimizer.Utils.IsSecretValue(rawTankSit) and rawTankSit == 3 then
                 result.otherTankAggro = true
                 break
             end
@@ -149,6 +154,7 @@ function Minimizer.Threat.GetSituation(unit, source)
         if cached ~= nil then return cached end
     end
     local situation = UnitThreatSituation(source, unit)
+    if Minimizer.Utils.IsSecretValue(situation) or type(situation) ~= "number" then situation = nil end
     if Minimizer.Cache and Minimizer.Cache.SetUnitKeyWithGeneration then Minimizer.Cache.SetUnitKeyWithGeneration(unit, cacheKey, situation) end
     return situation
 end
@@ -250,7 +256,9 @@ local function ProcessMonitoredUnit(unit)
         return
     end
     if not UnitExists(unit) then return end
-    Minimizer.Threat.Invalidate(unit)
+    -- Do NOT call Invalidate() here: the generation-keyed cache already handles
+    -- stale data from nameplate recycling, and forcing a miss on every tick
+    -- defeats the cache entirely and allocates a fresh result table 4×/sec/unit.
     local details = Minimizer.Threat.GetThreatDetails(unit)
     local combat = Minimizer.Threat.IsInCombatWith(unit, details)
     local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
@@ -261,13 +269,21 @@ local function ProcessMonitoredUnit(unit)
         or previous.otherTankAggro ~= details.otherTankAggro
         or previous.combat ~= combat
         or previous.nilSpecial ~= details.nilSpecial
-    monitorState[unit] = {
-        generation = generation,
-        situation = details.situation,
-        otherTankAggro = details.otherTankAggro,
-        combat = combat,
-        nilSpecial = details.nilSpecial,
-    }
+    if previous then
+        previous.generation     = generation
+        previous.situation      = details.situation
+        previous.otherTankAggro = details.otherTankAggro
+        previous.combat         = combat
+        previous.nilSpecial     = details.nilSpecial
+    else
+        monitorState[unit] = {
+            generation     = generation,
+            situation      = details.situation,
+            otherTankAggro = details.otherTankAggro,
+            combat         = combat,
+            nilSpecial     = details.nilSpecial,
+        }
+    end
     if changed and Minimizer.Core and Minimizer.Core.ApplyToUnit then Minimizer.Core.ApplyToUnit(unit) end
 end
 
