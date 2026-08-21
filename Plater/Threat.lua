@@ -9,6 +9,8 @@ local UnitThreatSituation = UnitThreatSituation
 local UnitAffectingCombat = UnitAffectingCombat
 local UnitCanAttack = UnitCanAttack
 local UnitInParty = UnitInParty
+local UnitCanAttack = UnitCanAttack
+local UnitInParty = UnitInParty
 local wipe = wipe
 local ipairs = ipairs
 local IsInRaid = IsInRaid
@@ -70,6 +72,13 @@ local function IsThreatEnabled()
     return (IsInGroup and IsInGroup()) or (IsInRaid and IsInRaid()) or Minimizer.Threat.IsPlayerTank()
 end
 
+local function ReadCannotAttackPlayer(unit)
+    if not UnitCanAttack then return false end
+    local canAttackPlayer = UnitCanAttack(unit, "player")
+    if Minimizer.Utils.IsSecretValue(canAttackPlayer) then return false end
+    return canAttackPlayer == false
+end
+
 local function UpdateNilState(unit, result, generation, inCombat)
     local now = GetTime()
     local state = nilState[unit]
@@ -78,8 +87,9 @@ local function UpdateNilState(unit, result, generation, inCombat)
         nilState[unit] = state
     end
 
-    local canAttackPlayer = UnitCanAttack and UnitCanAttack(unit, "player")
-    local isNilSpecialCandidate = canAttackPlayer == false
+    local cannotAttackPlayer = ReadCannotAttackPlayer(unit)
+    result.cannotAttackPlayer = cannotAttackPlayer
+    local isNilSpecialCandidate = cannotAttackPlayer
 
     if result.situation == nil and inCombat and isNilSpecialCandidate then
         if not state.nilSince then
@@ -185,11 +195,17 @@ function Minimizer.Threat.IsNilSpecial(unit)
     return details and details.nilSpecial == true or false
 end
 
+function Minimizer.Threat.IsNonAttackable(unit)
+    if not IsThreatEnabled() then return false end
+    local details = Minimizer.Threat.GetThreatDetails(unit)
+    return details and details.cannotAttackPlayer == true or false
+end
+
 function Minimizer.Threat.ShouldLetBlizzardPaint(unit)
     if not IsThreatEnabled() or not Minimizer.Threat.IsPlayerTank() then return false end
     local details = Minimizer.Threat.GetThreatDetails(unit)
     if not details or not Minimizer.Threat.IsInCombatWith(unit, details) then return false end
-    if details.nilSpecial then return false end
+    if details.nilSpecial or details.cannotAttackPlayer then return false end
     local situation = details.situation
     return (situation == 0 or situation == nil) and not details.otherTankAggro
 end
@@ -198,6 +214,14 @@ function Minimizer.Threat.ShouldUnsimplify(unit)
     if not IsThreatEnabled() then return false end
     local details = Minimizer.Threat.GetThreatDetails(unit)
     if not details then return false end
+
+    -- Totems and other hostile units which cannot attack the player are treated
+    -- like nilSpecial: keep the full nameplate and let the priority color mark
+    -- them. This deliberately asks the reverse question (unit -> player) so it
+    -- also works when Blizzard provides no useful threat situation.
+    if details.cannotAttackPlayer then
+        return true
+    end
 
     if details.situation == nil then
         return details.nilSince ~= nil and Minimizer.Threat.IsInCombatWith(unit, details)
@@ -270,12 +294,14 @@ local function ProcessMonitoredUnit(unit)
         or previous.otherTankAggro ~= details.otherTankAggro
         or previous.combat ~= combat
         or previous.nilSpecial ~= details.nilSpecial
+        or previous.cannotAttackPlayer ~= details.cannotAttackPlayer
     if previous then
         previous.generation     = generation
         previous.situation      = details.situation
         previous.otherTankAggro = details.otherTankAggro
         previous.combat         = combat
         previous.nilSpecial     = details.nilSpecial
+        previous.cannotAttackPlayer = details.cannotAttackPlayer
     else
         monitorState[unit] = {
             generation     = generation,
@@ -283,6 +309,7 @@ local function ProcessMonitoredUnit(unit)
             otherTankAggro = details.otherTankAggro,
             combat         = combat,
             nilSpecial     = details.nilSpecial,
+            cannotAttackPlayer = details.cannotAttackPlayer,
         }
     end
     if changed and Minimizer.Core and Minimizer.Core.ApplyToUnit then Minimizer.Core.ApplyToUnit(unit) end
