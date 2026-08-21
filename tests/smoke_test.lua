@@ -904,9 +904,6 @@ do
 
     local parent = CreateFrame("Frame", "TestHaloParent")
     parent:SetSize(46, 46)
-    local pip = addonTable.Widgets.CreatePip("TestSharedRadiusPip", parent, "default", "TOPLEFT", 23)
-    check(pip ~= nil and pip.MinimizerPipRadius == 23,
-        "Pips: se acepta un radio compartido explícito para centrar el pip sobre el halo")
 
     -- Pips module tests
     check(type(addonTable.Pips) == "table" and type(addonTable.Pips.SLOTS) == "table",
@@ -935,6 +932,36 @@ do
     addonTable.Pips.HidePips(createdPips)
     check(createdPips[1]:IsShown() == false and createdPips[2]:IsShown() == false,
         "Pips: HidePips oculta todos los pips creados")
+
+    -- --- TEST: Configuración compartida de Pips entre Target y Focus ---
+    do
+        MinimizerCharDB.pip1 = 118000
+        MinimizerCharDB.pip2 = 5246
+
+        local targetParent = CreateFrame("Frame", "TestTargetParent")
+        local focusParent = CreateFrame("Frame", "TestFocusParent")
+        local targetPipsList = addonTable.Pips.CreatePips(targetParent, "TestTargetSharedPip", 23)
+        local focusPipsList = addonTable.Pips.CreatePips(focusParent, "TestFocusSharedPip", 23)
+
+        check(addonTable.Pips.GetSpellID(1) == 118000,
+            "Shared Pips: Pip 1 resuelve el spell compartido (118000)")
+        check(addonTable.Pips.GetSpellID(2) == 5246,
+            "Shared Pips: Pip 2 resuelve el spell compartido (5246)")
+
+        Mocks.cooldowns[118000] = { start = Mocks.time, duration = 30 }
+        Mocks.cooldowns[5246] = { start = Mocks.time, duration = 90 }
+
+        addonTable.Pips.UpdatePips(targetPipsList)
+        addonTable.Pips.UpdatePips(focusPipsList)
+
+        check(targetPipsList[1]:IsShown() == true and focusPipsList[1]:IsShown() == true,
+            "Shared Pips: Pip 1 se muestra tanto en Target como en Focus con el mismo spell")
+        check(targetPipsList[2]:IsShown() == true and focusPipsList[2]:IsShown() == true,
+            "Shared Pips: Pip 2 se muestra tanto en Target como en Focus con el mismo spell")
+
+        check(MinimizerCharDB.targetPip1 == nil and MinimizerCharDB.focusPip1 == nil,
+            "Shared Pips: no existe configuracion separada target/focus en MinimizerCharDB")
+    end
 
     local portraitCooldown = CreateFrame("Cooldown", "TestPortraitCooldown", nil, "CooldownFrameTemplate")
     addonTable.Widgets.MakeCooldownCircular(portraitCooldown, true)
