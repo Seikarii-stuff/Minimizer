@@ -14,6 +14,13 @@ local type = type
 local pcall = pcall
 local GetTime = GetTime
 
+local function CannotAttackPlayer(unit)
+    if not UnitCanAttack then return false end
+    local canAttack = UnitCanAttack(unit, "player")
+    if Minimizer.Utils and Minimizer.Utils.IsSecretValue and Minimizer.Utils.IsSecretValue(canAttack) then return false end
+    return canAttack == false
+end
+
 function Minimizer.Core.GetPlateGeneration(token)
     if not token then return 0 end
     return Minimizer.Core.plateGeneration[token] or 0
@@ -85,7 +92,10 @@ local function BuildSnapshot(unit, nameplate)
     s.threatSituation = details and details.situation or nil
     s.otherTankAggro = details and details.otherTankAggro or false
     s.isNilSpecial = details and details.nilSpecial == true or false
-    s.isNonAttackable = details and details.cannotAttackPlayer == true or false
+    -- Do not make this dependent on threat being enabled or on the threat
+    -- situation being nil. Totems can expose a normal threat state while still
+    -- being unable to attack the player.
+    s.isNonAttackable = CannotAttackPlayer(unit) or (details and details.cannotAttackPlayer == true) or false
     s.hasAggro = Minimizer.Threat.PlayerHasAggro(unit)
 
     s.isPvP = Minimizer.Utils.IsPvPUnit(unit)
@@ -109,6 +119,7 @@ end
 function Minimizer.Core.ComputeDisplayKind(unit, nameplate)
     if not unit then return nil end
     if UnitIsUnit(unit, "focus") then return "focus" end
+    if CannotAttackPlayer(unit) then return "priority" end
     if Minimizer.Threat and Minimizer.Threat.IsNonAttackable and Minimizer.Threat.IsNonAttackable(unit) then return "priority" end
     if Minimizer.Threat and Minimizer.Threat.IsNilSpecial and Minimizer.Threat.IsNilSpecial(unit) then return "priority" end
     if Minimizer.Threat and Minimizer.Threat.PlayerHasAggro and Minimizer.Threat.PlayerHasAggro(unit) then return "aggro" end
