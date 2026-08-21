@@ -7,11 +7,25 @@ local UnitExists = UnitExists
 local UnitCanAttack = UnitCanAttack
 local UnitIsUnit = UnitIsUnit
 
+local function CannotAttackPlayer(unit)
+    if not UnitCanAttack then return false end
+    local canAttack = UnitCanAttack(unit, "player")
+    if Minimizer.Utils and Minimizer.Utils.IsSecretValue and Minimizer.Utils.IsSecretValue(canAttack) then return false end
+    return canAttack == false
+end
+
 function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
     if not unit or not UnitExists(unit) then return false, "invalid" end
     if UnitIsUnit(unit, "target") then return false, "target" end
     if UnitIsUnit(unit, "focus") then return false, "focus" end
     if not UnitCanAttack("player", unit) then return false, "friendly" end
+
+    -- Do this independently of Threat.lua. A hostile totem can have a valid
+    -- threat situation, so the threat-based rule alone is too late to stop
+    -- the simplify path from making its nameplate small.
+    if (snapshot and snapshot.cannotAttackPlayer) or CannotAttackPlayer(unit) then
+        return false, "non-attackable"
+    end
 
     local enabled
     if Minimizer.Config and Minimizer.Config.IsSimplifyEnabled then
