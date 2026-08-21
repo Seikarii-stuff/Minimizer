@@ -23,13 +23,12 @@ Minimizer.Constants.CastColors = {
 }
 
 -- Colores para "pips": círculos pequeños de estado de cooldown anclados en la
--- esquina de otro widget (ej. CC del focus, defensivo del target). Cada
--- entrada define:
+-- esquina de otro widget (Target / Focus). Cada entrada define:
 --   on  = color brillante, mostrado cuando el spell está listo (100% visible).
 --   off = color del velo oscuro que lo cubre mientras está en cooldown (el
 --   "swipe" del Cooldown frame), va perdiendo cobertura hasta desaparecer
 --   cuando el cooldown termina.
 Minimizer.Constants.PipColors = {
-    cc = { on = {0.20, 0.55, 1.00}, off = {0.05, 0.10, 0.25} },
-    defensive = { on = {0.10, 1.00, 0.10}, off = {0.03, 0.20, 0.03} },
+    default = { on = {0.20, 0.55, 1.00}, off = {0.05, 0.10, 0.25} },
 }
+

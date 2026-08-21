@@ -45,7 +45,7 @@ end
 -- veces/seg via su throttle de 30fps, incluso sin cambios de estado).
 local cdSpellCache = {}
 
-function Minimizer.Widgets.GetCDSpellID(dbTable, override)
+function Minimizer.Widgets.GetCDSpellID(dbTable, override, slotIndex)
     if not dbTable then return nil end
 
     local bucket = cdSpellCache[dbTable]
@@ -54,7 +54,7 @@ function Minimizer.Widgets.GetCDSpellID(dbTable, override)
         cdSpellCache[dbTable] = bucket
     end
 
-    local key = override or false
+    local key = tostring(override or false) .. ":" .. tostring(slotIndex or 1)
     local cached = bucket[key]
     if cached ~= nil then
         if cached == false then return nil end
@@ -81,7 +81,7 @@ function Minimizer.Widgets.GetCDSpellID(dbTable, override)
         end
     end
 
-    local result = Minimizer.Utils.FindKnownSpell(spellList)
+    local result = Minimizer.Utils.FindKnownSpell(spellList, slotIndex)
     bucket[key] = result or false
     return result
 end
@@ -255,8 +255,8 @@ Minimizer.Widgets.PIP_SIZE = 10
 --   la zona circular real del portrait en el nombre de la placa.
 -- xOff, yOff: offset extra opcional. Por defecto 0, 0.
 function Minimizer.Widgets.CreatePip(name, parentFrame, colorKind, anchorCorner, radius, xOff, yOff)
-    local colors = Minimizer.Constants.PipColors
-        and Minimizer.Constants.PipColors[colorKind]
+    local colors = (Minimizer.Constants and Minimizer.Constants.PipColors and (Minimizer.Constants.PipColors[colorKind] or Minimizer.Constants.PipColors.default))
+        or { on = {0.20, 0.55, 1.00}, off = {0.05, 0.10, 0.25} }
 
     if not parentFrame or not colors then
         return nil

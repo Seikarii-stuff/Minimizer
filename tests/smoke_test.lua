@@ -352,9 +352,24 @@ do
         version = 1,
         focusIndicator = "arrows",
     }
+    MinimizerCharDB = {
+        focusCC = 118000,
+        targetDefensive = 871,
+        targetOffensive = 107574,
+    }
     addonTable.Config.Initialize()
     check(MinimizerDB.enableFocusFace == false and MinimizerDB.enableFocusArrows == true,
         "Config: migracion old focusIndicator=arrows crea los booleans separados")
+    check(MinimizerCharDB.focusPip1 == 118000,
+        "Config: migracion focusCC -> focusPip1")
+    check(MinimizerCharDB.focusCC == nil,
+        "Config: migracion elimina focusCC")
+    check(MinimizerCharDB.targetPip1 == 871,
+        "Config: migracion targetDefensive -> targetPip1")
+    check(MinimizerCharDB.targetDefensive == nil,
+        "Config: migracion elimina targetDefensive")
+    check(MinimizerCharDB.targetOffensive == nil,
+        "Config: migracion elimina targetOffensive")
 end
 
 -- --- TEST GROUP 5B: Config.IsSimplifyEnabled behaviour (centralized logic) ---
@@ -889,9 +904,29 @@ do
 
     local parent = CreateFrame("Frame", "TestHaloParent")
     parent:SetSize(46, 46)
-    local pip = addonTable.Widgets.CreatePip("TestSharedRadiusPip", parent, "defensive", "TOPLEFT", 23)
+    local pip = addonTable.Widgets.CreatePip("TestSharedRadiusPip", parent, "default", "TOPLEFT", 23)
     check(pip ~= nil and pip.MinimizerPipRadius == 23,
         "Pips: se acepta un radio compartido explícito para centrar el pip sobre el halo")
+
+    -- Pips module tests
+    check(type(addonTable.Pips) == "table" and type(addonTable.Pips.SLOTS) == "table",
+        "Pips: modulo Minimizer.Pips y tabla SLOTS existen")
+    check(#addonTable.Pips.SLOTS == 2,
+        "Pips: SLOTS define exactamente el numero de pips configurados (2)")
+
+    local createdPips = addonTable.Pips.CreatePips(parent, "TestModulePip", 23)
+    check(#createdPips == #addonTable.Pips.SLOTS,
+        "Pips: CreatePips crea exactamente un frame por cada slot definido")
+
+    MinimizerCharDB.targetPip1 = 118000
+    Mocks.cooldowns[118000] = { start = Mocks.time, duration = 45 }
+    addonTable.Pips.UpdatePips(createdPips, "target")
+    check(createdPips[1]:IsShown() == true,
+        "Pips: UpdatePips muestra el pip cuando el spell de PIPS_SPELLS está activo")
+
+    addonTable.Pips.HidePips(createdPips)
+    check(createdPips[1]:IsShown() == false and createdPips[2]:IsShown() == false,
+        "Pips: HidePips oculta todos los pips creados")
 
     local portraitCooldown = CreateFrame("Cooldown", "TestPortraitCooldown", nil, "CooldownFrameTemplate")
     addonTable.Widgets.MakeCooldownCircular(portraitCooldown, true)

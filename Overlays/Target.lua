@@ -4,16 +4,13 @@ if not Minimizer then return end
 local Target = {}
 Minimizer.Target = Target
 
--- Reemplazamos la antigua insignia por un halo (anillo) enlazado al cooldown
--- real del spell ofensivo disponible para la clase del jugador.
 local HALO_SIZE = 46
 local PORTRAIT_RADIUS = 18
-local offFrame = Minimizer.Widgets.CreateHalo("MinimizerTargetHalo", nil, HALO_SIZE)
-local defPip = Minimizer.Widgets.CreatePip("MinimizerTargetDefensivePip", offFrame, "defensive", "TOPLEFT", PORTRAIT_RADIUS)
+local haloFrame = Minimizer.Widgets.CreateHalo("MinimizerTargetHalo", nil, HALO_SIZE)
+local targetPips = Minimizer.Pips and Minimizer.Pips.CreatePips(haloFrame, "MinimizerTargetPip", PORTRAIT_RADIUS)
 
--- Solo el número de cuenta atrás del corte de Focus. No dibuja swipe/halo:
--- reutiliza exactamente el mismo spellID y la misma fuente de cooldown que Focus.
-local interruptCountdown = CreateFrame("Cooldown", "MinimizerTargetInterruptCountdown", offFrame, "CooldownFrameTemplate")
+-- Solo el número de cuenta atrás del corte.
+local interruptCountdown = CreateFrame("Cooldown", "MinimizerTargetInterruptCountdown", haloFrame, "CooldownFrameTemplate")
 interruptCountdown:SetAllPoints()
 Minimizer.Widgets.ConfigureCooldownFrame(interruptCountdown, {
     drawEdge = false,
@@ -23,7 +20,7 @@ Minimizer.Widgets.ConfigureCooldownFrame(interruptCountdown, {
     reverse = false,
     hideCountdownNumbers = false,
 })
-interruptCountdown:SetFrameLevel((offFrame:GetFrameLevel() or 0) + 10)
+interruptCountdown:SetFrameLevel((haloFrame:GetFrameLevel() or 0) + 10)
 
 local function UpdateInterruptCountdown()
     local interruptSpellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
@@ -40,39 +37,41 @@ end
 
 function Target:UpdateTargetCDs()
     if not UnitExists("target") or UnitIsDead("target") then 
-        offFrame:Hide()
+        haloFrame:Hide()
         interruptCountdown:Hide()
+        if targetPips and Minimizer.Pips then Minimizer.Pips.HidePips(targetPips) end
         return
     end
     
     local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit("target")
     if not plate then 
-        offFrame:Hide()
+        haloFrame:Hide()
         interruptCountdown:Hide()
+        if targetPips and Minimizer.Pips then Minimizer.Pips.HidePips(targetPips) end
         return
     end
 
-    local offOverride = MinimizerCharDB and MinimizerCharDB.targetOffensive
-    local defOverride = MinimizerCharDB and MinimizerCharDB.targetDefensive
-    local offID = Minimizer.Widgets.GetCDSpellID(Minimizer.Data.OFFENSIVE_CDS, offOverride)
-    local defID = Minimizer.Widgets.GetCDSpellID(Minimizer.Data.DEFENSIVE_CDS, defOverride)
+    local interruptSpellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
+        and Minimizer.Interrupt.GetSpellID()
 
-    Minimizer.Widgets.UpdatePip(defPip, defID)
+    if targetPips and Minimizer.Pips then
+        Minimizer.Pips.UpdatePips(targetPips, "target")
+    end
 
-    if offID then
-        Minimizer.Widgets.UpdateHalo(offFrame, offID)
-        offFrame:ClearAllPoints()
-        offFrame:SetPoint("CENTER", plate, "BOTTOM", 0, 10 + (HALO_SIZE / 2))
+    if interruptSpellID then
+        Minimizer.Widgets.UpdateHalo(haloFrame, interruptSpellID)
+        haloFrame:ClearAllPoints()
+        haloFrame:SetPoint("CENTER", plate, "BOTTOM", 0, 10 + (HALO_SIZE / 2))
         -- Poner el halo justo por encima del portrait (nivel relativo a la placa)
         local plateLevel = (plate:GetFrameLevel() or 0)
-        offFrame:SetFrameLevel(plateLevel + 2)
-        if defPip then
-            defPip:SetFrameLevel((offFrame:GetFrameLevel() or 0) + 5)
+        haloFrame:SetFrameLevel(plateLevel + 2)
+        if targetPips and Minimizer.Pips then
+            Minimizer.Pips.SetFrameLevel(targetPips, (haloFrame:GetFrameLevel() or 0) + 5)
         end
-        interruptCountdown:SetFrameLevel((offFrame:GetFrameLevel() or 0) + 10)
+        interruptCountdown:SetFrameLevel((haloFrame:GetFrameLevel() or 0) + 10)
         UpdateInterruptCountdown()
     else
-        offFrame:Hide()
+        haloFrame:Hide()
         interruptCountdown:Hide()
     end
 end
@@ -81,4 +80,5 @@ end
 Target.DebouncedUpdate = Minimizer.Utils.Throttle(function()
     Target:UpdateTargetCDs()
 end, 0.033)
+
 

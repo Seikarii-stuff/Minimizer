@@ -120,7 +120,7 @@ Minimizer.Data.DEFENSIVE_CDS = {
     },
 }
 
-Minimizer.Data.MASS_CC_SPELLS = {
+Minimizer.Data.PIPS_SPELLS = {
     WARRIOR = { { id = 118000, name = "Dragon Roar" }, { id = 5246, name = "Intimidating Shout" } },
     PALADIN = { { id = 115750, name = "Blinding Light" } },
     HUNTER = { { id = 117405, name = "Binding Shot" }, { id = 213691, name = "Scatter Shot" } },
@@ -135,3 +135,4 @@ Minimizer.Data.MASS_CC_SPELLS = {
     DEMONHUNTER = { { id = 179057, name = "Chaos Nova" }, { id = 207684, name = "Sigil of Misery" } },
     EVOKER = { { id = 358385, name = "Landslide" }, { id = 357210, name = "Deep Breath" } },
 }
+

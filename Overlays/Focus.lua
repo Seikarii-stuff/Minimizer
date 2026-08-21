@@ -21,10 +21,7 @@ local cooldown = CreateFrame("Cooldown", "MinimizerFocusCooldown", frame, "Coold
 cooldown:SetAllPoints()
 Minimizer.Widgets.MakeCooldownCircular(cooldown, true)
 
-local ccPip
-if Minimizer.Widgets and Minimizer.Widgets.CreatePip then
-    ccPip = Minimizer.Widgets.CreatePip("MinimizerFocusCCPip", frame, "cc", "TOPRIGHT", PORTRAIT_RADIUS)
-end
+local focusPips = Minimizer.Pips and Minimizer.Pips.CreatePips(frame, "MinimizerFocusPip", PORTRAIT_RADIUS)
 
 local function UpdateCooldown()
     local interruptSpellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
@@ -44,7 +41,7 @@ function Focus:SetFaceEnabled(enabled)
     MinimizerDB.enableFocusFace = enabled == true
     if MinimizerDB.enableFocusFace ~= true then
         frame:Hide()
-        if ccPip then ccPip:Hide() end
+        if focusPips and Minimizer.Pips then Minimizer.Pips.HidePips(focusPips) end
     end
     if Minimizer.Core then Minimizer.Core.ApplyToAll() end
 end
@@ -76,19 +73,19 @@ end
 function Focus:UpdateFace()
     if MinimizerDB.enableFocusFace ~= true then
         frame:Hide()
-        if ccPip then ccPip:Hide() end
+        if focusPips and Minimizer.Pips then Minimizer.Pips.HidePips(focusPips) end
         return
     end
     if not UnitExists("focus") or UnitIsDead("focus") then
         frame:Hide()
-        if ccPip then ccPip:Hide() end
+        if focusPips and Minimizer.Pips then Minimizer.Pips.HidePips(focusPips) end
         return
     end
 
     local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit("focus")
     if not plate then
         frame:Hide()
-        if ccPip then ccPip:Hide() end
+        if focusPips and Minimizer.Pips then Minimizer.Pips.HidePips(focusPips) end
         return
     end
 
@@ -102,13 +99,9 @@ function Focus:UpdateFace()
     frame:Show()
     UpdateCooldown()
 
-    if ccPip and Minimizer.Widgets and Minimizer.Widgets.GetCDSpellID then
-        local overrideSpell = MinimizerCharDB and MinimizerCharDB.focusCC
-        local ccID = Minimizer.Widgets.GetCDSpellID(Minimizer.Data.MASS_CC_SPELLS, overrideSpell)
-        Minimizer.Widgets.UpdatePip(ccPip, ccID)
-    end
-    if ccPip then
-        ccPip:SetFrameLevel((frame:GetFrameLevel() or 0) + 5)
+    if focusPips and Minimizer.Pips then
+        Minimizer.Pips.UpdatePips(focusPips, "focus")
+        Minimizer.Pips.SetFrameLevel(focusPips, (frame:GetFrameLevel() or 0) + 5)
     end
 end
 

@@ -234,15 +234,18 @@ function Minimizer.Utils.IsSpellKnownByPlayer(spellID)
     return false
 end
 
--- Busca el primer spellID de una lista que el jugador conozca.
--- spellList puede ser un numero suelto o una tabla de numeros.
--- Si ninguno esta "conocido" segun las APIs, devuelve el primero de la lista
+-- Busca el primer (o N-ésimo) spellID de una lista que el jugador conozca.
+-- spellList puede ser un numero suelto o una tabla de numeros/tablas {id=, name=}.
+-- Si ninguno esta "conocido" segun las APIs, devuelve el N-ésimo (o primero) de la lista
 -- como fallback (asumimos que aun no se ha aprendido pero existe).
-function Minimizer.Utils.FindKnownSpell(spellList)
+function Minimizer.Utils.FindKnownSpell(spellList, slotIndex)
     if not spellList then return nil end
+    slotIndex = slotIndex or 1
     if type(spellList) == "number" then
-        spellList = {spellList}
+        return (slotIndex == 1) and spellList or nil
     end
+
+    local knownList = {}
     for _, entry in ipairs(spellList) do
         local spellID = nil
         if type(entry) == "number" then
@@ -251,12 +254,18 @@ function Minimizer.Utils.FindKnownSpell(spellList)
             spellID = entry.id
         end
         if spellID and Minimizer.Utils.IsSpellKnownByPlayer(spellID) then
-            return spellID
+            table.insert(knownList, spellID)
         end
     end
-    -- Fallback: return the first numeric id we can extract from the list
-    local first = spellList[1]
-    if type(first) == "number" then return first end
-    if type(first) == "table" and type(first.id) == "number" then return first.id end
+
+    if #knownList >= slotIndex then
+        return knownList[slotIndex]
+    end
+
+    -- Fallback: return the N-th (or first) numeric id from the list
+    local fallbackEntry = spellList[slotIndex] or spellList[1]
+    if type(fallbackEntry) == "number" then return fallbackEntry end
+    if type(fallbackEntry) == "table" and type(fallbackEntry.id) == "number" then return fallbackEntry.id end
     return nil
 end
+
