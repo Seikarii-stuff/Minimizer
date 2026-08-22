@@ -52,19 +52,27 @@ SlashCmdList["MINIMIZER"] = function(msg)
         return
     end
 
+    local function RequestUpdate()
+        if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
+            Minimizer.Dispatcher.RequestFullUpdate()
+        elseif Minimizer.Core and Minimizer.Core.ApplyToAll then
+            Minimizer.Core.ApplyToAll()
+        end
+    end
+
     local value = tonumber(msg)
     if msg == "on" then
         if not MinimizerDB then MinimizerDB = {} end
         MinimizerDB.simplifyEnabled = true
         print("|cff33ff99Minimizer|r: simplificación habilitada")
-        Minimizer.Core.ApplyToAll()
+        RequestUpdate()
         return
     end
     if msg == "off" then
         if not MinimizerDB then MinimizerDB = {} end
         MinimizerDB.simplifyEnabled = false
         print("|cff33ff99Minimizer|r: simplificación deshabilitada")
-        Minimizer.Core.ApplyToAll()
+        RequestUpdate()
         return
     end
 
@@ -77,5 +85,5 @@ SlashCmdList["MINIMIZER"] = function(msg)
     if not MinimizerDB then MinimizerDB = {} end
     MinimizerDB.simplifyEnabled = (value > 0)
     print("|cff33ff99Minimizer|r: simplificación " .. (value > 0 and "habilitada" or "deshabilitada"))
-    Minimizer.Core.ApplyToAll()
+    RequestUpdate()
 end

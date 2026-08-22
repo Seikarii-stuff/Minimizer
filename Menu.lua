@@ -90,6 +90,12 @@ local function BuildSpellOptions(tableKey)
     return options
 end
 
+local function RequestFullUpdate()
+    if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
+        Minimizer.Dispatcher.RequestFullUpdate()
+    end
+end
+
 local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
     -- Interface 120100 sigue aceptando la API clásica UIDropDownMenuTemplate como la
     -- opción recomendada para menús simples, por compatibilidad y estabilidad con el
@@ -98,13 +104,10 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
     local dropdown = CreateFrame("Frame", name, frame, "UIDropDownMenuTemplate")
     dropdown:SetSize(160, 28)
     dropdown.label = dropdown:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    dropdown.label:SetPoint("BOTTOMLEFT", dropdown, "TOPLEFT", 18, 2)
+    dropdown.label:SetPoint("TOPLEFT", dropdown, "TOPLEFT", 16, 12)
     dropdown.label:SetText(labelText)
 
-    dropdown.dbKey = dbKey
-    dropdown.tableKey = tableKey
-
-    dropdown.initialize = function()
+    UIDropDownMenu_Initialize(dropdown, function(self, level)
         local selectedValue = MinimizerCharDB and MinimizerCharDB[dbKey]
         local info = UIDropDownMenu_CreateInfo()
         info.text = "Automático"
@@ -115,7 +118,7 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
             if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then
                 Minimizer.Widgets.InvalidateCDSpellCache()
             end
-            if Minimizer.Core then Minimizer.Core.ApplyToAll() end
+            RequestFullUpdate()
             Menu.Refresh()
         end
         UIDropDownMenu_AddButton(info)
@@ -132,13 +135,13 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
                     if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then
                         Minimizer.Widgets.InvalidateCDSpellCache()
                     end
-                    if Minimizer.Core then Minimizer.Core.ApplyToAll() end
+                    RequestFullUpdate()
                     Menu.Refresh()
                 end
                 UIDropDownMenu_AddButton(info2)
             end
         end
-    end
+    end)
 
     dropdown.Refresh = function()
         local selectedValue = MinimizerCharDB and MinimizerCharDB[dbKey]
@@ -341,7 +344,7 @@ local function EnsureFrame()
     simplifyToggle:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
     simplifyToggle:SetScript("OnClick", function(self)
         if MinimizerDB then MinimizerDB.simplifyEnabled = self:GetChecked() end
-        if Minimizer.Core then Minimizer.Core.ApplyToAll() end
+        RequestFullUpdate()
     end)
 
     local targetMarkers = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
@@ -353,7 +356,7 @@ local function EnsureFrame()
     end
     targetMarkers:SetScript("OnClick", function(self)
         if MinimizerDB then MinimizerDB.enableTargetMarkers = self:GetChecked() end
-        if Minimizer.Core then Minimizer.Core.ApplyToAll() end
+        RequestFullUpdate()
     end)
 
     local focusMarkers = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
@@ -365,7 +368,7 @@ local function EnsureFrame()
     end
     focusMarkers:SetScript("OnClick", function(self)
         if MinimizerDB then MinimizerDB.enableFocusMarkers = self:GetChecked() end
-        if Minimizer.Core then Minimizer.Core.ApplyToAll() end
+        RequestFullUpdate()
     end)
 
     local faceToggle = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")

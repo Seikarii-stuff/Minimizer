@@ -8,6 +8,12 @@ _G.Mocks = Mocks
 -- WoW globals
 _G.tinsert = table.insert
 _G.tremove = table.remove
+_G.wipe = function(t)
+    if not t then return t end
+    for k in pairs(t) do t[k] = nil end
+    return t
+end
+table.wipe = _G.wipe
 _G.bit = require("bit") -- Requires LuaJIT or lua-bitop
 _G.Enum = {
     PowerType = {
@@ -406,12 +412,15 @@ function _G.UnitGroupRolesAssigned(unit)
     return u.role or "NONE"
 end
 
+Mocks.inGroup = true
+Mocks.inRaid = false
+
 function _G.IsInRaid()
-    return false
+    return Mocks.inRaid == true
 end
 
 function _G.IsInGroup()
-    return false
+    return Mocks.inGroup == true
 end
 
 function _G.UnitIsUnit(unit1, unit2)

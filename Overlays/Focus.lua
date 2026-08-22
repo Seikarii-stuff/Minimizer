@@ -43,12 +43,20 @@ function Focus:SetFaceEnabled(enabled)
         frame:Hide()
         if focusPips and Minimizer.Pips then Minimizer.Pips.HidePips(focusPips) end
     end
-    if Minimizer.Core then Minimizer.Core.ApplyToAll() end
+    if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
+        Minimizer.Dispatcher.RequestFullUpdate()
+    elseif Minimizer.Core then
+        Minimizer.Core.ApplyToAll()
+    end
 end
 
 function Focus:SetArrowsEnabled(enabled)
     MinimizerDB.enableFocusArrows = enabled == true
-    if Minimizer.Core then Minimizer.Core.ApplyToAll() end
+    if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
+        Minimizer.Dispatcher.RequestFullUpdate()
+    elseif Minimizer.Core then
+        Minimizer.Core.ApplyToAll()
+    end
 end
 
 function Focus:SetMode(mode)
@@ -109,4 +117,20 @@ end
 Focus.DebouncedUpdate = Minimizer.Utils.Throttle(function()
     Focus:UpdateFace()
 end, 0.033)
+
+function Focus:OnCooldownTick()
+    Focus.DebouncedUpdate()
+end
+
+function Focus:OnUnitChanged(unit, reason)
+    if reason == "focus" then
+        Focus:UpdateFace()
+    elseif reason == "added" or reason == "removed" then
+        Focus:UpdateFace()
+    end
+end
+
+if Minimizer.Overlays and Minimizer.Overlays.Register then
+    Minimizer.Overlays.Register("Focus", Focus)
+end
 

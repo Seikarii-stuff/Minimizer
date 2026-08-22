@@ -69,6 +69,7 @@ end
 local function IsThreatEnabled()
     return (IsInGroup and IsInGroup()) or (IsInRaid and IsInRaid()) or Minimizer.Threat.IsPlayerTank()
 end
+Minimizer.Threat.IsThreatEnabled = IsThreatEnabled
 
 local function UpdateNilState(unit, result, generation, inCombat)
     local now = GetTime()
@@ -104,7 +105,7 @@ function Minimizer.Threat.GetThreatDetails(unit)
     if Minimizer.Cache and Minimizer.Cache.GetUnitKeyWithGeneration then
         local cached = Minimizer.Cache.GetUnitKeyWithGeneration(unit, cacheKey)
         if cached ~= nil then
-            local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
+            local generation = Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit) or 0
             local combat = Minimizer.Threat.IsInCombatWith(unit, cached)
             return UpdateNilState(unit, cached, generation, combat)
         end
@@ -123,7 +124,7 @@ function Minimizer.Threat.GetThreatDetails(unit)
             end
         end
     end
-    local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
+    local generation = Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit) or 0
     local combat = Minimizer.Threat.IsInCombatWith(unit, result)
     result = UpdateNilState(unit, result, generation, combat)
     if Minimizer.Cache and Minimizer.Cache.SetUnitKeyWithGeneration then Minimizer.Cache.SetUnitKeyWithGeneration(unit, cacheKey, result) end
@@ -185,126 +186,42 @@ function Minimizer.Threat.IsNilSpecial(unit)
     return details and details.nilSpecial == true or false
 end
 
-function Minimizer.Threat.ShouldLetBlizzardPaint(unit)
-    if not IsThreatEnabled() or not Minimizer.Threat.IsPlayerTank() then return false end
+function Minimizer.Threat.GetUnitThreatState(unit)
+    if not Minimizer.Threat.IsThreatEnabled() then return nil end
+    if not unit or not UnitExists(unit) then return nil end
     local details = Minimizer.Threat.GetThreatDetails(unit)
-    if not details or not Minimizer.Threat.IsInCombatWith(unit, details) then return false end
-    if details.nilSpecial then return false end
-    local situation = details.situation
-    return (situation == 0 or situation == nil) and not details.otherTankAggro
+    if not details then return nil end
+    local combat = Minimizer.Threat.IsInCombatWith(unit, details)
+    local generation = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit)) or 0
+    return {
+        generation     = generation,
+        situation      = details.situation,
+        otherTankAggro = details.otherTankAggro == true,
+        combat         = combat == true,
+        nilSpecial     = details.nilSpecial == true,
+    }
 end
 
-function Minimizer.Threat.ShouldUnsimplify(unit)
-    if not IsThreatEnabled() then return false end
-    local details = Minimizer.Threat.GetThreatDetails(unit)
-    if not details then return false end
-
-    if details.situation == nil then
-        return details.nilSince ~= nil and Minimizer.Threat.IsInCombatWith(unit, details)
-    end
-
-    if Minimizer.Threat.IsPlayerTank() then
-        if not Minimizer.Threat.IsInCombatWith(unit, details) then return false end
-        if details.otherTankAggro then return false end
-        return details.situation == 0
-    end
-    return details.situation == 3
-end
-
-local monitorFrame
-local monitorElapsed = 0
-local monitorStep = 1
-local monitorUnits = {}
-local monitorCount = 0
-local monitorState = {}
-local monitorDirty = true
-
-local function IsNameplateToken(unit)
-    return type(unit) == "string" and unit:match("^nameplate%d+$") ~= nil
-end
-
-local function RebuildMonitorUnits()
-    if not monitorDirty then return end
-    monitorDirty = false
-    wipe(monitorUnits)
-    monitorCount = 0
-    if not Minimizer.ActiveNameplates then return end
-    for unit in pairs(Minimizer.ActiveNameplates) do
-        if IsNameplateToken(unit) then
-            monitorCount = monitorCount + 1
-            monitorUnits[monitorCount] = unit
-        end
-    end
-    if monitorStep > monitorCount then monitorStep = 1 end
+function Minimizer.Threat.StatesEqual(s1, s2)
+    if s1 == s2 then return true end
+    if not s1 or not s2 then return false end
+    return s1.generation == s2.generation
+        and s1.situation == s2.situation
+        and s1.otherTankAggro == s2.otherTankAggro
+        and s1.combat == s2.combat
+        and s1.nilSpecial == s2.nilSpecial
 end
 
 function Minimizer.Threat.TrackUnit(unit)
-    if IsNameplateToken(unit) then monitorDirty = true end
+    -- Deprecated, routed via Events/Lifecycle now
 end
 
 function Minimizer.Threat.ForgetUnit(unit)
     if unit then
-        monitorState[unit] = nil
         nilState[unit] = nil
-        monitorDirty = true
     end
-end
-
-local function ProcessMonitoredUnit(unit)
-    if not IsNameplateToken(unit) then return end
-    if not Minimizer.ActiveNameplates or not Minimizer.ActiveNameplates[unit] then
-        monitorState[unit] = nil
-        nilState[unit] = nil
-        monitorDirty = true
-        return
-    end
-    if not UnitExists(unit) then return end
-    local details = Minimizer.Threat.GetThreatDetails(unit)
-    if not details then return end
-    local combat = Minimizer.Threat.IsInCombatWith(unit, details)
-    local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
-    local previous = monitorState[unit]
-    local changed = not previous
-        or previous.generation ~= generation
-        or previous.situation ~= details.situation
-        or previous.otherTankAggro ~= details.otherTankAggro
-        or previous.combat ~= combat
-        or previous.nilSpecial ~= details.nilSpecial
-    if previous then
-        previous.generation     = generation
-        previous.situation      = details.situation
-        previous.otherTankAggro = details.otherTankAggro
-        previous.combat         = combat
-        previous.nilSpecial     = details.nilSpecial
-    else
-        monitorState[unit] = {
-            generation     = generation,
-            situation      = details.situation,
-            otherTankAggro = details.otherTankAggro,
-            combat         = combat,
-            nilSpecial     = details.nilSpecial,
-        }
-    end
-    if changed and Minimizer.Core and Minimizer.Core.ApplyToUnit then Minimizer.Core.ApplyToUnit(unit) end
 end
 
 function Minimizer.Threat.StartMonitor()
-    if monitorFrame or not IsThreatEnabled() then return end
-    RebuildMonitorUnits()
-    monitorFrame = CreateFrame("Frame")
-    monitorFrame:SetScript("OnUpdate", function(_, elapsed)
-        RebuildMonitorUnits()
-        if monitorCount == 0 then
-            monitorElapsed = 0
-            return
-        end
-        monitorElapsed = monitorElapsed + elapsed
-        local interval = 0.25 / monitorCount
-        if monitorElapsed < interval then return end
-        monitorElapsed = monitorElapsed - interval
-        if monitorStep > monitorCount then monitorStep = 1 end
-        local unit = monitorUnits[monitorStep]
-        monitorStep = monitorStep + 1
-        ProcessMonitoredUnit(unit)
-    end)
+    -- Deprecated, handled by Dispatcher
 end

@@ -1008,6 +1008,43 @@ do
         "ApplyToAll: sigue funcionando sin error tras remover una unidad del registro")
 end
 
+-- --- TEST GROUP: Final Architecture Integration & Ownership ---
+do
+    -- 1. Dispatcher owns scheduling and monitor
+    check(type(addonTable.Dispatcher.StartMonitor) == "function",
+        "Architecture: Dispatcher.StartMonitor exists")
+    check(type(addonTable.Dispatcher.TrackUnit) == "function",
+        "Architecture: Dispatcher.TrackUnit exists")
+    check(type(addonTable.Dispatcher.ForgetUnit) == "function",
+        "Architecture: Dispatcher.ForgetUnit exists")
+
+    -- 2. Threat is a data provider delegating scheduling
+    check(type(addonTable.Threat.GetThreatDetails) == "function",
+        "Architecture: Threat exposes GetThreatDetails")
+    check(type(addonTable.Threat.PlayerHasAggro) == "function",
+        "Architecture: Threat exposes PlayerHasAggro")
+
+    -- 3. Decision owns business logic
+    check(type(addonTable.Decision.ShouldSimplifyUnit) == "function",
+        "Architecture: Decision owns ShouldSimplifyUnit")
+    check(type(addonTable.Decision.ShouldUnsimplify) == "function",
+        "Architecture: Decision owns ShouldUnsimplify")
+    check(type(addonTable.Decision.ShouldLetBlizzardPaint) == "function",
+        "Architecture: Decision owns ShouldLetBlizzardPaint")
+
+    -- 4. Absorb is single source for MarkSeen
+    check(type(addonTable.Absorb.MarkSeen) == "function",
+        "Architecture: Absorb owns MarkSeen")
+    check(type(addonTable.Absorb.GetTotalAbsorbs) == "function",
+        "Architecture: Absorb owns GetTotalAbsorbs")
+
+    -- 5. Lifecycle owns generations and active nameplates
+    check(type(addonTable.Lifecycle.GetGeneration) == "function",
+        "Architecture: Lifecycle owns GetGeneration")
+    check(type(addonTable.Lifecycle.IsGenerationStale) == "function",
+        "Architecture: Lifecycle owns IsGenerationStale")
+end
+
 -- --- RESUMEN FINAL ---
 print(string.format("\n=== SMOKE TEST RESULTS: %d/%d passed ===\n", testsRun - testsFailed, testsRun))
 if testsFailed > 0 then

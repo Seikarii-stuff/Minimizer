@@ -50,41 +50,56 @@ Para añadir/corregir spells por clase, editar `data/SpellData.lua` respetando e
 Orden de carga tal como aparece en `Minimizer.toc`:
 
 ```
-Bootstrap.lua       Minimizer (inicialización global, ADDON_LOADED)
-Utils.lua           Minimizer.Utils (helpers puros, guardas de secretos, debounce/throttle, tokens)
-Widgets.lua         Minimizer.Widgets (búsqueda de castbars, halos, pips, cooldowns)
-HitTest.lua         Minimizer.HitTest (sincroniza hit-test con la healthBar real y reintenta si Blizzard aún no permite mutar el click region)
-Config.lua          Minimizer.Config (SavedVariables MinimizerDB, defaults, migraciones)
-Constants.lua       Minimizer.Constants (paletas de color de salud/cast/pips)
-data/SpellData.lua  Minimizer.Data (spellIDs por clase: interrupts, CDs of./def., CC masivo)
-Cache.lua           Minimizer.Cache (cache genérico unit -> {kind -> valor}, invalidado por generación)
-Threat.lua          Minimizer.Threat (aggro/tanque, sincronización de tokens de grupo/raid)
-Absorb.lua          Minimizer.Absorb (detección de absorción vía indicator:IsShown())
-Cast.lua            Minimizer.Cast (lectura SIN cache de casts/canalizaciones, ver §3.5)
-Classification.lua  Minimizer.Classification (boss/miniboss/caster/melee/trivial)
-Decision.lua        Minimizer.Decision (motor ShouldSimplifyUnit)
-Interrupt.lua        Minimizer.Interrupt (spellID de interrupción + cache de "listo" a nivel de pase)
-Core.lua            Minimizer.Core (orquestación, snapshot, ciclo de vida, RegisterModule)
-Markers.lua         Minimizer.Markers (flechas de target/focus)
-HealthBarColor.lua  módulo registrado: coloreo de healthbars nativas
-CastingBar.lua      módulo registrado: coloreo de castbars nativas, visuales de "me está casteando"
-Focus.lua           Minimizer.Focus (retrato de focus, CD de interrupt, pip de CC masivo)
-Target.lua          Minimizer.Target (halo de CD ofensivo + pip de CD defensivo sobre el target)
-Menu.lua            Minimizer.Menu (frame propio, dropdowns/checkboxes; uso interno/dev)
-Events.lua          Minimizer (EventFrame centralizado, tabla de dispatch)
-SlashCommands.lua   Minimizer (/simp)
+Bootstrap.lua             Minimizer (inicialización global, ADDON_LOADED)
+Core/Utils.lua            Minimizer.Utils (helpers puros, guardas de secretos, debounce/throttle, tokens)
+Overlays/Widgets.lua      Minimizer.Widgets (búsqueda de castbars, halos, pips, cooldowns)
+Plater/HitTest.lua        Minimizer.HitTest (sincroniza hit-test con healthBar real, retry scheduler generation-safe)
+Config.lua                Minimizer.Config (SavedVariables MinimizerDB, defaults, migraciones)
+Core/Constants.lua        Minimizer.Constants (paletas de color de salud/cast/pips)
+Data/SpellData.lua        Minimizer.Data (spellIDs por clase: interrupts, CDs of./def., CC masivo)
+Plater/Lifecycle.lua      Minimizer.Lifecycle (generaciones de plates, registro de plates activas, teardown)
+Core/Cache.lua            Minimizer.Cache (cache genérico unit -> {kind -> valor}, atado a Lifecycle.GetGeneration)
+Plater/Threat.lua         Minimizer.Threat (threat data, aggro/tanque, ThreatState desacoplado)
+Plater/Absorb.lua         Minimizer.Absorb (owner único de absorb y persistencia)
+Plater/Cast.lua           Minimizer.Cast (lectura SIN cache de casts/canalizaciones, ver §3.5)
+Plater/Classification.lua Minimizer.Classification (boss/miniboss/caster/melee/trivial)
+Plater/Decision.lua       Minimizer.Decision (motor ShouldSimplifyUnit, ShouldUnsimplify, ShouldLetBlizzardPaint)
+Plater/Interrupt.lua      Minimizer.Interrupt (spellID de interrupción + cache de "listo" a nivel de pase)
+Plater/Snapshot.lua       Minimizer.Snapshot (snapshot pool sin colisiones, Build, ComputeDisplayKind)
+Plater/Core.lua           Minimizer.Core (registro de módulos visuales, UpdateModules, compatibilidad)
+Plater/Dispatcher.lua     Minimizer.Dispatcher (orquestación, cola de reentrancia con coalescing, monitor dinámico)
+Plater/Markers.lua        Minimizer.Markers (flechas de target/focus)
+Plater/HealthBarColor.lua módulo registrado: coloreo de healthbars nativas y overshield
+Plater/CastingBar.lua     módulo registrado: coloreo de castbars nativas, visuales de "me está casteando"
+Overlays/Pips.lua         Minimizer.Pips (gestión compartida de pips para Target y Focus)
+Overlays/Overlays.lua     Minimizer.Overlays (registro y enrutamiento central de overlays: OnCooldownTick, OnUnitChanged)
+Overlays/Focus.lua        Minimizer.Focus (retrato de focus, CD de interrupt, pip de CC masivo)
+Overlays/Target.lua       Minimizer.Target (halo de CD ofensivo + pip de CD defensivo sobre el target)
+Menu.lua                  Minimizer.Menu (frame propio, dropdowns/checkboxes; uso interno/dev)
+Options.lua               Minimizer.Options (panel de opciones de Blizzard Settings)
+Plater/Events.lua         Minimizer (EventFrame centralizado, traducción de eventos)
+SlashCommands.lua         Minimizer (/mini)
 ```
 
-`Core.lua` construye un `snapshot` por unidad **una vez por pase** (`BuildSnapshot`, dentro de `ApplyToUnit`) y lo pasa tanto a `Decision.ShouldSimplifyUnit` como a `Core.UpdateModules` → cada módulo visual registrado. Esto evita que `Decision` y `HealthBarColor` recalculen `Classification.GetEliteType` / `Absorb.HasAbsorb` cada uno por su cuenta.
+### Arquitectura de Ejecución
 
-`Target.lua` y `Focus.lua` usan dos familias visuales intencionalmente distintas: el halo/donut del target y los pips circulares pequeños de cooldown, más el retrato del focus con color de estado listo/CD. No se mezcla "anillo" con "círculo" porque el hueco central del halo es parte del framing visual del retrato del focus en pulls grandes.
+El pipeline de ejecución sigue el flujo unidireccional desacoplado:
 
-`Minimizer.Core.RegisterModule(name, module)` es el único punto de entrada para que un módulo visual se enganche al ciclo de vida de las nameplates. Un módulo registrado puede exponer:
+$$\text{Lifecycle} \longrightarrow \text{Dispatcher} \longrightarrow \text{Snapshot} \longrightarrow \text{Decision} \longrightarrow \text{Rendering/Modules}$$
 
-- `module:UpdateNamePlate(unit, nameplate, snapshot)` — llamado desde `Core.UpdateModules` en cada pase de `ApplyToUnit`. `snapshot` puede ser `nil` si el llamador es un hook de repintado nativo fuera del pase normal (ver §3.3); los módulos deben tener fallback.
-- `module:OnNamePlateRemoved(unit, nameplate)` — llamado desde `Core.ClearNeverSimplify`.
+- **Lifecycle** (`Plater/Lifecycle.lua`): Autoridad única sobre las nameplates activas y los números de generación de tokens (`GetGeneration`, `IncrementGeneration`, `IsGenerationStale`, `ClearNeverSimplify`).
+- **Dispatcher** (`Plater/Dispatcher.lua`): Motor de orquestación de pases (`ApplyToUnit`, `ApplyToAll`). Cuenta con una **cola de reentrancia coalescida** (`_pendingReentrantUnits` con dominancia de `forceUpdate` y límite de seguridad anti-bucles) para evitar recursiones sincrónicas durante hooks nativos, y un **monitor dinámico de Threat** con ciclo de vida activo/inactivo según el rol/grupo del jugador.
+- **Snapshot** (`Plater/Snapshot.lua`): Construye el estado unificado de la unidad para el pase mediante un **pool preasignado circular** (`snapshotPool[1..8]`), garantizando aislamiento total frente a invocaciones anidadas sin generar basura en el recolector de basura (GC).
+- **Decision** (`Plater/Decision.lua`): Reglas de negocio puras (`ShouldSimplifyUnit`, `ShouldUnsimplify`, `ShouldLetBlizzardPaint`).
+- **Overlays** (`Overlays/Overlays.lua`): Registry unificado que distribuye eventos a `Target` y `Focus` vía `OnCooldownTick()` y `OnUnitChanged(unit, reason)`.
+- **Core** (`Plater/Core.lua`): Registro y despacho de módulos visuales (`RegisterModule`, `UpdateModules`), manteniendo aliases hacia los propietarios reales para garantizar compatibilidad con tests y extensiones.
 
-Esto separa la lógica de **decisión** (Core, Threat, Cast, Absorb, Classification, Decision) de la lógica de **presentación** (HealthBarColor, CastingBar, Focus, Target, Markers).
+`Target.lua` y `Focus.lua` usan dos familias visuales intencionalmente distintas: el halo/donut del target y los pips circulares pequeños de cooldown, más el retrato del focus con color de estado listo/CD.
+
+`Minimizer.Core.RegisterModule(name, module)` es el punto de entrada para que un módulo visual se enganche al ciclo de vida de las nameplates. Un módulo registrado expone:
+
+- `module:UpdateNamePlate(unit, nameplate, snapshot)` — llamado desde `Core.UpdateModules` en cada pase de `ApplyToUnit`.
+- `module:OnNamePlateRemoved(unit, nameplate)` — llamado desde `Lifecycle.ClearNeverSimplify`.
 
 ---
 

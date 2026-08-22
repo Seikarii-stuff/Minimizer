@@ -158,7 +158,25 @@ end
 -- Devuelve true si la unidad es un jugador enemigo (PvP). En ese caso los
 -- modulos de color deben dejar las barras de Blizzard sin tocar.
 function Minimizer.Utils.IsPvPUnit(unit)
-    return unit and UnitIsPlayer(unit) and UnitCanAttack("player", unit)
+    return unit and UnitIsPlayer and UnitIsPlayer(unit) and UnitCanAttack and UnitCanAttack("player", unit) or false
+end
+
+-- Devuelve true si la unidad es amistosa hacia el jugador.
+function Minimizer.Utils.IsFriendlyUnit(unit)
+    if not unit then return false end
+    return (UnitCanAttack and not UnitCanAttack("player", unit)) or false
+end
+
+-- Helper común para interceptar repintados nativos y reaplicar último color guardado
+function Minimizer.Utils.HookRepaintGuard(statusBar, hookedFlag, applyingFlag, onRepaint)
+    if not statusBar or statusBar[hookedFlag] then return end
+    statusBar[hookedFlag] = true
+    if hooksecurefunc then
+        hooksecurefunc(statusBar, "SetStatusBarColor", function()
+            if statusBar[applyingFlag] then return end
+            onRepaint()
+        end)
+    end
 end
 
 function Minimizer.Utils.Debounce(fn)

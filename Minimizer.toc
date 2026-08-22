@@ -14,11 +14,14 @@ Plater/HitTest.lua
 Config.lua
 Core/Constants.lua
 Data/SpellData.lua
+Plater/Lifecycle.lua
 Core/Cache.lua
+Plater/Dispatcher.lua
 Plater/Threat.lua
 Plater/Absorb.lua
 Plater/Cast.lua
 Plater/Classification.lua
+Plater/Snapshot.lua
 Plater/Decision.lua
 Plater/Interrupt.lua
 Plater/Core.lua
@@ -26,6 +29,7 @@ Plater/Markers.lua
 Plater/HealthBarColor.lua
 Plater/CastingBar.lua
 Overlays/Pips.lua
+Overlays/Overlays.lua
 Overlays/Focus.lua
 Overlays/Target.lua
 Menu.lua

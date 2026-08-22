@@ -40,19 +40,29 @@ end
 
 local function ScheduleRetry(unit)
     if pendingRetries[unit] then return end
-    pendingRetries[unit] = MAX_RETRY_TICKS
+    local gen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
+        or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit))
+        or 0
+    pendingRetries[unit] = { remaining = MAX_RETRY_TICKS, gen = gen }
 
     local function tick()
-        local remaining = pendingRetries[unit]
-        if not remaining then return end -- cancelado (OnNamePlateRemoved)
+        local retry = pendingRetries[unit]
+        if not retry then return end -- cancelado (OnNamePlateRemoved / CancelRetry)
+
+        if Minimizer.Lifecycle and Minimizer.Lifecycle.IsGenerationStale then
+            if Minimizer.Lifecycle.IsGenerationStale(unit, retry.gen) then
+                pendingRetries[unit] = nil
+                return
+            end
+        end
 
         local applied = Minimizer.HitTest.Sync(unit)
-        if applied or remaining <= 1 then
+        if applied or retry.remaining <= 1 then
             pendingRetries[unit] = nil
             return
         end
 
-        pendingRetries[unit] = remaining - 1
+        retry.remaining = retry.remaining - 1
         C_Timer.After(RETRY_INTERVAL, tick)
     end
 
