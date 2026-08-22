@@ -6,14 +6,8 @@ Minimizer.Snapshot = Minimizer.Snapshot or {}
 local UnitIsUnit = UnitIsUnit
 local UnitCanAttack = UnitCanAttack
 
--- Pre-allocated snapshot pool to prevent caller snapshot corruption if a
--- nested build occurs, while generating zero garbage.
-local POOL_SIZE = 8
+local currentDepth = 0
 local snapshotPool = {}
-for i = 1, POOL_SIZE do
-    snapshotPool[i] = {}
-end
-local poolIndex = 0
 
 local function ResolveDisplayKind(unit, isFocus, isNilSpecial, hasAggro, hasHadAbsorb, eliteType)
     if isFocus then
@@ -32,8 +26,11 @@ end
 Minimizer.Snapshot.ResolveDisplayKind = ResolveDisplayKind
 
 function Minimizer.Snapshot.Build(unit, nameplate)
-    poolIndex = (poolIndex % POOL_SIZE) + 1
-    local s = snapshotPool[poolIndex]
+    currentDepth = currentDepth + 1
+    if not snapshotPool[currentDepth] then
+        snapshotPool[currentDepth] = {}
+    end
+    local s = snapshotPool[currentDepth]
     wipe(s)
 
     s.eliteType = Minimizer.Classification and Minimizer.Classification.GetEliteType and Minimizer.Classification.GetEliteType(unit)
@@ -61,6 +58,7 @@ function Minimizer.Snapshot.Build(unit, nameplate)
     end
 
     s.displayKind = ResolveDisplayKind(unit, UnitIsUnit(unit, "focus"), s.isNilSpecial, s.hasAggro, s.hasHadAbsorb, s.eliteType)
+    currentDepth = currentDepth - 1
     return s
 end
 

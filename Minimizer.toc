@@ -16,15 +16,15 @@ Core/Constants.lua
 Data/SpellData.lua
 Plater/Lifecycle.lua
 Core/Cache.lua
+Plater/Dispatcher.lua
 Plater/Threat.lua
 Plater/Absorb.lua
 Plater/Cast.lua
 Plater/Classification.lua
+Plater/Snapshot.lua
 Plater/Decision.lua
 Plater/Interrupt.lua
-Plater/Snapshot.lua
 Plater/Core.lua
-Plater/Dispatcher.lua
 Plater/Markers.lua
 Plater/HealthBarColor.lua
 Plater/CastingBar.lua

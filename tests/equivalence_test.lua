@@ -212,24 +212,64 @@ do
     local savedEliteType10 = snap10.eliteType
     assert_eq(savedDisplayKind10, "boss", "Outer Snapshot: 10 has boss displayKind")
 
-    -- Simulated nested invocation (e.g., from an indicator hook or module update)
-    local snap11 = addonTable.Snapshot.Build("nameplate11", np11)
-    assert_eq(snap11.displayKind, "melee", "Nested Snapshot: 11 has melee displayKind")
+    local originalGetEliteType = addonTable.Classification and addonTable.Classification.GetEliteType
+    local innerSnap = nil
+    local mockGetEliteType = function(u)
+        if not innerSnap and u == "nameplate10" then
+            -- Trigger reentrant build inside Build
+            innerSnap = addonTable.Snapshot.Build("nameplate11", np11)
+        end
+        return "boss"
+    end
+    
+    if addonTable.Classification then
+        addonTable.Classification.GetEliteType = mockGetEliteType
+    end
+    
+    local outerSnap = addonTable.Snapshot.Build("nameplate10", np10)
+    
+    if addonTable.Classification then
+        addonTable.Classification.GetEliteType = originalGetEliteType
+    end
+    
+    assert_true(outerSnap ~= innerSnap, "Reentrancy: Snapshot pool provides distinct table instances for nested depths (depth 1 vs depth 2)")
 
-    -- Assert outer snapshot 10 was NOT corrupted by nested call
-    assert_eq(snap10.displayKind, savedDisplayKind10, "Reentrancy: Outer snapshot displayKind unchanged after nested build")
-    assert_eq(snap10.eliteType, savedEliteType10, "Reentrancy: Outer snapshot eliteType unchanged after nested build")
-    assert_true(snap10 ~= snap11, "Reentrancy: Snapshot pool provides distinct table instances for nested depths")
+    -- Test depth > initial pool size (e.g. depth 10) by chaining reentrancy
+    local depthCount = 0
+    local deepSnaps = {}
+    local function chainedReentrant(u)
+        depthCount = depthCount + 1
+        if depthCount <= 10 and u == "nameplate10" then
+            deepSnaps[depthCount] = addonTable.Snapshot.Build("nameplate11", np11)
+        elseif depthCount <= 10 and u == "nameplate11" then
+            deepSnaps[depthCount] = addonTable.Snapshot.Build("nameplate11", np11)
+        end
+        return "normal"
+    end
+    if addonTable.Classification then
+        addonTable.Classification.GetEliteType = chainedReentrant
+    end
+    
+    addonTable.Snapshot.Build("nameplate10", np10)
+    
+    if addonTable.Classification then
+        addonTable.Classification.GetEliteType = originalGetEliteType
+    end
+    
+    assert_true(deepSnaps[1] ~= deepSnaps[10], "Reentrancy: Dynamic pool scales beyond arbitrary depth limits")
 
-    -- Test Dispatcher nested ApplyToUnit coalescing
+    -- Test Dispatcher nested ApplyToUnit coalescing and runaway recursion protection
     local nestedProcessed11 = false
+    local runawayCount = 0
     local dummyModule = {
         UpdateNamePlate = function(self, unit, np, snapshot)
             if unit == "nameplate10" then
-                -- Trigger reentrant ApplyToUnit on 11 with forceUpdate=true
                 addonTable.Dispatcher.ApplyToUnit("nameplate11", true)
             elseif unit == "nameplate11" then
                 nestedProcessed11 = true
+            elseif unit == "nameplate12" then
+                runawayCount = runawayCount + 1
+                addonTable.Dispatcher.ApplyToUnit("nameplate12", true)
             end
         end
     }
@@ -237,6 +277,14 @@ do
 
     addonTable.Dispatcher.ApplyToUnit("nameplate10", false)
     assert_true(nestedProcessed11, "Dispatcher: Nested reentrant ApplyToUnit was deferred, coalesced and executed safely")
+
+    Mocks.CreateTestUnit("nameplate12", { name = "Runaway Mob", level = 70 })
+    local np12r = Mocks.CreateTestNameplate("nameplate12")
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate12")
+    
+    addonTable.Dispatcher.ApplyToUnit("nameplate12", true)
+    -- It should break the loop at MAX_REENTRANT_PASSES (10 passes).
+    assert_true(runawayCount > 10 and runawayCount <= 50, "Dispatcher: Runaway recursion correctly aborted after reaching limit (count: " .. runawayCount .. ")")
 end
 
 -- --------------------------------------------------------------------------

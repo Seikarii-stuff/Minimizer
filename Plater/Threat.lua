@@ -105,7 +105,7 @@ function Minimizer.Threat.GetThreatDetails(unit)
     if Minimizer.Cache and Minimizer.Cache.GetUnitKeyWithGeneration then
         local cached = Minimizer.Cache.GetUnitKeyWithGeneration(unit, cacheKey)
         if cached ~= nil then
-            local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
+            local generation = Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit) or 0
             local combat = Minimizer.Threat.IsInCombatWith(unit, cached)
             return UpdateNilState(unit, cached, generation, combat)
         end
@@ -124,7 +124,7 @@ function Minimizer.Threat.GetThreatDetails(unit)
             end
         end
     end
-    local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
+    local generation = Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit) or 0
     local combat = Minimizer.Threat.IsInCombatWith(unit, result)
     result = UpdateNilState(unit, result, generation, combat)
     if Minimizer.Cache and Minimizer.Cache.SetUnitKeyWithGeneration then Minimizer.Cache.SetUnitKeyWithGeneration(unit, cacheKey, result) end
@@ -206,9 +206,7 @@ function Minimizer.Threat.GetUnitThreatState(unit)
     local details = Minimizer.Threat.GetThreatDetails(unit)
     if not details then return nil end
     local combat = Minimizer.Threat.IsInCombatWith(unit, details)
-    local generation = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
-        or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit))
-        or 0
+    local generation = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit)) or 0
     return {
         generation     = generation,
         situation      = details.situation,

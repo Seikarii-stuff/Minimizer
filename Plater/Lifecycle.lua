@@ -93,7 +93,7 @@ end
 
 -- Backward compatibility aliases on Minimizer.Core
 Minimizer.Core = Minimizer.Core or {}
-Minimizer.Core.plateGeneration = plateGeneration
+-- Export for backward compatibility hooks
 Minimizer.Core.GetPlateGeneration = Minimizer.Lifecycle.GetGeneration
 Minimizer.Core.IncrementPlateGeneration = Minimizer.Lifecycle.IncrementGeneration
 Minimizer.Core.ClearNeverSimplify = Minimizer.Lifecycle.ClearNeverSimplify

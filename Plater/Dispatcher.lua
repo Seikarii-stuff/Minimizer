@@ -7,6 +7,10 @@ local C_NamePlateManager = C_NamePlateManager
 
 local _isApplying = false
 local _pendingReentrantUnits = {}
+-- The maximum number of reentrant passes allowed per ApplyToUnit cycle.
+-- This guarantees that the system will eventually yield even if a module 
+-- incorrectly triggers an infinite update loop (e.g., A updates B, B updates A).
+-- Reaching this limit indicates a bug in module event handling.
 local MAX_REENTRANT_PASSES = 10
 
 local function ApplyToUnitInternal(unit, forceUpdate)
@@ -90,6 +94,11 @@ function Minimizer.Dispatcher.ApplyToUnit(unit, forceUpdate)
     end
 
     if pass >= MAX_REENTRANT_PASSES and next(_pendingReentrantUnits) then
+        if Minimizer.Utils and Minimizer.Utils.LogGuardedError then
+            Minimizer.Utils.LogGuardedError("Dispatcher", "Runaway recursion detected: MAX_REENTRANT_PASSES limit reached. Breaking loop to prevent crash.")
+        else
+            print("|cFFFF0000[Minimizer] Runaway recursion in Dispatcher. Breaking loop.|r")
+        end
         wipe(_pendingReentrantUnits)
     end
     _isApplying = false

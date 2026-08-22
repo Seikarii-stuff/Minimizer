@@ -48,7 +48,6 @@ end
 -- ============================================================================
 
 -- Lifecycle aliases
-Minimizer.Core.plateGeneration = (Minimizer.Lifecycle and Minimizer.Lifecycle.plateGeneration) or Minimizer.Core.plateGeneration or {}
 Minimizer.Core.GetPlateGeneration = function(token)
     if Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration then
         return Minimizer.Lifecycle.GetGeneration(token)
