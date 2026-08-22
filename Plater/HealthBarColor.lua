@@ -63,14 +63,6 @@ local function ShouldLetBlizzardPaint(unit, snapshot)
     if Minimizer.Decision and Minimizer.Decision.ShouldLetBlizzardPaint then
         return Minimizer.Decision.ShouldLetBlizzardPaint(unit, snapshot)
     end
-    if not Minimizer.Threat or not Minimizer.Threat.IsPlayerTank then return false end
-    if not Minimizer.Threat.IsPlayerTank() then return false end
-    if Minimizer.Threat.IsNilSpecial and Minimizer.Threat.IsNilSpecial(unit) then
-        return false
-    end
-    if Minimizer.Threat.ShouldLetBlizzardPaint then
-        return Minimizer.Threat.ShouldLetBlizzardPaint(unit)
-    end
     return false
 end
 
@@ -153,7 +145,9 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     if hasHadAbsorb == nil then
         local liveAbsorb = snapshot and snapshot.hasAbsorb
         if liveAbsorb == nil then liveAbsorb = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate) end
-        hasHadAbsorb = Minimizer.Core and Minimizer.Core.MarkAbsorbSeen and Minimizer.Core.MarkAbsorbSeen(unit, nameplate, liveAbsorb)
+        hasHadAbsorb = (Minimizer.Absorb and Minimizer.Absorb.MarkSeen and Minimizer.Absorb.MarkSeen(unit, nameplate, liveAbsorb))
+            or (Minimizer.Core and Minimizer.Core.MarkAbsorbSeen and Minimizer.Core.MarkAbsorbSeen(unit, nameplate, liveAbsorb))
+            or false
     end
 
     if hasHadAbsorb then
@@ -238,7 +232,9 @@ HookIndicator = function(indicator, healthBar)
             local nameplate = Minimizer.Utils.GetNameplateFromHealthBar(healthBar)
             local unit = Minimizer.Utils.GetUnitFromNameplate(nameplate)
             if unit then
-                if Minimizer and Minimizer.Core and Minimizer.Core.ApplyToUnit then
+                if Minimizer and Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
+                    Minimizer.Dispatcher.ApplyToUnit(unit)
+                elseif Minimizer and Minimizer.Core and Minimizer.Core.ApplyToUnit then
                     Minimizer.Core.ApplyToUnit(unit)
                 else
                     HealthBarColor:UpdateNamePlate(unit, nameplate, nil)

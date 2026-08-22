@@ -69,6 +69,7 @@ end
 local function IsThreatEnabled()
     return (IsInGroup and IsInGroup()) or (IsInRaid and IsInRaid()) or Minimizer.Threat.IsPlayerTank()
 end
+Minimizer.Threat.IsThreatEnabled = IsThreatEnabled
 
 local function UpdateNilState(unit, result, generation, inCombat)
     local now = GetTime()
@@ -189,138 +190,33 @@ function Minimizer.Threat.ShouldLetBlizzardPaint(unit)
     if Minimizer.Decision and Minimizer.Decision.ShouldLetBlizzardPaint then
         return Minimizer.Decision.ShouldLetBlizzardPaint(unit)
     end
-    if not IsThreatEnabled() or not Minimizer.Threat.IsPlayerTank() then return false end
-    local details = Minimizer.Threat.GetThreatDetails(unit)
-    if not details or not Minimizer.Threat.IsInCombatWith(unit, details) then return false end
-    if details.nilSpecial then return false end
-    local situation = details.situation
-    return (situation == 0 or situation == nil) and not details.otherTankAggro
+    return false
 end
 
 function Minimizer.Threat.ShouldUnsimplify(unit)
     if Minimizer.Decision and Minimizer.Decision.ShouldUnsimplify then
         return Minimizer.Decision.ShouldUnsimplify(unit)
     end
-    if not IsThreatEnabled() then return false end
-    local details = Minimizer.Threat.GetThreatDetails(unit)
-    if not details then return false end
-
-    if details.situation == nil then
-        return details.nilSince ~= nil and Minimizer.Threat.IsInCombatWith(unit, details)
-    end
-
-    if Minimizer.Threat.IsPlayerTank() then
-        if not Minimizer.Threat.IsInCombatWith(unit, details) then return false end
-        if details.otherTankAggro then return false end
-        return details.situation == 0
-    end
-    return details.situation == 3
-end
-
-local monitorFrame
-local monitorElapsed = 0
-local monitorStep = 1
-local monitorUnits = {}
-local monitorCount = 0
-local monitorState = {}
-local monitorDirty = true
-
-local function IsNameplateToken(unit)
-    return type(unit) == "string" and unit:match("^nameplate%d+$") ~= nil
-end
-
-local function RebuildMonitorUnits()
-    if not monitorDirty then return end
-    monitorDirty = false
-    wipe(monitorUnits)
-    monitorCount = 0
-    local activePlates = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetActiveNameplates and Minimizer.Lifecycle.GetActiveNameplates()) or Minimizer.ActiveNameplates
-    if not activePlates then return end
-    for unit in pairs(activePlates) do
-        if IsNameplateToken(unit) then
-            monitorCount = monitorCount + 1
-            monitorUnits[monitorCount] = unit
-        end
-    end
-    if monitorStep > monitorCount then monitorStep = 1 end
+    return false
 end
 
 function Minimizer.Threat.TrackUnit(unit)
-    if IsNameplateToken(unit) then monitorDirty = true end
+    if Minimizer.Dispatcher and Minimizer.Dispatcher.TrackUnit then
+        Minimizer.Dispatcher.TrackUnit(unit)
+    end
 end
 
 function Minimizer.Threat.ForgetUnit(unit)
     if unit then
-        monitorState[unit] = nil
         nilState[unit] = nil
-        monitorDirty = true
-    end
-end
-
-local function ProcessMonitoredUnit(unit)
-    if not IsNameplateToken(unit) then return end
-    local activePlates = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetActiveNameplates and Minimizer.Lifecycle.GetActiveNameplates()) or Minimizer.ActiveNameplates
-    if not activePlates or not activePlates[unit] then
-        monitorState[unit] = nil
-        nilState[unit] = nil
-        monitorDirty = true
-        return
-    end
-    if not UnitExists(unit) then return end
-    local details = Minimizer.Threat.GetThreatDetails(unit)
-    if not details then return end
-    local combat = Minimizer.Threat.IsInCombatWith(unit, details)
-    local generation = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
-        or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit))
-        or 0
-    local previous = monitorState[unit]
-    local changed = not previous
-        or previous.generation ~= generation
-        or previous.situation ~= details.situation
-        or previous.otherTankAggro ~= details.otherTankAggro
-        or previous.combat ~= combat
-        or previous.nilSpecial ~= details.nilSpecial
-    if previous then
-        previous.generation     = generation
-        previous.situation      = details.situation
-        previous.otherTankAggro = details.otherTankAggro
-        previous.combat         = combat
-        previous.nilSpecial     = details.nilSpecial
-    else
-        monitorState[unit] = {
-            generation     = generation,
-            situation      = details.situation,
-            otherTankAggro = details.otherTankAggro,
-            combat         = combat,
-            nilSpecial     = details.nilSpecial,
-        }
-    end
-    if changed then
-        if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestUpdate then
-            Minimizer.Dispatcher.RequestUpdate(unit)
-        elseif Minimizer.Core and Minimizer.Core.ApplyToUnit then
-            Minimizer.Core.ApplyToUnit(unit)
+        if Minimizer.Dispatcher and Minimizer.Dispatcher.ForgetUnit then
+            Minimizer.Dispatcher.ForgetUnit(unit)
         end
     end
 end
 
 function Minimizer.Threat.StartMonitor()
-    if monitorFrame or not IsThreatEnabled() then return end
-    RebuildMonitorUnits()
-    monitorFrame = CreateFrame("Frame")
-    monitorFrame:SetScript("OnUpdate", function(_, elapsed)
-        RebuildMonitorUnits()
-        if monitorCount == 0 then
-            monitorElapsed = 0
-            return
-        end
-        monitorElapsed = monitorElapsed + elapsed
-        local interval = 0.25 / monitorCount
-        if monitorElapsed < interval then return end
-        monitorElapsed = monitorElapsed - interval
-        if monitorStep > monitorCount then monitorStep = 1 end
-        local unit = monitorUnits[monitorStep]
-        monitorStep = monitorStep + 1
-        ProcessMonitoredUnit(unit)
-    end)
+    if Minimizer.Dispatcher and Minimizer.Dispatcher.StartMonitor then
+        Minimizer.Dispatcher.StartMonitor()
+    end
 end

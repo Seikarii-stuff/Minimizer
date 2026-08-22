@@ -100,6 +100,113 @@ function Minimizer.Dispatcher.StartSafetyNet()
     end)
 end
 
+local monitorFrame
+local monitorElapsed = 0
+local monitorStep = 1
+local monitorUnits = {}
+local monitorCount = 0
+local monitorState = {}
+local monitorDirty = true
+
+local function IsNameplateToken(unit)
+    return type(unit) == "string" and unit:match("^nameplate%d+$") ~= nil
+end
+
+local function RebuildMonitorUnits()
+    if not monitorDirty then return end
+    monitorDirty = false
+    wipe(monitorUnits)
+    monitorCount = 0
+    local activePlates = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetActiveNameplates and Minimizer.Lifecycle.GetActiveNameplates())
+        or Minimizer.ActiveNameplates
+    if not activePlates then return end
+    for unit in pairs(activePlates) do
+        if IsNameplateToken(unit) then
+            monitorCount = monitorCount + 1
+            monitorUnits[monitorCount] = unit
+        end
+    end
+    if monitorStep > monitorCount then monitorStep = 1 end
+end
+
+function Minimizer.Dispatcher.TrackUnit(unit)
+    if IsNameplateToken(unit) then monitorDirty = true end
+end
+
+function Minimizer.Dispatcher.ForgetUnit(unit)
+    if unit then
+        monitorState[unit] = nil
+        monitorDirty = true
+    end
+end
+
+local function ProcessMonitoredUnit(unit)
+    if not IsNameplateToken(unit) then return end
+    local activePlates = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetActiveNameplates and Minimizer.Lifecycle.GetActiveNameplates())
+        or Minimizer.ActiveNameplates
+    if not activePlates or not activePlates[unit] then
+        monitorState[unit] = nil
+        monitorDirty = true
+        return
+    end
+    if not UnitExists(unit) then return end
+    local details = Minimizer.Threat and Minimizer.Threat.GetThreatDetails and Minimizer.Threat.GetThreatDetails(unit)
+    if not details then return end
+    local combat = Minimizer.Threat and Minimizer.Threat.IsInCombatWith and Minimizer.Threat.IsInCombatWith(unit, details)
+    local generation = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
+        or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit))
+        or 0
+    local previous = monitorState[unit]
+    local changed = not previous
+        or previous.generation ~= generation
+        or previous.situation ~= details.situation
+        or previous.otherTankAggro ~= details.otherTankAggro
+        or previous.combat ~= combat
+        or previous.nilSpecial ~= details.nilSpecial
+    if previous then
+        previous.generation     = generation
+        previous.situation      = details.situation
+        previous.otherTankAggro = details.otherTankAggro
+        previous.combat         = combat
+        previous.nilSpecial     = details.nilSpecial
+    else
+        monitorState[unit] = {
+            generation     = generation,
+            situation      = details.situation,
+            otherTankAggro = details.otherTankAggro,
+            combat         = combat,
+            nilSpecial     = details.nilSpecial,
+        }
+    end
+    if changed then
+        Minimizer.Dispatcher.RequestUpdate(unit)
+    end
+end
+
+function Minimizer.Dispatcher.StartMonitor()
+    if monitorFrame then return end
+    if Minimizer.Threat and Minimizer.Threat.IsThreatEnabled and not Minimizer.Threat.IsThreatEnabled() then
+        return
+    end
+    RebuildMonitorUnits()
+    monitorFrame = CreateFrame("Frame")
+    monitorFrame:SetScript("OnUpdate", function(_, elapsed)
+        RebuildMonitorUnits()
+        if monitorCount == 0 then
+            monitorElapsed = 0
+            return
+        end
+        monitorElapsed = monitorElapsed + elapsed
+        local interval = 0.25 / monitorCount
+        if monitorElapsed < interval then return end
+        monitorElapsed = monitorElapsed - interval
+        if monitorStep > monitorCount then monitorStep = 1 end
+        local unit = monitorUnits[monitorStep]
+        monitorStep = monitorStep + 1
+        ProcessMonitoredUnit(unit)
+    end)
+end
+
 -- Backward compatibility aliases on Minimizer.Core
 Minimizer.Core = Minimizer.Core or {}
 Minimizer.Core.ApplyToUnit = Minimizer.Dispatcher.ApplyToUnit

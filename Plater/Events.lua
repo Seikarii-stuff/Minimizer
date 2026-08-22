@@ -256,7 +256,9 @@ EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_STOP")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_UPDATE")
 EventFrame:SetScript("OnEvent", OnEvent)
 
-if Minimizer.Threat and Minimizer.Threat.StartMonitor then
+if Minimizer.Dispatcher and Minimizer.Dispatcher.StartMonitor then
+    Minimizer.Dispatcher.StartMonitor()
+elseif Minimizer.Threat and Minimizer.Threat.StartMonitor then
     Minimizer.Threat.StartMonitor()
 end
 

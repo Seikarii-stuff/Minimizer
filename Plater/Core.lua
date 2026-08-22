@@ -4,64 +4,13 @@ if not Minimizer then return end
 Minimizer.Core = Minimizer.Core or {}
 Minimizer.Modules = Minimizer.Modules or {}
 Minimizer.ModuleList = Minimizer.ModuleList or {}
-Minimizer.ActiveNameplates = Minimizer.ActiveNameplates or (Minimizer.Lifecycle and Minimizer.Lifecycle.ActiveNameplates) or {}
-Minimizer.Core.plateGeneration = (Minimizer.Lifecycle and Minimizer.Lifecycle.plateGeneration) or Minimizer.Core.plateGeneration or {}
 
-local C_NamePlateManager = C_NamePlateManager
-local UnitIsUnit = UnitIsUnit
-local UnitCanAttack = UnitCanAttack
 local type = type
 local pcall = pcall
 local GetTime = GetTime
 
-function Minimizer.Core.GetPlateGeneration(token)
-    if Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration then
-        return Minimizer.Lifecycle.GetGeneration(token)
-    end
-    if not token then return 0 end
-    return Minimizer.Core.plateGeneration[token] or 0
-end
-
-function Minimizer.Core.MarkAbsorbSeen(unit, nameplate, hasAbsorbNow)
-    if not nameplate then return hasAbsorbNow == true end
-    local isStale
-    if Minimizer.Lifecycle and Minimizer.Lifecycle.IsGenerationStale then
-        isStale = Minimizer.Lifecycle.IsGenerationStale(unit, nameplate.MinimizerAbsorbPersistentGen)
-    else
-        local currentGen = Minimizer.Core.GetPlateGeneration(unit)
-        isStale = nameplate.MinimizerAbsorbPersistentGen ~= currentGen
-    end
-    if isStale then
-        local currentGen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
-            or Minimizer.Core.GetPlateGeneration(unit)
-        nameplate.MinimizerAbsorbPersistentGen = currentGen
-        nameplate.MinimizerHasHadAbsorb = nil
-    end
-    if hasAbsorbNow then nameplate.MinimizerHasHadAbsorb = true end
-    return nameplate.MinimizerHasHadAbsorb == true
-end
-
-local SAFETY_NET_INTERVAL = 2.0
-local _safetyNetStarted = false
-function Minimizer.Core.StartSafetyNet()
-    if _safetyNetStarted then return end
-    _safetyNetStarted = true
-    C_Timer.NewTicker(SAFETY_NET_INTERVAL, function() Minimizer.Core.ApplyToAll(false) end)
-end
-
-function Minimizer.Core.IncrementPlateGeneration(token)
-    if Minimizer.Lifecycle and Minimizer.Lifecycle.IncrementGeneration then
-        return Minimizer.Lifecycle.IncrementGeneration(token)
-    end
-    if not token then return end
-    local g = Minimizer.Core.plateGeneration
-    g[token] = (g[token] or 0) + 1
-    return g[token]
-end
-
 local _module_error_throttle = {}
 local _MODULE_ERROR_THROTTLE_SECONDS = 10
-local scratchSnapshot = {}
 
 function Minimizer.Core.RegisterModule(name, module)
     if type(name) ~= "string" or type(module) ~= "table" then return end
@@ -89,46 +38,74 @@ function Minimizer.Core.UpdateModules(unit, nameplate, snapshot)
     end
 end
 
-local function BuildSnapshot(unit, nameplate)
+-- ============================================================================
+-- Backward Compatibility Aliases
+-- All implementations have dedicated ownership in their respective components:
+-- Lifecycle (generations, active nameplates, teardown)
+-- Dispatcher (ApplyToUnit, ApplyToAll, RequestApplyToAll, SafetyNet)
+-- Snapshot (BuildSnapshot, ComputeDisplayKind)
+-- Absorb (MarkAbsorbSeen)
+-- ============================================================================
+
+-- Lifecycle aliases
+Minimizer.Core.plateGeneration = (Minimizer.Lifecycle and Minimizer.Lifecycle.plateGeneration) or Minimizer.Core.plateGeneration or {}
+Minimizer.Core.GetPlateGeneration = function(token)
+    if Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration then
+        return Minimizer.Lifecycle.GetGeneration(token)
+    end
+    return 0
+end
+Minimizer.Core.IncrementPlateGeneration = function(token)
+    if Minimizer.Lifecycle and Minimizer.Lifecycle.IncrementGeneration then
+        return Minimizer.Lifecycle.IncrementGeneration(token)
+    end
+end
+Minimizer.Core.ClearNeverSimplify = function(unit)
+    if Minimizer.Lifecycle and Minimizer.Lifecycle.ClearNeverSimplify then
+        return Minimizer.Lifecycle.ClearNeverSimplify(unit)
+    end
+end
+
+-- Absorb aliases
+Minimizer.Core.MarkAbsorbSeen = function(unit, nameplate, hasAbsorbNow)
+    if Minimizer.Absorb and Minimizer.Absorb.MarkSeen then
+        return Minimizer.Absorb.MarkSeen(unit, nameplate, hasAbsorbNow)
+    end
+    return hasAbsorbNow == true
+end
+
+-- Snapshot aliases
+Minimizer.Core.BuildSnapshot = function(unit, nameplate)
     if Minimizer.Snapshot and Minimizer.Snapshot.Build then
         return Minimizer.Snapshot.Build(unit, nameplate)
     end
-    return scratchSnapshot
+    return nil
 end
-
-function Minimizer.Core.ComputeDisplayKind(unit, nameplate)
+Minimizer.Core.ComputeDisplayKind = function(unit, nameplate)
     if Minimizer.Snapshot and Minimizer.Snapshot.ComputeDisplayKind then
         return Minimizer.Snapshot.ComputeDisplayKind(unit, nameplate)
     end
     return nil
 end
 
-function Minimizer.Core.ApplyToUnit(unit, forceUpdate)
+-- Dispatcher aliases
+Minimizer.Core.ApplyToUnit = function(unit, forceUpdate)
     if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
         return Minimizer.Dispatcher.ApplyToUnit(unit, forceUpdate)
     end
 end
-
-function Minimizer.Core.ApplyToAll(forceUpdate)
+Minimizer.Core.ApplyToAll = function(forceUpdate)
     if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToAll then
         return Minimizer.Dispatcher.ApplyToAll(forceUpdate)
     end
 end
-
 Minimizer.Core.RequestApplyToAll = function(...)
     if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestApplyToAll then
         return Minimizer.Dispatcher.RequestApplyToAll(...)
     end
 end
-
-function Minimizer.Core.StartSafetyNet()
+Minimizer.Core.StartSafetyNet = function()
     if Minimizer.Dispatcher and Minimizer.Dispatcher.StartSafetyNet then
         return Minimizer.Dispatcher.StartSafetyNet()
-    end
-end
-
-function Minimizer.Core.ClearNeverSimplify(unit)
-    if Minimizer.Lifecycle and Minimizer.Lifecycle.ClearNeverSimplify then
-        return Minimizer.Lifecycle.ClearNeverSimplify(unit)
     end
 end
