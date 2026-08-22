@@ -1,0 +1,208 @@
+Aggregated Benchmark Runs: 6
+
+
+=== Minimizer Benchmark Results (run 1) ===
+Date       : 2026-08-22 03:26:15
+Iterations : 1000 frames
+Nameplates : 50 units
+Total Time : 0.2010 s
+Total ApplyToUnit calls : 3250
+Basura generada (GC)    : 3012.06 KB total / 0.9268 KB por ApplyToUnit
+Avg ApplyToUnit  : 0.053538 ms
+P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 1.000 ms
+Worst frame (calls)   : 28
+
+--- Module Breakdown (sorted by total cost) ---
+Module                 Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+HealthBarColor         0.0340       0.009855       3450       16.92%
+CastingBar             0.0320       0.009275       3450       15.92%
+Markers                0.0140       0.004058       3450        6.97%
+
+--- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---
+Funcion                Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+HasAbsorb              0.0150       0.004348       3450        7.46%
+PlayerHasAggro         0.0110       0.003188       3450        5.47%
+GetEliteType           0.0100       0.002899       3450        4.98%
+ShouldSimplifyUnit     0.0060       0.003432       1748        2.99%
+
+--- Throttle check: Target/Focus repaints bajo rafaga de eventos ---
+Eventos SPELL_UPDATE_COOLDOWN simulados : 100 (en ~1s simulado)
+Target:UpdateTargetCDs() llamadas reales: 25
+Focus:UpdateFace() llamadas reales       : 25
+(Si estos numeros son cercanos a 100, el debounce actual NO esta limitando el repintado real y hace falta un throttle explicito, p.ej. limitar a max 1 repintado cada 0.1s con C_Timer)
+
+========================================================================
+
+=== Minimizer Benchmark Results (run 2) ===
+Date       : 2026-08-22 03:26:15
+Iterations : 1000 frames
+Nameplates : 50 units
+Total Time : 0.2050 s
+Total ApplyToUnit calls : 3376
+Basura generada (GC)    : 3099.66 KB total / 0.9181 KB por ApplyToUnit
+Avg ApplyToUnit  : 0.053614 ms
+P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 2.000 ms
+Worst frame (calls)   : 30
+
+--- Module Breakdown (sorted by total cost) ---
+Module                 Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+HealthBarColor         0.0480       0.013238       3626       23.41%
+CastingBar             0.0380       0.010480       3626       18.54%
+Markers                0.0090       0.002482       3626        4.39%
+
+--- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---
+Funcion                Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+GetEliteType           0.0100       0.002758       3626        4.88%
+HasAbsorb              0.0090       0.002482       3626        4.39%
+PlayerHasAggro         0.0060       0.001655       3626        2.93%
+ShouldSimplifyUnit     0.0040       0.002963       1350        1.95%
+
+--- Throttle check: Target/Focus repaints bajo rafaga de eventos ---
+Eventos SPELL_UPDATE_COOLDOWN simulados : 100 (en ~1s simulado)
+Target:UpdateTargetCDs() llamadas reales: 25
+Focus:UpdateFace() llamadas reales       : 25
+(Si estos numeros son cercanos a 100, el debounce actual NO esta limitando el repintado real y hace falta un throttle explicito, p.ej. limitar a max 1 repintado cada 0.1s con C_Timer)
+
+========================================================================
+
+=== Minimizer Benchmark Results (run 3) ===
+Date       : 2026-08-22 03:26:15
+Iterations : 1000 frames
+Nameplates : 50 units
+Total Time : 0.2080 s
+Total ApplyToUnit calls : 3391
+Basura generada (GC)    : 3119.12 KB total / 0.9198 KB por ApplyToUnit
+Avg ApplyToUnit  : 0.051902 ms
+P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 1.000 ms
+Worst frame (calls)   : 30
+
+--- Module Breakdown (sorted by total cost) ---
+Module                 Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+HealthBarColor         0.0380       0.010437       3641       18.27%
+CastingBar             0.0380       0.010437       3641       18.27%
+Markers                0.0110       0.003021       3641        5.29%
+
+--- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---
+Funcion                Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+PlayerHasAggro         0.0110       0.003021       3641        5.29%
+HasAbsorb              0.0080       0.002197       3641        3.85%
+ShouldSimplifyUnit     0.0070       0.004895       1430        3.37%
+GetEliteType           0.0050       0.001373       3641        2.40%
+
+--- Throttle check: Target/Focus repaints bajo rafaga de eventos ---
+Eventos SPELL_UPDATE_COOLDOWN simulados : 100 (en ~1s simulado)
+Target:UpdateTargetCDs() llamadas reales: 25
+Focus:UpdateFace() llamadas reales       : 25
+(Si estos numeros son cercanos a 100, el debounce actual NO esta limitando el repintado real y hace falta un throttle explicito, p.ej. limitar a max 1 repintado cada 0.1s con C_Timer)
+
+========================================================================
+
+=== Minimizer Benchmark Results (run 4) ===
+Date       : 2026-08-22 03:26:15
+Iterations : 1000 frames
+Nameplates : 50 units
+Total Time : 0.1960 s
+Total ApplyToUnit calls : 3202
+Basura generada (GC)    : 2956.60 KB total / 0.9234 KB por ApplyToUnit
+Avg ApplyToUnit  : 0.053404 ms
+P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 1.000 ms
+Worst frame (calls)   : 30
+
+--- Module Breakdown (sorted by total cost) ---
+Module                 Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+HealthBarColor         0.0400       0.011587       3452       20.41%
+CastingBar             0.0320       0.009270       3452       16.33%
+Markers                0.0110       0.003187       3452        5.61%
+
+--- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---
+Funcion                Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+ShouldSimplifyUnit     0.0090       0.006907       1303        4.59%
+HasAbsorb              0.0090       0.002607       3452        4.59%
+PlayerHasAggro         0.0050       0.001448       3452        2.55%
+GetEliteType           0.0040       0.001159       3452        2.04%
+
+--- Throttle check: Target/Focus repaints bajo rafaga de eventos ---
+Eventos SPELL_UPDATE_COOLDOWN simulados : 100 (en ~1s simulado)
+Target:UpdateTargetCDs() llamadas reales: 25
+Focus:UpdateFace() llamadas reales       : 25
+(Si estos numeros son cercanos a 100, el debounce actual NO esta limitando el repintado real y hace falta un throttle explicito, p.ej. limitar a max 1 repintado cada 0.1s con C_Timer)
+
+========================================================================
+
+=== Minimizer Benchmark Results (run 5) ===
+Date       : 2026-08-22 03:26:15
+Iterations : 1000 frames
+Nameplates : 50 units
+Total Time : 0.1980 s
+Total ApplyToUnit calls : 3246
+Basura generada (GC)    : 2993.63 KB total / 0.9223 KB por ApplyToUnit
+Avg ApplyToUnit  : 0.052988 ms
+P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 1.000 ms
+Worst frame (calls)   : 30
+
+--- Module Breakdown (sorted by total cost) ---
+Module                 Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+HealthBarColor         0.0380       0.010870       3496       19.19%
+CastingBar             0.0340       0.009725       3496       17.17%
+Markers                0.0160       0.004577       3496        8.08%
+
+--- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---
+Funcion                Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+HasAbsorb              0.0100       0.002860       3496        5.05%
+PlayerHasAggro         0.0060       0.001716       3496        3.03%
+GetEliteType           0.0040       0.001144       3496        2.02%
+ShouldSimplifyUnit     0.0030       0.002266       1324        1.52%
+
+--- Throttle check: Target/Focus repaints bajo rafaga de eventos ---
+Eventos SPELL_UPDATE_COOLDOWN simulados : 100 (en ~1s simulado)
+Target:UpdateTargetCDs() llamadas reales: 25
+Focus:UpdateFace() llamadas reales       : 25
+(Si estos numeros son cercanos a 100, el debounce actual NO esta limitando el repintado real y hace falta un throttle explicito, p.ej. limitar a max 1 repintado cada 0.1s con C_Timer)
+
+========================================================================
+
+=== Minimizer Benchmark Results (run 6) ===
+Date       : 2026-08-22 03:26:16
+Iterations : 1000 frames
+Nameplates : 50 units
+Total Time : 0.2080 s
+Total ApplyToUnit calls : 3400
+Basura generada (GC)    : 3122.07 KB total / 0.9183 KB por ApplyToUnit
+Avg ApplyToUnit  : 0.052059 ms
+P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 1.000 ms
+Worst frame (calls)   : 29
+
+--- Module Breakdown (sorted by total cost) ---
+Module                 Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+HealthBarColor         0.0410       0.011233       3650       19.71%
+CastingBar             0.0290       0.007945       3650       13.94%
+Markers                0.0130       0.003562       3650        6.25%
+
+--- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---
+Funcion                Total (s)    Avg/call (ms)  Calls      Share
+------------------------------------------------------------------------
+HasAbsorb              0.0160       0.004384       3650        7.69%
+PlayerHasAggro         0.0120       0.003288       3650        5.77%
+GetEliteType           0.0020       0.000548       3650        0.96%
+ShouldSimplifyUnit     0.0020       0.001444       1385        0.96%
+
+--- Throttle check: Target/Focus repaints bajo rafaga de eventos ---
+Eventos SPELL_UPDATE_COOLDOWN simulados : 100 (en ~1s simulado)
+Target:UpdateTargetCDs() llamadas reales: 25
+Focus:UpdateFace() llamadas reales       : 25
+(Si estos numeros son cercanos a 100, el debounce actual NO esta limitando el repintado real y hace falta un throttle explicito, p.ej. limitar a max 1 repintado cada 0.1s con C_Timer)
+
+========================================================================
+
+AGGREGATE SUMMARY (median across runs): p90 = 0.0000 ms, avgApplyToUnit = 0.053196 ms, GC = 0.9210 KB/call

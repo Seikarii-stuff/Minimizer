@@ -81,4 +81,8 @@ Target.DebouncedUpdate = Minimizer.Utils.Throttle(function()
     Target:UpdateTargetCDs()
 end, 0.033)
 
+if Minimizer.Overlays and Minimizer.Overlays.Register then
+    Minimizer.Overlays.Register("Target", Target)
+end
+
 

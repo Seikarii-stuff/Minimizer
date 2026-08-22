@@ -82,18 +82,31 @@ function CastingBar:EnsureVisuals(castBar)
         targetPulse = pulse,
     }
 
-    if hooksecurefunc and not castBar.MinimizerColorHooked then
-        castBar.MinimizerColorHooked = true
-        hooksecurefunc(castBar, "SetStatusBarColor", function()
-            local bar = castBar
-            if bar.MinimizerApplyingColor then return end
-            local lastColor = bar.MinimizerLastCastColor
-            if lastColor then
-                Minimizer.Utils.GuardedCall(bar, "MinimizerApplyingColor", function()
-                    bar:SetStatusBarColor(lastColor[1], lastColor[2], lastColor[3], lastColor[4])
+    if not castBar.MinimizerColorHooked then
+        if Minimizer.Utils and Minimizer.Utils.HookRepaintGuard then
+            Minimizer.Utils.HookRepaintGuard(castBar, "MinimizerColorHooked", "MinimizerApplyingColor", function()
+                local lastColor = castBar.MinimizerLastCastColor
+                if lastColor then
+                    Minimizer.Utils.GuardedCall(castBar, "MinimizerApplyingColor", function()
+                        castBar:SetStatusBarColor(lastColor[1], lastColor[2], lastColor[3], lastColor[4])
+                    end)
+                end
+            end)
+        else
+            castBar.MinimizerColorHooked = true
+            if hooksecurefunc then
+                hooksecurefunc(castBar, "SetStatusBarColor", function()
+                    local bar = castBar
+                    if bar.MinimizerApplyingColor then return end
+                    local lastColor = bar.MinimizerLastCastColor
+                    if lastColor then
+                        Minimizer.Utils.GuardedCall(bar, "MinimizerApplyingColor", function()
+                            bar:SetStatusBarColor(lastColor[1], lastColor[2], lastColor[3], lastColor[4])
+                        end)
+                    end
                 end)
             end
-        end)
+        end
     end
     return castBar.MinimizerCastVisuals
 end
@@ -137,7 +150,10 @@ function CastingBar:UpdateNamePlate(unit, nameplate, snapshot)
     -- Blizzard las gestiona nativamente mejor que nosotros. Filtrar también
     -- unidades amistosas (no solo PvP) para evitar tocar castbars nativas.
     local isFriendly = snapshot and snapshot.isFriendly
-    if isFriendly == nil then isFriendly = UnitCanAttack and not UnitCanAttack("player", unit) end
+    if isFriendly == nil then
+        isFriendly = (Minimizer.Utils and Minimizer.Utils.IsFriendlyUnit and Minimizer.Utils.IsFriendlyUnit(unit))
+            or (UnitCanAttack and not UnitCanAttack("player", unit))
+    end
     if isFriendly then return end
     local castBar = self:GetCastBar(nameplate)
     if not castBar or type(castBar.SetStatusBarColor) ~= "function" then return end

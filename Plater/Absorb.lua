@@ -13,3 +13,15 @@ function Minimizer.Absorb.HasAbsorb(unit, nameplate)
     local indicator = healthBar and (healthBar.totalAbsorbOverlay or healthBar.totalAbsorb)
     return indicator and indicator.IsShown and indicator:IsShown() == true or false
 end
+
+local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
+
+function Minimizer.Absorb.GetTotalAbsorbs(unit)
+    if not unit or not UnitExists(unit) then return 0 end
+    if not UnitGetTotalAbsorbs then return 0 end
+    local absorbs = UnitGetTotalAbsorbs(unit)
+    if Minimizer.Utils and Minimizer.Utils.IsSecretValue and Minimizer.Utils.IsSecretValue(absorbs) then
+        return absorbs
+    end
+    return absorbs or 0
+end

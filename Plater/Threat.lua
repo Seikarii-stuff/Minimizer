@@ -186,6 +186,9 @@ function Minimizer.Threat.IsNilSpecial(unit)
 end
 
 function Minimizer.Threat.ShouldLetBlizzardPaint(unit)
+    if Minimizer.Decision and Minimizer.Decision.ShouldLetBlizzardPaint then
+        return Minimizer.Decision.ShouldLetBlizzardPaint(unit)
+    end
     if not IsThreatEnabled() or not Minimizer.Threat.IsPlayerTank() then return false end
     local details = Minimizer.Threat.GetThreatDetails(unit)
     if not details or not Minimizer.Threat.IsInCombatWith(unit, details) then return false end
@@ -195,6 +198,9 @@ function Minimizer.Threat.ShouldLetBlizzardPaint(unit)
 end
 
 function Minimizer.Threat.ShouldUnsimplify(unit)
+    if Minimizer.Decision and Minimizer.Decision.ShouldUnsimplify then
+        return Minimizer.Decision.ShouldUnsimplify(unit)
+    end
     if not IsThreatEnabled() then return false end
     local details = Minimizer.Threat.GetThreatDetails(unit)
     if not details then return false end
@@ -228,8 +234,9 @@ local function RebuildMonitorUnits()
     monitorDirty = false
     wipe(monitorUnits)
     monitorCount = 0
-    if not Minimizer.ActiveNameplates then return end
-    for unit in pairs(Minimizer.ActiveNameplates) do
+    local activePlates = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetActiveNameplates and Minimizer.Lifecycle.GetActiveNameplates()) or Minimizer.ActiveNameplates
+    if not activePlates then return end
+    for unit in pairs(activePlates) do
         if IsNameplateToken(unit) then
             monitorCount = monitorCount + 1
             monitorUnits[monitorCount] = unit
@@ -252,7 +259,8 @@ end
 
 local function ProcessMonitoredUnit(unit)
     if not IsNameplateToken(unit) then return end
-    if not Minimizer.ActiveNameplates or not Minimizer.ActiveNameplates[unit] then
+    local activePlates = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetActiveNameplates and Minimizer.Lifecycle.GetActiveNameplates()) or Minimizer.ActiveNameplates
+    if not activePlates or not activePlates[unit] then
         monitorState[unit] = nil
         nilState[unit] = nil
         monitorDirty = true
@@ -262,7 +270,9 @@ local function ProcessMonitoredUnit(unit)
     local details = Minimizer.Threat.GetThreatDetails(unit)
     if not details then return end
     local combat = Minimizer.Threat.IsInCombatWith(unit, details)
-    local generation = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
+    local generation = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
+        or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit))
+        or 0
     local previous = monitorState[unit]
     local changed = not previous
         or previous.generation ~= generation
@@ -285,7 +295,13 @@ local function ProcessMonitoredUnit(unit)
             nilSpecial     = details.nilSpecial,
         }
     end
-    if changed and Minimizer.Core and Minimizer.Core.ApplyToUnit then Minimizer.Core.ApplyToUnit(unit) end
+    if changed then
+        if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestUpdate then
+            Minimizer.Dispatcher.RequestUpdate(unit)
+        elseif Minimizer.Core and Minimizer.Core.ApplyToUnit then
+            Minimizer.Core.ApplyToUnit(unit)
+        end
+    end
 end
 
 function Minimizer.Threat.StartMonitor()

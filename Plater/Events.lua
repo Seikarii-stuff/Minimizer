@@ -5,7 +5,9 @@ local EventFrame = CreateFrame("Frame", "MinimizerEventFrame")
 local lastInterruptReady
 
 local function UpdateNameplates()
-    if Minimizer.Core.RequestApplyToAll then
+    if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestApplyToAll then
+        Minimizer.Dispatcher.RequestApplyToAll()
+    elseif Minimizer.Core and Minimizer.Core.RequestApplyToAll then
         Minimizer.Core.RequestApplyToAll()
     end
 end
@@ -62,26 +64,14 @@ handlers["PLAYER_FOCUS_CHANGED"] = function(self, event)
     end
 end
 
-handlers["NAME_PLATE_UNIT_ADDED"] = function(self, event, unit)
-    if unit and unit:match("^nameplate%d+$") then
-        if Minimizer.Core.IncrementPlateGeneration then
-            Minimizer.Core.IncrementPlateGeneration(unit)
-        end
-        if Minimizer.Threat and Minimizer.Threat.ForgetUnit then
-            Minimizer.Threat.ForgetUnit(unit)
-            Minimizer.Threat.TrackUnit(unit)
-        end
-        if Minimizer.Threat and Minimizer.Threat.Invalidate then
-            Minimizer.Threat.Invalidate(unit)
-        end
-        Minimizer.Core.ApplyToUnit(unit)
-        UpdateNameplates()
-    end
-end
 
 local function HandleUnitStateChange(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then
-        Minimizer.Core.ApplyToUnit(unit)
+        if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
+            Minimizer.Dispatcher.ApplyToUnit(unit)
+        elseif Minimizer.Core.ApplyToUnit then
+            Minimizer.Core.ApplyToUnit(unit)
+        end
     end
 end
 handlers["UNIT_DISPLAYPOWER"] = HandleUnitStateChange
@@ -89,7 +79,11 @@ handlers["UNIT_CLASSIFICATION_CHANGED"] = HandleUnitStateChange
 handlers["UNIT_LEVEL"] = HandleUnitStateChange
 handlers["UNIT_ABSORB_AMOUNT_CHANGED"] = function(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then
-        Minimizer.Core.ApplyToUnit(unit)
+        if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
+            Minimizer.Dispatcher.ApplyToUnit(unit)
+        elseif Minimizer.Core.ApplyToUnit then
+            Minimizer.Core.ApplyToUnit(unit)
+        end
     end
 end
 
@@ -100,7 +94,11 @@ local function HandleThreatEvent(self, event, unit)
         elseif Minimizer.Cache and Minimizer.Cache.InvalidateUnit then
             Minimizer.Cache.InvalidateUnit(unit, "threat")
         end
-        Minimizer.Core.ApplyToUnit(unit)
+        if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
+            Minimizer.Dispatcher.ApplyToUnit(unit)
+        elseif Minimizer.Core.ApplyToUnit then
+            Minimizer.Core.ApplyToUnit(unit)
+        end
     else
         InvalidateAllThreat()
         UpdateNameplates()
@@ -139,7 +137,11 @@ local function HandleCastEvent(self, event, unit)
     if Minimizer.Cast and Minimizer.Cast.InvalidateState then
         Minimizer.Cast.InvalidateState(unit)
     end
-    Minimizer.Core.ApplyToUnit(unit)
+    if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
+        Minimizer.Dispatcher.ApplyToUnit(unit)
+    elseif Minimizer.Core.ApplyToUnit then
+        Minimizer.Core.ApplyToUnit(unit)
+    end
 end
 for _, evt in ipairs({
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED",
@@ -169,16 +171,34 @@ handlers["SPELL_UPDATE_COOLDOWN"] = function(self, event)
     end
 end
 
-local originalNamePlateAdded = handlers["NAME_PLATE_UNIT_ADDED"]
 handlers["NAME_PLATE_UNIT_ADDED"] = function(self, event, unit)
-    originalNamePlateAdded(self, event, unit)
-    if Minimizer.Target and Minimizer.Target.UpdateTargetCDs then
-        if not unit or UnitIsUnit(unit, "target") then
-            Minimizer.Target:UpdateTargetCDs()
+    if unit and unit:match("^nameplate%d+$") then
+        if Minimizer.Lifecycle and Minimizer.Lifecycle.IncrementGeneration then
+            Minimizer.Lifecycle.IncrementGeneration(unit)
+        elseif Minimizer.Core.IncrementPlateGeneration then
+            Minimizer.Core.IncrementPlateGeneration(unit)
         end
-    end
-    if Minimizer.Focus and Minimizer.Focus.UpdateFace then
-        Minimizer.Focus.UpdateFace()
+        if Minimizer.Threat and Minimizer.Threat.ForgetUnit then
+            Minimizer.Threat.ForgetUnit(unit)
+            Minimizer.Threat.TrackUnit(unit)
+        end
+        if Minimizer.Threat and Minimizer.Threat.Invalidate then
+            Minimizer.Threat.Invalidate(unit)
+        end
+        if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
+            Minimizer.Dispatcher.ApplyToUnit(unit)
+        elseif Minimizer.Core.ApplyToUnit then
+            Minimizer.Core.ApplyToUnit(unit)
+        end
+        UpdateNameplates()
+        if Minimizer.Target and Minimizer.Target.UpdateTargetCDs then
+            if not unit or UnitIsUnit(unit, "target") then
+                Minimizer.Target:UpdateTargetCDs()
+            end
+        end
+        if Minimizer.Focus and Minimizer.Focus.UpdateFace then
+            Minimizer.Focus.UpdateFace()
+        end
     end
 end
 
@@ -243,7 +263,11 @@ end
 if NamePlateDriverFrame then
     hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit)
         if not unit or not unit:match("^nameplate%d+$") then return end
-        Minimizer.Core.ClearNeverSimplify(unit)
+        if Minimizer.Lifecycle and Minimizer.Lifecycle.ClearNeverSimplify then
+            Minimizer.Lifecycle.ClearNeverSimplify(unit)
+        elseif Minimizer.Core and Minimizer.Core.ClearNeverSimplify then
+            Minimizer.Core.ClearNeverSimplify(unit)
+        end
     end)
 end
 
@@ -254,7 +278,11 @@ if CompactUnitFrame_UpdateHealthColor then
         end
         local unit = unitFrame and unitFrame.unit
         if unit and unit:match("^nameplate%d+$") then
-            Minimizer.Core.ApplyToUnit(unit)
+            if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
+                Minimizer.Dispatcher.ApplyToUnit(unit)
+            elseif Minimizer.Core and Minimizer.Core.ApplyToUnit then
+                Minimizer.Core.ApplyToUnit(unit)
+            end
         end
     end)
 end
