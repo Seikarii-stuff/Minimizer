@@ -200,6 +200,34 @@ function Minimizer.Threat.ShouldUnsimplify(unit)
     return false
 end
 
+function Minimizer.Threat.GetUnitThreatState(unit)
+    if not Minimizer.Threat.IsThreatEnabled() then return nil end
+    if not unit or not UnitExists(unit) then return nil end
+    local details = Minimizer.Threat.GetThreatDetails(unit)
+    if not details then return nil end
+    local combat = Minimizer.Threat.IsInCombatWith(unit, details)
+    local generation = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
+        or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit))
+        or 0
+    return {
+        generation     = generation,
+        situation      = details.situation,
+        otherTankAggro = details.otherTankAggro == true,
+        combat         = combat == true,
+        nilSpecial     = details.nilSpecial == true,
+    }
+end
+
+function Minimizer.Threat.StatesEqual(s1, s2)
+    if s1 == s2 then return true end
+    if not s1 or not s2 then return false end
+    return s1.generation == s2.generation
+        and s1.situation == s2.situation
+        and s1.otherTankAggro == s2.otherTankAggro
+        and s1.combat == s2.combat
+        and s1.nilSpecial == s2.nilSpecial
+end
+
 function Minimizer.Threat.TrackUnit(unit)
     if Minimizer.Dispatcher and Minimizer.Dispatcher.TrackUnit then
         Minimizer.Dispatcher.TrackUnit(unit)
@@ -216,7 +244,9 @@ function Minimizer.Threat.ForgetUnit(unit)
 end
 
 function Minimizer.Threat.StartMonitor()
-    if Minimizer.Dispatcher and Minimizer.Dispatcher.StartMonitor then
+    if Minimizer.Dispatcher and Minimizer.Dispatcher.UpdateMonitorState then
+        Minimizer.Dispatcher.UpdateMonitorState()
+    elseif Minimizer.Dispatcher and Minimizer.Dispatcher.StartMonitor then
         Minimizer.Dispatcher.StartMonitor()
     end
 end

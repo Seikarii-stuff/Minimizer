@@ -41,6 +41,9 @@ local function HandleFullRefreshEvent(self, event)
             Minimizer.Threat.InvalidatePlayerTankCache()
         end
         InvalidateAllThreat()
+        if Minimizer.Dispatcher and Minimizer.Dispatcher.UpdateMonitorState then
+            Minimizer.Dispatcher.UpdateMonitorState()
+        end
     end
     UpdateNameplates()
 end
@@ -52,14 +55,18 @@ handlers["PLAYER_REGEN_ENABLED"] = HandleFullRefreshEvent
 
 handlers["PLAYER_TARGET_CHANGED"] = function(self, event)
     HandleFullRefreshEvent(self, event)
-    if Minimizer.Target and Minimizer.Target.UpdateTargetCDs then
+    if Minimizer.Overlays and Minimizer.Overlays.OnUnitChanged then
+        Minimizer.Overlays.OnUnitChanged("target", "target")
+    elseif Minimizer.Target and Minimizer.Target.UpdateTargetCDs then
         Minimizer.Target:UpdateTargetCDs()
     end
 end
 
 handlers["PLAYER_FOCUS_CHANGED"] = function(self, event)
     HandleFullRefreshEvent(self, event)
-    if Minimizer.Focus and Minimizer.Focus.UpdateFace then
+    if Minimizer.Overlays and Minimizer.Overlays.OnUnitChanged then
+        Minimizer.Overlays.OnUnitChanged("focus", "focus")
+    elseif Minimizer.Focus and Minimizer.Focus.UpdateFace then
         Minimizer.Focus.UpdateFace()
     end
 end
@@ -116,6 +123,9 @@ local function HandleRosterOrSpecChange(self, event)
         Minimizer.Threat.RefreshPlayerTankCache()
     end
     InvalidateAllThreat()
+    if Minimizer.Dispatcher and Minimizer.Dispatcher.UpdateMonitorState then
+        Minimizer.Dispatcher.UpdateMonitorState()
+    end
     if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then
         Minimizer.Widgets.InvalidateCDSpellCache()
     end
@@ -163,11 +173,15 @@ handlers["SPELL_UPDATE_COOLDOWN"] = function(self, event)
         lastInterruptReady = ready
         UpdateNameplates()
     end
-    if Minimizer.Target and Minimizer.Target.DebouncedUpdate then
-        Minimizer.Target.DebouncedUpdate()
-    end
-    if Minimizer.Focus and Minimizer.Focus.DebouncedUpdate then
-        Minimizer.Focus.DebouncedUpdate()
+    if Minimizer.Overlays and Minimizer.Overlays.OnCooldownTick then
+        Minimizer.Overlays.OnCooldownTick()
+    else
+        if Minimizer.Target and Minimizer.Target.DebouncedUpdate then
+            Minimizer.Target.DebouncedUpdate()
+        end
+        if Minimizer.Focus and Minimizer.Focus.DebouncedUpdate then
+            Minimizer.Focus.DebouncedUpdate()
+        end
     end
 end
 
@@ -191,13 +205,17 @@ handlers["NAME_PLATE_UNIT_ADDED"] = function(self, event, unit)
             Minimizer.Core.ApplyToUnit(unit)
         end
         UpdateNameplates()
-        if Minimizer.Target and Minimizer.Target.UpdateTargetCDs then
-            if not unit or UnitIsUnit(unit, "target") then
-                Minimizer.Target:UpdateTargetCDs()
+        if Minimizer.Overlays and Minimizer.Overlays.OnUnitChanged then
+            Minimizer.Overlays.OnUnitChanged(unit, "added")
+        else
+            if Minimizer.Target and Minimizer.Target.UpdateTargetCDs then
+                if not unit or UnitIsUnit(unit, "target") then
+                    Minimizer.Target:UpdateTargetCDs()
+                end
             end
-        end
-        if Minimizer.Focus and Minimizer.Focus.UpdateFace then
-            Minimizer.Focus.UpdateFace()
+            if Minimizer.Focus and Minimizer.Focus.UpdateFace then
+                Minimizer.Focus.UpdateFace()
+            end
         end
     end
 end
@@ -206,13 +224,17 @@ handlers["NAME_PLATE_UNIT_REMOVED"] = function(self, event, unit)
     if Minimizer.Threat and Minimizer.Threat.ForgetUnit then
         Minimizer.Threat.ForgetUnit(unit)
     end
-    if Minimizer.Target and Minimizer.Target.UpdateTargetCDs then
-        if not unit or UnitIsUnit(unit, "target") then
-            Minimizer.Target:UpdateTargetCDs()
+    if Minimizer.Overlays and Minimizer.Overlays.OnUnitChanged then
+        Minimizer.Overlays.OnUnitChanged(unit, "removed")
+    else
+        if Minimizer.Target and Minimizer.Target.UpdateTargetCDs then
+            if not unit or UnitIsUnit(unit, "target") then
+                Minimizer.Target:UpdateTargetCDs()
+            end
         end
-    end
-    if Minimizer.Focus and Minimizer.Focus.UpdateFace then
-        Minimizer.Focus.UpdateFace()
+        if Minimizer.Focus and Minimizer.Focus.UpdateFace then
+            Minimizer.Focus.UpdateFace()
+        end
     end
 end
 

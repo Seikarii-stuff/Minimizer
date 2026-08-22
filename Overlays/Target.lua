@@ -81,6 +81,20 @@ Target.DebouncedUpdate = Minimizer.Utils.Throttle(function()
     Target:UpdateTargetCDs()
 end, 0.033)
 
+function Target:OnCooldownTick()
+    Target.DebouncedUpdate()
+end
+
+function Target:OnUnitChanged(unit, reason)
+    if reason == "target" then
+        Target:UpdateTargetCDs()
+    elseif reason == "added" or reason == "removed" then
+        if not unit or (UnitExists and UnitExists("target") and UnitIsUnit and UnitIsUnit(unit, "target")) then
+            Target:UpdateTargetCDs()
+        end
+    end
+end
+
 if Minimizer.Overlays and Minimizer.Overlays.Register then
     Minimizer.Overlays.Register("Target", Target)
 end

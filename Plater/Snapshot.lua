@@ -6,10 +6,14 @@ Minimizer.Snapshot = Minimizer.Snapshot or {}
 local UnitIsUnit = UnitIsUnit
 local UnitCanAttack = UnitCanAttack
 
--- Scratch snapshot table reused across calls for memory efficiency.
--- RESTRICTION: Valid ONLY during the current synchronous pass.
--- Do not retain or store references across asynchronous ticks or passes.
-local scratchSnapshot = {}
+-- Pre-allocated snapshot pool to prevent caller snapshot corruption if a
+-- nested build occurs, while generating zero garbage.
+local POOL_SIZE = 8
+local snapshotPool = {}
+for i = 1, POOL_SIZE do
+    snapshotPool[i] = {}
+end
+local poolIndex = 0
 
 local function ResolveDisplayKind(unit, isFocus, isNilSpecial, hasAggro, hasHadAbsorb, eliteType)
     if isFocus then
@@ -28,7 +32,10 @@ end
 Minimizer.Snapshot.ResolveDisplayKind = ResolveDisplayKind
 
 function Minimizer.Snapshot.Build(unit, nameplate)
-    local s = scratchSnapshot
+    poolIndex = (poolIndex % POOL_SIZE) + 1
+    local s = snapshotPool[poolIndex]
+    wipe(s)
+
     s.eliteType = Minimizer.Classification and Minimizer.Classification.GetEliteType and Minimizer.Classification.GetEliteType(unit)
     s.hasAbsorb = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
     s.hasHadAbsorb = (Minimizer.Absorb and Minimizer.Absorb.MarkSeen and Minimizer.Absorb.MarkSeen(unit, nameplate, s.hasAbsorb))

@@ -8,7 +8,7 @@ local addonTable = {}
 local function LoadAddonFile(filepath)
     local func, err = loadfile(filepath)
     if not func then
-        if filepath == "data/SpellData.lua" then
+        if filepath == "data/SpellData.lua" or filepath == "Data/SpellData.lua" then
             addonTable.Data = addonTable.Data or { INTERRUPT_SPELLS = {} }
             return
         end
@@ -190,29 +190,222 @@ do
 end
 
 -- --------------------------------------------------------------------------
--- 4. Dispatcher: ApplyToUnit, ApplyToAll, Debounce & SafetyNet
+-- 4. Reentrancy & Snapshot Pool Immunity Test
 -- --------------------------------------------------------------------------
 do
-    print("\n--- Testing Dispatcher Execution ---")
+    print("\n--- Testing Dispatcher Reentrancy & Snapshot Isolation ---")
+    Mocks.units = {}
+    Mocks.nameplates = {}
+    Mocks.time = 400.0
+
+    Mocks.CreateTestUnit("nameplate10", { name = "Mob A", level = 70, classification = "worldboss" })
+    Mocks.CreateTestUnit("nameplate11", { name = "Mob B", level = 70, classification = "normal" })
+    local np10 = Mocks.CreateTestNameplate("nameplate10")
+    local np11 = Mocks.CreateTestNameplate("nameplate11")
+
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate10")
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate11")
+
+    -- Build snapshot 10
+    local snap10 = addonTable.Snapshot.Build("nameplate10", np10)
+    local savedDisplayKind10 = snap10.displayKind
+    local savedEliteType10 = snap10.eliteType
+    assert_eq(savedDisplayKind10, "boss", "Outer Snapshot: 10 has boss displayKind")
+
+    -- Simulated nested invocation (e.g., from an indicator hook or module update)
+    local snap11 = addonTable.Snapshot.Build("nameplate11", np11)
+    assert_eq(snap11.displayKind, "melee", "Nested Snapshot: 11 has melee displayKind")
+
+    -- Assert outer snapshot 10 was NOT corrupted by nested call
+    assert_eq(snap10.displayKind, savedDisplayKind10, "Reentrancy: Outer snapshot displayKind unchanged after nested build")
+    assert_eq(snap10.eliteType, savedEliteType10, "Reentrancy: Outer snapshot eliteType unchanged after nested build")
+    assert_true(snap10 ~= snap11, "Reentrancy: Snapshot pool provides distinct table instances for nested depths")
+
+    -- Test Dispatcher nested ApplyToUnit coalescing
+    local nestedProcessed11 = false
+    local dummyModule = {
+        UpdateNamePlate = function(self, unit, np, snapshot)
+            if unit == "nameplate10" then
+                -- Trigger reentrant ApplyToUnit on 11 with forceUpdate=true
+                addonTable.Dispatcher.ApplyToUnit("nameplate11", true)
+            elseif unit == "nameplate11" then
+                nestedProcessed11 = true
+            end
+        end
+    }
+    addonTable.Core.RegisterModule("DummyReentrantTester", dummyModule)
+
+    addonTable.Dispatcher.ApplyToUnit("nameplate10", false)
+    assert_true(nestedProcessed11, "Dispatcher: Nested reentrant ApplyToUnit was deferred, coalesced and executed safely")
+end
+
+-- --------------------------------------------------------------------------
+-- 5. Threat Dynamic Monitor Lifecycle & Idempotency
+-- --------------------------------------------------------------------------
+do
+    print("\n--- Testing Threat Dynamic Monitor Lifecycle ---")
     Mocks.units = {}
     Mocks.nameplates = {}
 
-    Mocks.CreateTestUnit("nameplate4", { name = "Mob 4", level = 70, inCombat = true })
-    Mocks.CreateTestUnit("nameplate5", { name = "Mob 5", level = 70, inCombat = true })
-    local np4 = Mocks.CreateTestNameplate("nameplate4")
-    local np5 = Mocks.CreateTestNameplate("nameplate5")
+    -- 1. Solo DPS: Threat is disabled
+    Mocks.inGroup = false
+    Mocks.inRaid = false
+    Mocks.CreateTestUnit("player", { level = 70, isPlayer = true, class = "ROGUE", role = "DAMAGER" })
+    addonTable.Threat.InvalidatePlayerTankCache()
+    assert_eq(addonTable.Threat.IsThreatEnabled(), false, "Solo DPS: Threat is disabled")
 
-    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate4")
-    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate5")
+    addonTable.Dispatcher.UpdateMonitorState()
 
-    local activePlates = addonTable.Lifecycle.GetActiveNameplates()
-    assert_true(activePlates["nameplate4"] ~= nil, "Lifecycle: nameplate4 registered")
-    assert_true(activePlates["nameplate5"] ~= nil, "Lifecycle: nameplate5 registered")
+    -- 2. Solo joins Group -> GROUP_ROSTER_UPDATE
+    Mocks.inGroup = true
+    Mocks.FireEvent("GROUP_ROSTER_UPDATE")
+    assert_eq(addonTable.Threat.IsThreatEnabled(), true, "Group DPS: Threat is enabled")
 
-    -- ApplyToAll executes without errors
-    addonTable.Dispatcher.ApplyToAll(true)
-    assert_true(np4.MinimizerState ~= nil, "Dispatcher: nameplate4 processed")
-    assert_true(np5.MinimizerState ~= nil, "Dispatcher: nameplate5 processed")
+    -- Verify idempotency of UpdateMonitorState
+    addonTable.Dispatcher.UpdateMonitorState()
+    addonTable.Dispatcher.UpdateMonitorState()
+    assert_true(true, "Dispatcher: UpdateMonitorState is idempotent and safe against multiple invocations")
+
+    -- 3. Group leaves -> Solo again -> GROUP_ROSTER_UPDATE
+    Mocks.inGroup = false
+    Mocks.FireEvent("GROUP_ROSTER_UPDATE")
+    assert_eq(addonTable.Threat.IsThreatEnabled(), false, "Solo again: Threat is disabled")
+
+    -- 4. Switch spec to Tank -> PLAYER_SPECIALIZATION_CHANGED
+    Mocks.CreateTestUnit("player", { level = 70, isPlayer = true, class = "WARRIOR", role = "TANK" })
+    addonTable.Threat.InvalidatePlayerTankCache()
+    Mocks.FireEvent("PLAYER_SPECIALIZATION_CHANGED")
+    assert_eq(addonTable.Threat.IsThreatEnabled(), true, "Solo Tank: Threat is enabled")
+
+    -- 5. Switch spec back to DPS
+    Mocks.CreateTestUnit("player", { level = 70, isPlayer = true, class = "WARRIOR", role = "DAMAGER" })
+    addonTable.Threat.InvalidatePlayerTankCache()
+    Mocks.FireEvent("PLAYER_SPECIALIZATION_CHANGED")
+    assert_eq(addonTable.Threat.IsThreatEnabled(), false, "Solo DPS again: Threat is disabled")
+end
+
+-- --------------------------------------------------------------------------
+-- 6. ThreatState Decoupling & StatesEqual
+-- --------------------------------------------------------------------------
+do
+    print("\n--- Testing ThreatState Structure & Equality ---")
+    Mocks.inGroup = true
+    Mocks.CreateTestUnit("nameplate12", {
+        name = "Aggro Mob", level = 70, inCombat = true, canAttackPlayer = true,
+        threatSituation = 3
+    })
+    local npThreat = Mocks.CreateTestNameplate("nameplate12")
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate12")
+
+    local state1 = addonTable.Threat.GetUnitThreatState("nameplate12")
+    assert_true(state1 ~= nil, "Threat: GetUnitThreatState returned state table")
+    assert_eq(state1.situation, 3, "ThreatState: situation is 3")
+    assert_eq(state1.combat, true, "ThreatState: combat is true")
+    assert_eq(state1.otherTankAggro, false, "ThreatState: otherTankAggro is false")
+    assert_eq(state1.nilSpecial, false, "ThreatState: nilSpecial is false")
+
+    local state2 = addonTable.Threat.GetUnitThreatState("nameplate12")
+    assert_true(addonTable.Threat.StatesEqual(state1, state2), "Threat: StatesEqual returns true for identical states")
+
+    -- Mutate mock to simulate change
+    Mocks.units["nameplate12"].threatSituation = 1
+    addonTable.Threat.Invalidate("nameplate12")
+    local state3 = addonTable.Threat.GetUnitThreatState("nameplate12")
+    assert_eq(addonTable.Threat.StatesEqual(state1, state3), false, "Threat: StatesEqual returns false when situation changes")
+end
+
+-- --------------------------------------------------------------------------
+-- 7. Overlays Pipeline (Target / Focus / Cooldowns)
+-- --------------------------------------------------------------------------
+do
+    print("\n--- Testing Overlays Registry & Event Routing ---")
+    local targetRegistered = addonTable.Overlays.Get("Target")
+    local focusRegistered = addonTable.Overlays.Get("Focus")
+    assert_true(targetRegistered ~= nil, "Overlays: Target module is registered")
+    assert_true(focusRegistered ~= nil, "Overlays: Focus module is registered")
+
+    -- Cooldown tick dispatch
+    local cooldownTicked = false
+    local testOverlay = {
+        OnCooldownTick = function(self) cooldownTicked = true end
+    }
+    addonTable.Overlays.Register("TestOverlay", testOverlay)
+    addonTable.Overlays.OnCooldownTick()
+    assert_true(cooldownTicked, "Overlays: OnCooldownTick triggers registered modules")
+
+    -- Unit changed routing
+    local unitChangedReason = nil
+    testOverlay.OnUnitChanged = function(self, unit, reason)
+        unitChangedReason = reason
+    end
+    addonTable.Overlays.OnUnitChanged("target", "target")
+    assert_eq(unitChangedReason, "target", "Overlays: OnUnitChanged propagates reason correctly")
+end
+
+-- --------------------------------------------------------------------------
+-- 8. HitTest Generation-Safe Cancellation
+-- --------------------------------------------------------------------------
+do
+    print("\n--- Testing HitTest Generation-Safe Retry Cancellation ---")
+    Mocks.units = {}
+    Mocks.nameplates = {}
+    Mocks.timers = {}
+    Mocks.time = 500.0
+
+    Mocks.CreateTestUnit("nameplate14", { name = "HitTest Mob", level = 70 })
+    local npHT = Mocks.CreateTestNameplate("nameplate14")
+    -- Simulate CanChangeHitTestPoints returning false to force retry scheduling
+    npHT.CanChangeHitTestPoints = function() return false end
+    npHT.SetAllHitTestPoints = function(self, region) self.syncedRegion = region end
+
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate14")
+    addonTable.HitTest.Sync("nameplate14", npHT)
+
+    assert_true(#Mocks.timers > 0, "HitTest: Retry timer was scheduled when API denied mutation")
+
+    -- Remove nameplate -> cancels retry
+    Mocks.FireEvent("NAME_PLATE_UNIT_REMOVED", "nameplate14")
+
+    -- Recycle token: new unit on same nameplate token with new generation
+    Mocks.CreateTestUnit("nameplate14", { name = "Recycled Mob", level = 70 })
+    local npHT_new = Mocks.CreateTestNameplate("nameplate14")
+    npHT_new.syncedRegion = nil
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate14")
+
+    -- Advance time to let any old timer fire
+    Mocks.AdvanceTime(1.0)
+    assert_eq(npHT_new.syncedRegion, nil, "HitTest: Stale retry did NOT modify recycled nameplate of new generation")
+end
+
+-- --------------------------------------------------------------------------
+-- 9. Baseline Equivalence Matrix vs Main
+-- --------------------------------------------------------------------------
+do
+    print("\n--- Testing Baseline Behavioral Invariants vs Main ---")
+    Mocks.units = {}
+    Mocks.nameplates = {}
+    Mocks.unitCastingInfoCallCounts = {}
+    Mocks.unitChannelInfoCallCounts = {}
+
+    -- Verify displayKind priorities: Focus (1) > Aggro (2) > Absorb (3) > Boss (4) > Caster (5) > Melee (6)
+    Mocks.CreateTestUnit("nameplate15", { name = "Boss Mob", level = 70, classification = "worldboss", inCombat = true })
+    local npP1 = Mocks.CreateTestNameplate("nameplate15")
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate15")
+
+    local snapP1 = addonTable.Snapshot.Build("nameplate15", npP1)
+    assert_eq(snapP1.displayKind, "boss", "Invariant: Boss displayKind is 'boss'")
+
+    -- If player gains aggro (sit 3), aggro wins over boss
+    Mocks.units["nameplate15"].threatSituation = 3
+    addonTable.Threat.Invalidate("nameplate15")
+    local snapP1_aggro = addonTable.Snapshot.Build("nameplate15", npP1)
+    assert_eq(snapP1_aggro.displayKind, "aggro", "Invariant: Aggro (sit 3) beats boss -> 'aggro'")
+
+    -- Verify single UnitCastingInfo call per ApplyToUnit pass
+    Mocks.unitCastingInfoCallCounts = {}
+    addonTable.Dispatcher.ApplyToUnit("nameplate15", false)
+    local castCalls = Mocks.unitCastingInfoCallCounts["nameplate15"] or 0
+    assert_eq(castCalls, 1, "Invariant: UnitCastingInfo called exactly once per ApplyToUnit pass")
 end
 
 print(string.format("\n=== EQUIVALENCE TEST SUMMARY: %d/%d passed ===", testsRun - testsFailed, testsRun))

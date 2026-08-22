@@ -118,6 +118,18 @@ Focus.DebouncedUpdate = Minimizer.Utils.Throttle(function()
     Focus:UpdateFace()
 end, 0.033)
 
+function Focus:OnCooldownTick()
+    Focus.DebouncedUpdate()
+end
+
+function Focus:OnUnitChanged(unit, reason)
+    if reason == "focus" then
+        Focus:UpdateFace()
+    elseif reason == "added" or reason == "removed" then
+        Focus:UpdateFace()
+    end
+end
+
 if Minimizer.Overlays and Minimizer.Overlays.Register then
     Minimizer.Overlays.Register("Focus", Focus)
 end

@@ -5,7 +5,11 @@ Minimizer.Dispatcher = Minimizer.Dispatcher or {}
 
 local C_NamePlateManager = C_NamePlateManager
 
-function Minimizer.Dispatcher.ApplyToUnit(unit, forceUpdate)
+local _isApplying = false
+local _pendingReentrantUnits = {}
+local MAX_REENTRANT_PASSES = 10
+
+local function ApplyToUnitInternal(unit, forceUpdate)
     if not unit then return end
     local nameplate = Minimizer.Utils and Minimizer.Utils.GetNamePlateForUnit and Minimizer.Utils.GetNamePlateForUnit(unit)
     if not nameplate then return end
@@ -65,6 +69,32 @@ function Minimizer.Dispatcher.ApplyToUnit(unit, forceUpdate)
     end
 end
 
+function Minimizer.Dispatcher.ApplyToUnit(unit, forceUpdate)
+    if not unit then return end
+    if _isApplying then
+        _pendingReentrantUnits[unit] = (forceUpdate == true) or (_pendingReentrantUnits[unit] == true) or false
+        return
+    end
+
+    _isApplying = true
+    ApplyToUnitInternal(unit, forceUpdate)
+
+    local pass = 0
+    while next(_pendingReentrantUnits) and pass < MAX_REENTRANT_PASSES do
+        pass = pass + 1
+        local currentBatch = _pendingReentrantUnits
+        _pendingReentrantUnits = {}
+        for queuedUnit, queuedForce in pairs(currentBatch) do
+            ApplyToUnitInternal(queuedUnit, queuedForce)
+        end
+    end
+
+    if pass >= MAX_REENTRANT_PASSES and next(_pendingReentrantUnits) then
+        wipe(_pendingReentrantUnits)
+    end
+    _isApplying = false
+end
+
 function Minimizer.Dispatcher.ApplyToAll(forceUpdate)
     if Minimizer.Interrupt and Minimizer.Interrupt.RefreshReadyCache then
         Minimizer.Interrupt.RefreshReadyCache()
@@ -101,6 +131,7 @@ function Minimizer.Dispatcher.StartSafetyNet()
 end
 
 local monitorFrame
+local monitorRunning = false
 local monitorElapsed = 0
 local monitorStep = 1
 local monitorUnits = {}
@@ -150,61 +181,57 @@ local function ProcessMonitoredUnit(unit)
         return
     end
     if not UnitExists(unit) then return end
-    local details = Minimizer.Threat and Minimizer.Threat.GetThreatDetails and Minimizer.Threat.GetThreatDetails(unit)
-    if not details then return end
-    local combat = Minimizer.Threat and Minimizer.Threat.IsInCombatWith and Minimizer.Threat.IsInCombatWith(unit, details)
-    local generation = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
-        or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit))
-        or 0
-    local previous = monitorState[unit]
-    local changed = not previous
-        or previous.generation ~= generation
-        or previous.situation ~= details.situation
-        or previous.otherTankAggro ~= details.otherTankAggro
-        or previous.combat ~= combat
-        or previous.nilSpecial ~= details.nilSpecial
-    if previous then
-        previous.generation     = generation
-        previous.situation      = details.situation
-        previous.otherTankAggro = details.otherTankAggro
-        previous.combat         = combat
-        previous.nilSpecial     = details.nilSpecial
-    else
-        monitorState[unit] = {
-            generation     = generation,
-            situation      = details.situation,
-            otherTankAggro = details.otherTankAggro,
-            combat         = combat,
-            nilSpecial     = details.nilSpecial,
-        }
-    end
+
+    if not Minimizer.Threat or not Minimizer.Threat.GetUnitThreatState then return end
+    local currentState = Minimizer.Threat.GetUnitThreatState(unit)
+    if not currentState then return end
+
+    local previousState = monitorState[unit]
+    local changed = not previousState or not Minimizer.Threat.StatesEqual(currentState, previousState)
     if changed then
+        monitorState[unit] = currentState
         Minimizer.Dispatcher.RequestUpdate(unit)
     end
 end
 
-function Minimizer.Dispatcher.StartMonitor()
-    if monitorFrame then return end
-    if Minimizer.Threat and Minimizer.Threat.IsThreatEnabled and not Minimizer.Threat.IsThreatEnabled() then
+local function OnMonitorUpdate(_, elapsed)
+    RebuildMonitorUnits()
+    if monitorCount == 0 then
+        monitorElapsed = 0
         return
     end
-    RebuildMonitorUnits()
-    monitorFrame = CreateFrame("Frame")
-    monitorFrame:SetScript("OnUpdate", function(_, elapsed)
-        RebuildMonitorUnits()
-        if monitorCount == 0 then
-            monitorElapsed = 0
-            return
+    monitorElapsed = monitorElapsed + elapsed
+    local interval = 0.25 / monitorCount
+    if monitorElapsed < interval then return end
+    monitorElapsed = monitorElapsed - interval
+    if monitorStep > monitorCount then monitorStep = 1 end
+    local unit = monitorUnits[monitorStep]
+    monitorStep = monitorStep + 1
+    ProcessMonitoredUnit(unit)
+end
+
+function Minimizer.Dispatcher.UpdateMonitorState()
+    local enabled = Minimizer.Threat and Minimizer.Threat.IsThreatEnabled and Minimizer.Threat.IsThreatEnabled()
+    if enabled then
+        if not monitorFrame then
+            monitorFrame = CreateFrame("Frame")
         end
-        monitorElapsed = monitorElapsed + elapsed
-        local interval = 0.25 / monitorCount
-        if monitorElapsed < interval then return end
-        monitorElapsed = monitorElapsed - interval
-        if monitorStep > monitorCount then monitorStep = 1 end
-        local unit = monitorUnits[monitorStep]
-        monitorStep = monitorStep + 1
-        ProcessMonitoredUnit(unit)
-    end)
+        if not monitorRunning then
+            monitorRunning = true
+            monitorElapsed = 0
+            monitorDirty = true
+            monitorFrame:SetScript("OnUpdate", OnMonitorUpdate)
+        end
+    else
+        if monitorRunning and monitorFrame then
+            monitorRunning = false
+            monitorFrame:SetScript("OnUpdate", nil)
+        end
+    end
+end
+
+function Minimizer.Dispatcher.StartMonitor()
+    Minimizer.Dispatcher.UpdateMonitorState()
 end
 
 -- Backward compatibility aliases on Minimizer.Core

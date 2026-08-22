@@ -37,9 +37,7 @@ function Cache.GetUnitKeyWithGeneration(unit, key)
     if not state then return nil end
     local entry = state[key]
     if not entry then return nil end
-    local gen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
-        or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit))
-        or 0
+    local gen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit)) or 0
     if type(entry) == "table" and entry.gen == gen then
         return entry.value
     end
@@ -53,9 +51,7 @@ function Cache.SetUnitKeyWithGeneration(unit, key, value)
         state = {}
         Cache.units[unit] = state
     end
-    local gen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
-        or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit))
-        or 0
+    local gen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit)) or 0
     -- Reutilizar la entry existente en vez de crear una tabla nueva en cada
     -- escritura: esta función se llama por cada unidad/clave/pase, así que
     -- una tabla nueva por llamada es basura constante e innecesaria.

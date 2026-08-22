@@ -16,18 +16,18 @@ end
 
 function Overlays.OnCooldownTick()
     for _, module in pairs(Overlays.registry) do
-        if type(module.DebouncedUpdate) == "function" then
+        if type(module.OnCooldownTick) == "function" then
+            module:OnCooldownTick()
+        elseif type(module.DebouncedUpdate) == "function" then
             module.DebouncedUpdate()
-        elseif type(module.OnCooldownTick) == "function" then
-            module.OnCooldownTick()
         end
     end
 end
 
-function Overlays.OnUnitChanged(unit)
+function Overlays.OnUnitChanged(unit, reason)
     for _, module in pairs(Overlays.registry) do
         if type(module.OnUnitChanged) == "function" then
-            module.OnUnitChanged(unit)
+            module:OnUnitChanged(unit, reason)
         end
     end
 end

@@ -2,30 +2,30 @@ Aggregated Benchmark Runs: 6
 
 
 === Minimizer Benchmark Results (run 1) ===
-Date       : 2026-08-22 05:08:05
+Date       : 2026-08-22 05:55:07
 Iterations : 1000 frames
 Nameplates : 50 units
-Total Time : 0.1970 s
-Total ApplyToUnit calls : 3133
-Basura generada (GC)    : 2935.26 KB total / 0.9369 KB por ApplyToUnit
-Avg ApplyToUnit  : 0.055219 ms
-P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 1.000 ms
+Total Time : 0.2270 s
+Total ApplyToUnit calls : 3418
+Basura generada (GC)    : 3154.82 KB total / 0.9230 KB por ApplyToUnit
+Avg ApplyToUnit  : 0.057636 ms
+P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 2.000 ms
 Worst frame (calls)   : 30
 
 --- Module Breakdown (sorted by total cost) ---
 Module                 Total (s)    Avg/call (ms)  Calls      Share
 ------------------------------------------------------------------------
-HealthBarColor         0.0400       0.012001       3333       20.30%
-CastingBar             0.0290       0.008701       3333       14.72%
-Markers                0.0170       0.005101       3333        8.63%
+HealthBarColor         0.0360       0.009950       3618       15.86%
+CastingBar             0.0320       0.008845       3618       14.10%
+Markers                0.0120       0.003317       3618        5.29%
 
 --- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---
 Funcion                Total (s)    Avg/call (ms)  Calls      Share
 ------------------------------------------------------------------------
-HasAbsorb              0.0110       0.003300       3333        5.58%
-GetEliteType           0.0070       0.002100       3333        3.55%
-PlayerHasAggro         0.0060       0.001800       3333        3.05%
-ShouldSimplifyUnit     0.0030       0.001556       1928        1.52%
+HasAbsorb              0.0140       0.003870       3618        6.17%
+ShouldSimplifyUnit     0.0100       0.005426       1843        4.41%
+GetEliteType           0.0070       0.001935       3618        3.08%
+PlayerHasAggro         0.0040       0.001106       3618        1.76%
 
 --- Throttle check: Target/Focus repaints bajo rafaga de eventos ---
 Eventos SPELL_UPDATE_COOLDOWN simulados : 100 (en ~1s simulado)
@@ -36,30 +36,30 @@ Focus:UpdateFace() llamadas reales       : 25
 ========================================================================
 
 === Minimizer Benchmark Results (run 2) ===
-Date       : 2026-08-22 05:08:06
+Date       : 2026-08-22 05:55:07
 Iterations : 1000 frames
 Nameplates : 50 units
-Total Time : 0.2040 s
-Total ApplyToUnit calls : 3222
-Basura generada (GC)    : 3000.27 KB total / 0.9312 KB por ApplyToUnit
-Avg ApplyToUnit  : 0.055245 ms
+Total Time : 0.2200 s
+Total ApplyToUnit calls : 3253
+Basura generada (GC)    : 3003.13 KB total / 0.9232 KB por ApplyToUnit
+Avg ApplyToUnit  : 0.059330 ms
 P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 1.000 ms
 Worst frame (calls)   : 29
 
 --- Module Breakdown (sorted by total cost) ---
 Module                 Total (s)    Avg/call (ms)  Calls      Share
 ------------------------------------------------------------------------
-CastingBar             0.0400       0.011521       3472       19.61%
-HealthBarColor         0.0390       0.011233       3472       19.12%
-Markers                0.0130       0.003744       3472        6.37%
+CastingBar             0.0310       0.008850       3503       14.09%
+HealthBarColor         0.0270       0.007708       3503       12.27%
+Markers                0.0110       0.003140       3503        5.00%
 
 --- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---
 Funcion                Total (s)    Avg/call (ms)  Calls      Share
 ------------------------------------------------------------------------
-ShouldSimplifyUnit     0.0080       0.005013       1596        3.92%
-HasAbsorb              0.0070       0.002016       3472        3.43%
-GetEliteType           0.0070       0.002016       3472        3.43%
-PlayerHasAggro         0.0070       0.002016       3472        3.43%
+HasAbsorb              0.0090       0.002569       3503        4.09%
+PlayerHasAggro         0.0090       0.002569       3503        4.09%
+ShouldSimplifyUnit     0.0040       0.002928       1366        1.82%
+GetEliteType           0.0030       0.000856       3503        1.36%
 
 --- Throttle check: Target/Focus repaints bajo rafaga de eventos ---
 Eventos SPELL_UPDATE_COOLDOWN simulados : 100 (en ~1s simulado)
@@ -70,30 +70,30 @@ Focus:UpdateFace() llamadas reales       : 25
 ========================================================================
 
 === Minimizer Benchmark Results (run 3) ===
-Date       : 2026-08-22 05:08:06
+Date       : 2026-08-22 05:55:07
 Iterations : 1000 frames
 Nameplates : 50 units
-Total Time : 0.2150 s
-Total ApplyToUnit calls : 3386
-Basura generada (GC)    : 3137.71 KB total / 0.9267 KB por ApplyToUnit
-Avg ApplyToUnit  : 0.055818 ms
+Total Time : 0.2200 s
+Total ApplyToUnit calls : 3287
+Basura generada (GC)    : 3032.38 KB total / 0.9225 KB por ApplyToUnit
+Avg ApplyToUnit  : 0.058716 ms
 P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 1.000 ms
-Worst frame (calls)   : 30
+Worst frame (calls)   : 28
 
 --- Module Breakdown (sorted by total cost) ---
 Module                 Total (s)    Avg/call (ms)  Calls      Share
 ------------------------------------------------------------------------
-HealthBarColor         0.0360       0.009901       3636       16.74%
-CastingBar             0.0310       0.008526       3636       14.42%
-Markers                0.0140       0.003850       3636        6.51%
+HealthBarColor         0.0360       0.010178       3537       16.36%
+CastingBar             0.0270       0.007634       3537       12.27%
+Markers                0.0190       0.005372       3537        8.64%
 
 --- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---
 Funcion                Total (s)    Avg/call (ms)  Calls      Share
 ------------------------------------------------------------------------
-HasAbsorb              0.0170       0.004675       3636        7.91%
-ShouldSimplifyUnit     0.0130       0.007780       1671        6.05%
-PlayerHasAggro         0.0100       0.002750       3636        4.65%
-GetEliteType           0.0070       0.001925       3636        3.26%
+HasAbsorb              0.0160       0.004524       3537        7.27%
+PlayerHasAggro         0.0070       0.001979       3537        3.18%
+GetEliteType           0.0060       0.001696       3537        2.73%
+ShouldSimplifyUnit     0.0020       0.001440       1389        0.91%
 
 --- Throttle check: Target/Focus repaints bajo rafaga de eventos ---
 Eventos SPELL_UPDATE_COOLDOWN simulados : 100 (en ~1s simulado)
@@ -104,30 +104,30 @@ Focus:UpdateFace() llamadas reales       : 25
 ========================================================================
 
 === Minimizer Benchmark Results (run 4) ===
-Date       : 2026-08-22 05:08:06
+Date       : 2026-08-22 05:55:07
 Iterations : 1000 frames
 Nameplates : 50 units
-Total Time : 0.2050 s
-Total ApplyToUnit calls : 3280
-Basura generada (GC)    : 3049.39 KB total / 0.9297 KB por ApplyToUnit
-Avg ApplyToUnit  : 0.056098 ms
+Total Time : 0.2230 s
+Total ApplyToUnit calls : 3289
+Basura generada (GC)    : 3034.91 KB total / 0.9227 KB por ApplyToUnit
+Avg ApplyToUnit  : 0.059289 ms
 P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 1.000 ms
 Worst frame (calls)   : 30
 
 --- Module Breakdown (sorted by total cost) ---
 Module                 Total (s)    Avg/call (ms)  Calls      Share
 ------------------------------------------------------------------------
-HealthBarColor         0.0370       0.010482       3530       18.05%
-CastingBar             0.0330       0.009348       3530       16.10%
-Markers                0.0110       0.003116       3530        5.37%
+HealthBarColor         0.0340       0.009607       3539       15.25%
+CastingBar             0.0290       0.008194       3539       13.00%
+Markers                0.0170       0.004804       3539        7.62%
 
 --- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---
 Funcion                Total (s)    Avg/call (ms)  Calls      Share
 ------------------------------------------------------------------------
-HasAbsorb              0.0140       0.003966       3530        6.83%
-PlayerHasAggro         0.0080       0.002266       3530        3.90%
-ShouldSimplifyUnit     0.0060       0.003681       1630        2.93%
-GetEliteType           0.0050       0.001416       3530        2.44%
+HasAbsorb              0.0130       0.003673       3539        5.83%
+ShouldSimplifyUnit     0.0070       0.005004       1399        3.14%
+PlayerHasAggro         0.0070       0.001978       3539        3.14%
+GetEliteType           0.0030       0.000848       3539        1.35%
 
 --- Throttle check: Target/Focus repaints bajo rafaga de eventos ---
 Eventos SPELL_UPDATE_COOLDOWN simulados : 100 (en ~1s simulado)
@@ -138,30 +138,30 @@ Focus:UpdateFace() llamadas reales       : 25
 ========================================================================
 
 === Minimizer Benchmark Results (run 5) ===
-Date       : 2026-08-22 05:08:06
+Date       : 2026-08-22 05:55:08
 Iterations : 1000 frames
 Nameplates : 50 units
-Total Time : 0.2050 s
-Total ApplyToUnit calls : 3288
-Basura generada (GC)    : 3053.24 KB total / 0.9286 KB por ApplyToUnit
-Avg ApplyToUnit  : 0.052920 ms
+Total Time : 0.2270 s
+Total ApplyToUnit calls : 3409
+Basura generada (GC)    : 3138.04 KB total / 0.9205 KB por ApplyToUnit
+Avg ApplyToUnit  : 0.058375 ms
 P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 1.000 ms
-Worst frame (calls)   : 30
+Worst frame (calls)   : 29
 
 --- Module Breakdown (sorted by total cost) ---
 Module                 Total (s)    Avg/call (ms)  Calls      Share
 ------------------------------------------------------------------------
-CastingBar             0.0410       0.011588       3538       20.00%
-HealthBarColor         0.0380       0.010741       3538       18.54%
-Markers                0.0100       0.002826       3538        4.88%
+HealthBarColor         0.0400       0.010932       3659       17.62%
+CastingBar             0.0290       0.007926       3659       12.78%
+Markers                0.0140       0.003826       3659        6.17%
 
 --- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---
 Funcion                Total (s)    Avg/call (ms)  Calls      Share
 ------------------------------------------------------------------------
-HasAbsorb              0.0160       0.004522       3538        7.80%
-PlayerHasAggro         0.0130       0.003674       3538        6.34%
-GetEliteType           0.0060       0.001696       3538        2.93%
-ShouldSimplifyUnit     0.0040       0.002495       1603        1.95%
+HasAbsorb              0.0100       0.002733       3659        4.41%
+PlayerHasAggro         0.0090       0.002460       3659        3.96%
+GetEliteType           0.0050       0.001366       3659        2.20%
+ShouldSimplifyUnit     0.0020       0.001352       1479        0.88%
 
 --- Throttle check: Target/Focus repaints bajo rafaga de eventos ---
 Eventos SPELL_UPDATE_COOLDOWN simulados : 100 (en ~1s simulado)
@@ -172,30 +172,30 @@ Focus:UpdateFace() llamadas reales       : 25
 ========================================================================
 
 === Minimizer Benchmark Results (run 6) ===
-Date       : 2026-08-22 05:08:07
+Date       : 2026-08-22 05:55:08
 Iterations : 1000 frames
 Nameplates : 50 units
-Total Time : 0.2130 s
-Total ApplyToUnit calls : 3402
-Basura generada (GC)    : 3148.02 KB total / 0.9253 KB por ApplyToUnit
-Avg ApplyToUnit  : 0.054674 ms
+Total Time : 0.2310 s
+Total ApplyToUnit calls : 3440
+Basura generada (GC)    : 3160.96 KB total / 0.9189 KB por ApplyToUnit
+Avg ApplyToUnit  : 0.058140 ms
 P50 / P90 / P99 / Max : 0.000 ms / 0.000 ms / 1.000 ms / 1.000 ms
 Worst frame (calls)   : 29
 
 --- Module Breakdown (sorted by total cost) ---
 Module                 Total (s)    Avg/call (ms)  Calls      Share
 ------------------------------------------------------------------------
-HealthBarColor         0.0450       0.012322       3652       21.13%
-CastingBar             0.0310       0.008488       3652       14.55%
-Markers                0.0160       0.004381       3652        7.51%
+HealthBarColor         0.0410       0.011111       3690       17.75%
+CastingBar             0.0350       0.009485       3690       15.15%
+Markers                0.0130       0.003523       3690        5.63%
 
 --- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---
 Funcion                Total (s)    Avg/call (ms)  Calls      Share
 ------------------------------------------------------------------------
-HasAbsorb              0.0160       0.004381       3652        7.51%
-PlayerHasAggro         0.0070       0.001917       3652        3.29%
-ShouldSimplifyUnit     0.0040       0.002432       1645        1.88%
-GetEliteType           0.0030       0.000821       3652        1.41%
+PlayerHasAggro         0.0100       0.002710       3690        4.33%
+HasAbsorb              0.0060       0.001626       3690        2.60%
+GetEliteType           0.0050       0.001355       3690        2.16%
+ShouldSimplifyUnit     0.0040       0.002740       1460        1.73%
 
 --- Throttle check: Target/Focus repaints bajo rafaga de eventos ---
 Eventos SPELL_UPDATE_COOLDOWN simulados : 100 (en ~1s simulado)
@@ -205,4 +205,4 @@ Focus:UpdateFace() llamadas reales       : 25
 
 ========================================================================
 
-AGGREGATE SUMMARY (median across runs): p90 = 0.0000 ms, avgApplyToUnit = 0.055232 ms, GC = 0.9291 KB/call
+AGGREGATE SUMMARY (median across runs): p90 = 0.0000 ms, avgApplyToUnit = 0.058546 ms, GC = 0.9226 KB/call
