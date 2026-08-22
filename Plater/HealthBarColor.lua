@@ -126,7 +126,6 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
         baseKind = Minimizer.Core and Minimizer.Core.ComputeDisplayKind and Minimizer.Core.ComputeDisplayKind(unit, nameplate) or Minimizer.Classification.GetEliteType(unit)
     end
 
-    nameplate.MinimizerHasAbsorb = baseKind == "absorb"
     local color = GetSafeHealthColor(baseKind)
     local r, g, b = color[1], color[2], color[3]
 
@@ -146,7 +145,7 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
         local liveAbsorb = snapshot and snapshot.hasAbsorb
         if liveAbsorb == nil then liveAbsorb = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate) end
         hasHadAbsorb = (Minimizer.Absorb and Minimizer.Absorb.MarkSeen and Minimizer.Absorb.MarkSeen(unit, nameplate, liveAbsorb))
-            or (Minimizer.Core and Minimizer.Core.MarkAbsorbSeen and Minimizer.Core.MarkAbsorbSeen(unit, nameplate, liveAbsorb))
+            or (Minimizer.Absorb and Minimizer.Absorb.MarkAbsorbSeen and Minimizer.Absorb.MarkAbsorbSeen(unit, nameplate, liveAbsorb))
             or false
     end
 
@@ -252,7 +251,6 @@ function HealthBarColor:OnNamePlateRemoved(_, nameplate)
         nameplate.MinimizerHealthBarColorUnit = nil
         nameplate.MinimizerHealthBarColorGen = nil
         nameplate.MinimizerPersistentCastColor = nil
-        nameplate.MinimizerHasAbsorb = nil
         nameplate.MinimizerLastAppliedColor = nil
         local healthBar = self:GetHealthBar(nameplate)
         local bar = healthBar and healthBar.MinimizerOvershieldBar

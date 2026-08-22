@@ -20,8 +20,9 @@ local handlers = {}
 
 local function HandleFullRefreshEvent(self, event)
     if event == "PLAYER_REGEN_ENABLED" then
-        if C_NamePlate and C_NamePlate.GetNamePlates then
-            for _, nameplate in ipairs(C_NamePlate.GetNamePlates()) do
+        local activePlates = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetActiveNameplates and Minimizer.Lifecycle.GetActiveNameplates()) or Minimizer.ActiveNameplates
+        if activePlates then
+            for _, nameplate in pairs(activePlates) do
                 nameplate.MinimizerDesimplifiedPersistent = nil
                 nameplate.MinimizerDesimplifiedPersistentGen = nil
             end
@@ -253,6 +254,7 @@ EventFrame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 EventFrame:RegisterEvent("UNIT_DISPLAYPOWER")
 EventFrame:RegisterEvent("UNIT_CLASSIFICATION_CHANGED")
 EventFrame:RegisterEvent("UNIT_LEVEL")
+EventFrame:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED")
 EventFrame:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
 EventFrame:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
 EventFrame:RegisterEvent("UNIT_SPELLCAST_START")
@@ -283,10 +285,11 @@ if NamePlateDriverFrame then
 end
 
 if CompactUnitFrame_UpdateHealthColor then
+    -- Decisión de migración: el flag unitFrame.MinimizerLetBlizzardHealthColor fue identificado
+    -- como código muerto durante la auditoría de arquitectura (ningún archivo lo seteaba ni leía).
+    -- La responsabilidad de permitir el pintado nativo de Blizzard recae de forma centralizada en
+    -- Decision.ShouldLetBlizzardPaint(unit, snapshot). Se elimina la comprobación muerta.
     hooksecurefunc("CompactUnitFrame_UpdateHealthColor", function(unitFrame)
-        if unitFrame and unitFrame.MinimizerLetBlizzardHealthColor then
-            return
-        end
         local unit = unitFrame and unitFrame.unit
         if unit and unit:match("^nameplate%d+$") then
             if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then

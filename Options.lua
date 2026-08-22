@@ -59,13 +59,5 @@ local function CreateInterfaceOptionsPanel()
     Settings.RegisterAddOnCategory(category)
 end
 
--- Se registra en el mismo ciclo de vida que el resto del addon: no hace
--- falta esperar a nada especial, Settings ya está disponible en
--- ADDON_LOADED/PLAYER_LOGIN igual que en BloodShieldOverlay.
-local optionsFrame = CreateFrame("Frame", "MinimizerOptionsBootstrapFrame")
-optionsFrame:RegisterEvent("ADDON_LOADED")
-optionsFrame:SetScript("OnEvent", function(self, event, name)
-    if event ~= "ADDON_LOADED" or name ~= "Minimizer" then return end
-    self:UnregisterEvent("ADDON_LOADED")
-    CreateInterfaceOptionsPanel()
-end)
+Minimizer.Options = Minimizer.Options or {}
+Minimizer.Options.Initialize = CreateInterfaceOptionsPanel

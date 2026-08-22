@@ -1143,3 +1143,49 @@ Derivadas de los hallazgos de este documento, para aplicar durante toda la migra
 **Mayores riesgos:** (a) romper el contrato implícito de nombres de campo `nameplate.Minimizer*` que varios tests inspeccionan directamente; (b) desincronizar las 3-4 implementaciones de prioridad `displayKind` al unificarlas si no se valida exhaustivamente contra los tests de "PRIORITY" existentes; (c) que el monitor de Threat dejado de lado en Fase 3 cambie sutilmente el timing round-robin observable si no se preserva la fórmula `0.25/monitorCount`; (d) los dos puntos marcados `REQUIERE VALIDACIÓN` (`UNIT_ABSORB_AMOUNT_CHANGED` y `MinimizerLetBlizzardHealthColor`) deben confirmarse contra el repositorio real (posiblemente la rama `split-architectonico`) antes de tocar `Events.lua` en Fase 7.
 
 **Ajuste de riesgo recomendado:** la arquitectura objetivo es correcta, pero una migración directa puede romper comportamiento que actualmente funciona porque varias partes del addon tienen semántica temporal y de lifecycle además de dependencias estructurales. Por tanto, el riesgo principal no es la arquitectura final sino hacer demasiados cambios semánticos en un único paso. La recomendación técnica del documento es la misma que la de la propuesta de migración segura recién añadida: `compatibilidad → ownership → equivalencia → eliminación de duplicación`.
+
+---
+
+# Addendum: Estado de implementación (2026-08-23)
+
+Este addendum documenta el estado final de la migración arquitectónica (Fases 1 a 9) tras la ejecución del plan de refactorización y resolución de cabos sueltos.
+
+## Resumen por Fase
+
+- **Fase 1: Infraestructura de Ciclo de Vida (Lifecycle & Generation-gating)**
+  - *Implementado tal cual.* `Plater/Lifecycle.lua` gestiona las generaciones de nameplates (`GetGeneration`, `IsGenerationStale`, `ClearNeverSimplify`) y mantiene la tabla centralizada `Minimizer.ActiveNameplates`.
+
+- **Fase 2: Dispatcher Central (Unificación de Scheduling y Batching)**
+  - *Implementado con solución mejorada.* En lugar de un scheduler rígido o una cola simple, `Plater/Dispatcher.lua` implementa:
+    1. **Cola de reentrancia con límite de pases (`MAX_REENTRANT_PASSES = 32`):** evita desbordamiento de pila por recursión descontrolada si un repintado de UI o hook nativo re-dispara `ApplyToUnit`.
+    2. **Coalescencia de eventos:** peticiones reentrantes durante la evaluación de la misma unidad se aplazan y ejecutan de forma segura.
+
+- **Fase 3: Monitor Dinámico de Threat**
+  - *Implementado con solución mejorada.* `Plater/Threat.lua` y `Dispatcher.lua` no ejecutan un OnUpdate global incondicional. En su lugar:
+    1. **Monitor activable/desactivable dinámicamente (`UpdateMonitorState`):** solo se activa cuando el jugador está en grupo o tiene rol de Tank/DPS en combate relevante, reduciendo el consumo de CPU a cero cuando no se necesita monitorizar threat.
+
+- **Fase 4: Snapshot de Estado de Unidad e Aislamiento Reentrante**
+  - *Implementado con solución mejorada.* En lugar de una única tabla scratch global que causaría corrupción de datos en llamadas anidadas/reentrantes:
+    1. **Pool dinámico de Snapshots (`Snapshot Pool`):** `Plater/Snapshot.lua` asigna e incrementa dinámicamente instancias de snapshots aisladas según la profundidad de recursión (`currentDepth`), garantizando la integridad de datos entre llamadas anidadas sin alocar tablas en garbage collector en el path caliente.
+
+- **Fase 5: Módulo Centralizado de Decisión (Business Rules)**
+  - *Implementado tal cual.* `Plater/Decision.lua` es la única fuente de verdad para `ShouldSimplifyUnit`, `ShouldUnsimplify` y `ShouldLetBlizzardPaint`.
+
+- **Fase 6: Single Source of Truth para Absorb**
+  - *Implementado tal cual.* `Plater/Absorb.lua` administra `MarkSeen` y `GetTotalAbsorbs`. Se consolidó `MinimizerHasHadAbsorb` como única fuente de persistencia (eliminando el campo redundante e inútil `MinimizerHasAbsorb`).
+
+- **Fase 7: Refactorización de Rendering & Modularización (Plater & Overlays)**
+  - *Implementado tal cual.* `Plater/HealthBarColor.lua`, `CastingBar.lua`, `Markers.lua`, `Overlays/Overlays.lua` consumen exclusivamente la información del Snapshot provisto por el Dispatcher.
+
+- **Fase 8: Reducción de Trabajo Redundante y Optimización GC**
+  - *Implementado tal cual.* Se eliminó la llamada repetida a APIs nativas (como `UnitCastingInfo`/`UnitChannelInfo` memoizadas a 1 llamada por pase en el Snapshot). `HandleFullRefreshEvent` en `Events.lua` dejó de llamar a `C_NamePlate.GetNamePlates()` (que alocaba tablas nuevas) para iterar `ActiveNameplates` cumpliendo la Regla R1.
+
+- **Fase 9: Cierre de Cabos Sueltos y Verificación Extrema**
+  - *Completado:*
+    1. **`UNIT_ABSORB_AMOUNT_CHANGED`:** Registrado explícitamente en `EventFrame:RegisterEvent` de `Plater/Events.lua` y verificado mediante test en `smoke_test.lua`.
+    2. **`MinimizerLetBlizzardHealthColor`:** Flag muerto eliminado del hook de `CompactUnitFrame_UpdateHealthColor`, documentando que `Decision.ShouldLetBlizzardPaint` gobierna la lógica de pintado nativo.
+    3. **`MinimizerHasAbsorb`:** Campo eliminado de `HealthBarColor.lua`, dejando `MinimizerHasHadAbsorb` como único flag de persistencia.
+    4. **Regla R1 en `HandleFullRefreshEvent`:** `PLAYER_REGEN_ENABLED` migrado a `ActiveNameplates`.
+    5. **Fallbacks de Absorb:** Sustituido el fallback muerto `Minimizer.Core.MarkAbsorbSeen` por `Minimizer.Absorb.MarkAbsorbSeen`/`MarkSeen` en `Decision.lua`, `Snapshot.lua` y `HealthBarColor.lua`.
+    6. **Listener `ADDON_LOADED`:** Unificado en `Bootstrap.lua` invocando `Minimizer.Options.Initialize()`, eliminando `MinimizerOptionsBootstrapFrame` en `Options.lua`.
+

@@ -1008,6 +1008,27 @@ do
         "ApplyToAll: sigue funcionando sin error tras remover una unidad del registro")
 end
 
+-- --- TEST: UNIT_ABSORB_AMOUNT_CHANGED triggers Dispatcher.ApplyToUnit ---
+do
+    local unit = "nameplate99"
+    Mocks.CreateTestUnit(unit, { level = 70, classification = "normal", faction = "Horde" })
+    Mocks.CreateTestNameplate(unit)
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", unit)
+
+    local calledUnit = nil
+    local origApply = addonTable.Dispatcher.ApplyToUnit
+    addonTable.Dispatcher.ApplyToUnit = function(u, force)
+        calledUnit = u
+        return origApply(u, force)
+    end
+
+    Mocks.FireEvent("UNIT_ABSORB_AMOUNT_CHANGED", unit)
+    addonTable.Dispatcher.ApplyToUnit = origApply
+
+    check(calledUnit == unit,
+        "Events: UNIT_ABSORB_AMOUNT_CHANGED invoca Dispatcher.ApplyToUnit para la unidad")
+end
+
 -- --- TEST GROUP: Final Architecture Integration & Ownership ---
 do
     -- 1. Dispatcher owns scheduling and monitor
