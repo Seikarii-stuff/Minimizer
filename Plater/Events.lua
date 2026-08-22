@@ -7,8 +7,6 @@ local lastInterruptReady
 local function UpdateNameplates()
     if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestApplyToAll then
         Minimizer.Dispatcher.RequestApplyToAll()
-    elseif Minimizer.Core and Minimizer.Core.RequestApplyToAll then
-        Minimizer.Core.RequestApplyToAll()
     end
 end
 
@@ -76,8 +74,6 @@ local function HandleUnitStateChange(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then
         if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
             Minimizer.Dispatcher.ApplyToUnit(unit)
-        elseif Minimizer.Core.ApplyToUnit then
-            Minimizer.Core.ApplyToUnit(unit)
         end
     end
 end
@@ -88,8 +84,6 @@ handlers["UNIT_ABSORB_AMOUNT_CHANGED"] = function(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then
         if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
             Minimizer.Dispatcher.ApplyToUnit(unit)
-        elseif Minimizer.Core.ApplyToUnit then
-            Minimizer.Core.ApplyToUnit(unit)
         end
     end
 end
@@ -103,8 +97,6 @@ local function HandleThreatEvent(self, event, unit)
         end
         if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
             Minimizer.Dispatcher.ApplyToUnit(unit)
-        elseif Minimizer.Core.ApplyToUnit then
-            Minimizer.Core.ApplyToUnit(unit)
         end
     else
         InvalidateAllThreat()
@@ -149,8 +141,6 @@ local function HandleCastEvent(self, event, unit)
     end
     if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
         Minimizer.Dispatcher.ApplyToUnit(unit)
-    elseif Minimizer.Core.ApplyToUnit then
-        Minimizer.Core.ApplyToUnit(unit)
     end
 end
 for _, evt in ipairs({
@@ -189,20 +179,18 @@ handlers["NAME_PLATE_UNIT_ADDED"] = function(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then
         if Minimizer.Lifecycle and Minimizer.Lifecycle.IncrementGeneration then
             Minimizer.Lifecycle.IncrementGeneration(unit)
-        elseif Minimizer.Core.IncrementPlateGeneration then
-            Minimizer.Core.IncrementPlateGeneration(unit)
         end
         if Minimizer.Threat and Minimizer.Threat.ForgetUnit then
             Minimizer.Threat.ForgetUnit(unit)
-            Minimizer.Threat.TrackUnit(unit)
+        end
+        if Minimizer.Dispatcher and Minimizer.Dispatcher.TrackUnit then
+            Minimizer.Dispatcher.TrackUnit(unit)
         end
         if Minimizer.Threat and Minimizer.Threat.Invalidate then
             Minimizer.Threat.Invalidate(unit)
         end
         if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
             Minimizer.Dispatcher.ApplyToUnit(unit)
-        elseif Minimizer.Core.ApplyToUnit then
-            Minimizer.Core.ApplyToUnit(unit)
         end
         UpdateNameplates()
         if Minimizer.Overlays and Minimizer.Overlays.OnUnitChanged then
@@ -223,6 +211,9 @@ end
 handlers["NAME_PLATE_UNIT_REMOVED"] = function(self, event, unit)
     if Minimizer.Threat and Minimizer.Threat.ForgetUnit then
         Minimizer.Threat.ForgetUnit(unit)
+    end
+    if Minimizer.Dispatcher and Minimizer.Dispatcher.ForgetUnit then
+        Minimizer.Dispatcher.ForgetUnit(unit)
     end
     if Minimizer.Overlays and Minimizer.Overlays.OnUnitChanged then
         Minimizer.Overlays.OnUnitChanged(unit, "removed")
@@ -280,8 +271,6 @@ EventFrame:SetScript("OnEvent", OnEvent)
 
 if Minimizer.Dispatcher and Minimizer.Dispatcher.StartMonitor then
     Minimizer.Dispatcher.StartMonitor()
-elseif Minimizer.Threat and Minimizer.Threat.StartMonitor then
-    Minimizer.Threat.StartMonitor()
 end
 
 if NamePlateDriverFrame then
@@ -289,8 +278,6 @@ if NamePlateDriverFrame then
         if not unit or not unit:match("^nameplate%d+$") then return end
         if Minimizer.Lifecycle and Minimizer.Lifecycle.ClearNeverSimplify then
             Minimizer.Lifecycle.ClearNeverSimplify(unit)
-        elseif Minimizer.Core and Minimizer.Core.ClearNeverSimplify then
-            Minimizer.Core.ClearNeverSimplify(unit)
         end
     end)
 end
@@ -304,8 +291,6 @@ if CompactUnitFrame_UpdateHealthColor then
         if unit and unit:match("^nameplate%d+$") then
             if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
                 Minimizer.Dispatcher.ApplyToUnit(unit)
-            elseif Minimizer.Core and Minimizer.Core.ApplyToUnit then
-                Minimizer.Core.ApplyToUnit(unit)
             end
         end
     end)

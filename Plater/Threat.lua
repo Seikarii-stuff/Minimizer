@@ -186,20 +186,6 @@ function Minimizer.Threat.IsNilSpecial(unit)
     return details and details.nilSpecial == true or false
 end
 
-function Minimizer.Threat.ShouldLetBlizzardPaint(unit)
-    if Minimizer.Decision and Minimizer.Decision.ShouldLetBlizzardPaint then
-        return Minimizer.Decision.ShouldLetBlizzardPaint(unit)
-    end
-    return false
-end
-
-function Minimizer.Threat.ShouldUnsimplify(unit)
-    if Minimizer.Decision and Minimizer.Decision.ShouldUnsimplify then
-        return Minimizer.Decision.ShouldUnsimplify(unit)
-    end
-    return false
-end
-
 function Minimizer.Threat.GetUnitThreatState(unit)
     if not Minimizer.Threat.IsThreatEnabled() then return nil end
     if not unit or not UnitExists(unit) then return nil end
@@ -227,24 +213,15 @@ function Minimizer.Threat.StatesEqual(s1, s2)
 end
 
 function Minimizer.Threat.TrackUnit(unit)
-    if Minimizer.Dispatcher and Minimizer.Dispatcher.TrackUnit then
-        Minimizer.Dispatcher.TrackUnit(unit)
-    end
+    -- Deprecated, routed via Events/Lifecycle now
 end
 
 function Minimizer.Threat.ForgetUnit(unit)
     if unit then
         nilState[unit] = nil
-        if Minimizer.Dispatcher and Minimizer.Dispatcher.ForgetUnit then
-            Minimizer.Dispatcher.ForgetUnit(unit)
-        end
     end
 end
 
 function Minimizer.Threat.StartMonitor()
-    if Minimizer.Dispatcher and Minimizer.Dispatcher.UpdateMonitorState then
-        Minimizer.Dispatcher.UpdateMonitorState()
-    elseif Minimizer.Dispatcher and Minimizer.Dispatcher.StartMonitor then
-        Minimizer.Dispatcher.StartMonitor()
-    end
+    -- Deprecated, handled by Dispatcher
 end

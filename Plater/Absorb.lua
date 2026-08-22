@@ -47,6 +47,3 @@ function Minimizer.Absorb.MarkSeen(unit, nameplate, hasAbsorbNow)
 end
 Minimizer.Absorb.MarkAbsorbSeen = Minimizer.Absorb.MarkSeen
 
--- Backward compatibility alias on Minimizer.Core
-Minimizer.Core = Minimizer.Core or {}
-Minimizer.Core.MarkAbsorbSeen = Minimizer.Absorb.MarkSeen

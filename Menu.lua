@@ -93,8 +93,6 @@ end
 local function RequestFullUpdate()
     if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
         Minimizer.Dispatcher.RequestFullUpdate()
-    elseif Minimizer.Core and Minimizer.Core.ApplyToAll then
-        Minimizer.Core.ApplyToAll()
     end
 end
 

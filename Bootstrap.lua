@@ -28,7 +28,5 @@ bootstrapFrame:SetScript("OnEvent", function(_, event, name)
     end
     if Minimizer.Dispatcher and Minimizer.Dispatcher.StartSafetyNet then
         Minimizer.Dispatcher.StartSafetyNet()
-    elseif Minimizer.Core and Minimizer.Core.StartSafetyNet then
-        Minimizer.Core.StartSafetyNet()
     end
 end)
