@@ -1064,12 +1064,24 @@ do
         "Architecture: Absorb owns MarkSeen")
     check(type(addonTable.Absorb.GetTotalAbsorbs) == "function",
         "Architecture: Absorb owns GetTotalAbsorbs")
+    check(addonTable.Absorb.MarkAbsorbSeen == nil,
+        "Architecture: no legacy alias Absorb.MarkAbsorbSeen remains")
 
     -- 5. Lifecycle owns generations and active nameplates
     check(type(addonTable.Lifecycle.GetGeneration) == "function",
         "Architecture: Lifecycle owns GetGeneration")
     check(type(addonTable.Lifecycle.IsGenerationStale) == "function",
         "Architecture: Lifecycle owns IsGenerationStale")
+    check(addonTable.Lifecycle.GetPlateGeneration == nil,
+        "Architecture: no legacy alias Lifecycle.GetPlateGeneration remains")
+    check(addonTable.Lifecycle.IncrementPlateGeneration == nil,
+        "Architecture: no legacy alias Lifecycle.IncrementPlateGeneration remains")
+
+    -- 6. Snapshot displayKind has a single canonical path and a documented fallback
+    check(type(addonTable.Snapshot.Build) == "function",
+        "Architecture: Snapshot.Build is the canonical pipeline")
+    check(type(addonTable.Snapshot.ComputeDisplayKind) == "function",
+        "Architecture: Snapshot.ComputeDisplayKind remains only as explicit fallback")
 end
 
 -- --- RESUMEN FINAL ---

@@ -41,5 +41,4 @@ function Minimizer.Absorb.MarkSeen(unit, nameplate, hasAbsorbNow)
     if hasAbsorbNow then nameplate.MinimizerHasHadAbsorb = true end
     return nameplate.MinimizerHasHadAbsorb == true
 end
-Minimizer.Absorb.MarkAbsorbSeen = Minimizer.Absorb.MarkSeen
 

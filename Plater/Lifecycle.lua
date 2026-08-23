@@ -17,14 +17,12 @@ function Minimizer.Lifecycle.GetGeneration(token)
     if not token then return 0 end
     return plateGeneration[token] or 0
 end
-Minimizer.Lifecycle.GetPlateGeneration = Minimizer.Lifecycle.GetGeneration
 
 function Minimizer.Lifecycle.IncrementGeneration(token)
     if not token then return end
     plateGeneration[token] = (plateGeneration[token] or 0) + 1
     return plateGeneration[token]
 end
-Minimizer.Lifecycle.IncrementPlateGeneration = Minimizer.Lifecycle.IncrementGeneration
 
 function Minimizer.Lifecycle.IsGenerationStale(tokenOrNameplate, storedGen, tokenFallback)
     if storedGen == nil then return true end
