@@ -178,11 +178,40 @@ Mocks.FireEvent("NAME_PLATE_UNIT_REMOVED", "nameplate4")
 check(addonTable.ActiveNameplates["nameplate4"] == nil,
     "Friendly target: permanece fuera de ActiveNameplates")
 check(overlayEvents[1] and overlayEvents[1].reason == "added",
-    "Target/Focus overlays: reciben el evento de alta de la placa friendly")
+    "Target overlay: recibe el evento de alta de la placa friendly")
 check(overlayEvents[2] and overlayEvents[2].reason == "target",
-    "Target/Focus overlays: reciben PLAYER_TARGET_CHANGED")
+    "Target overlay: recibe PLAYER_TARGET_CHANGED")
 check(overlayEvents[#overlayEvents] and overlayEvents[#overlayEvents].reason == "removed",
-    "Target/Focus overlays: reciben la limpieza al retirar la placa friendly")
+    "Target overlay: recibe la limpieza al retirar la placa friendly")
+
+Mocks.CreateTestUnit("nameplate5", {
+    name = "Friendly Focus",
+    level = 70,
+    faction = "Alliance",
+    isPlayer = false,
+    classification = "normal",
+    guid = "friendly_focus_guid",
+})
+Mocks.CreateTestUnit("focus", {
+    name = "Friendly Focus",
+    level = 70,
+    faction = "Alliance",
+    isPlayer = false,
+    guid = "friendly_focus_guid",
+})
+Mocks.CreateTestNameplate("nameplate5")
+Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate5")
+Mocks.FireEvent("PLAYER_FOCUS_CHANGED")
+Mocks.FireEvent("NAME_PLATE_UNIT_REMOVED", "nameplate5")
+
+check(addonTable.ActiveNameplates["nameplate5"] == nil,
+    "Friendly focus: permanece fuera de ActiveNameplates")
+check(overlayEvents[4] and overlayEvents[4].reason == "added",
+    "Focus overlay: recibe el evento de alta de la placa friendly")
+check(overlayEvents[5] and overlayEvents[5].reason == "focus",
+    "Focus overlay: recibe PLAYER_FOCUS_CHANGED")
+check(overlayEvents[#overlayEvents] and overlayEvents[#overlayEvents].reason == "removed",
+    "Focus overlay: recibe la limpieza al retirar la placa friendly")
 
 print(string.format("\nFriendly filter / safety net tests: %d run, %d failed", testsRun, testsFailed))
 if testsFailed > 0 then
