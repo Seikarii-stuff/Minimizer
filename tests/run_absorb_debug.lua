@@ -36,7 +36,7 @@ np.UnitFrame.healthBar.totalAbsorbOverlay = CreateFrame("Frame")
 np.UnitFrame.healthBar.totalAbsorbOverlay:Show()
 
 print("Before ApplyToUnit: hooked=", np.UnitFrame.healthBar.MinimizerHealthColorHooked)
-addonTable.Core.ApplyToUnit(token)
+addonTable.Dispatcher.ApplyToUnit(token)
 local hb = addonTable.Utils.GetHealthBar(np)
 local r,g,b = hb:GetStatusBarColor()
 print(string.format("After ApplyToUnit color = %.3f %.3f %.3f", r,g,b))

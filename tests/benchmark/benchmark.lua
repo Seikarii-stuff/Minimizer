@@ -125,12 +125,12 @@ WrapFunction(addonTable.Classification, "GetEliteType")
 WrapFunction(addonTable.Threat, "PlayerHasAggro")
 WrapFunction(addonTable.Absorb, "HasAbsorb")
 
--- Core Profiling Wrapper
+-- Dispatcher Profiling Wrapper
 local coreStats = { count = 0, time = 0 }
-local origApplyToAll = addonTable.Core.ApplyToAll
-addonTable.Core.ApplyToAll = function()
+local origApplyToAll = addonTable.Dispatcher.ApplyToAll
+addonTable.Dispatcher.ApplyToAll = function(...)
     local start = os.clock()
-    origApplyToAll()
+    origApplyToAll(...)
     local elapsed = os.clock() - start
     coreStats.count = coreStats.count + 1
     coreStats.time  = coreStats.time  + elapsed
@@ -155,7 +155,7 @@ do
     Mocks.unitCastingInfoCallCounts[sampleUnit] = 0
     Mocks.unitChannelInfoCallCounts[sampleUnit] = 0
 
-    addonTable.Core.ApplyToUnit(sampleUnit, true)
+    addonTable.Dispatcher.ApplyToUnit(sampleUnit, true)
 
     local castCalls = Mocks.unitCastingInfoCallCounts[sampleUnit] or 0
     local channelCalls = Mocks.unitChannelInfoCallCounts[sampleUnit] or 0
@@ -182,7 +182,7 @@ do
     local gcStart = collectgarbage("count")
     local APPLY_TO_ALL_SAMPLES = 200
     for i = 1, APPLY_TO_ALL_SAMPLES do
-        addonTable.Core.ApplyToAll(false)
+        addonTable.Dispatcher.ApplyToAll(false)
     end
     local gcEnd = collectgarbage("count")
     collectgarbage("restart")
@@ -270,7 +270,7 @@ local function run_single(runIndex, seed)
 
         -- Measure ApplyToUnit (hot-path)
         local start = os.clock()
-        addonTable.Core.ApplyToUnit(unit)
+        addonTable.Dispatcher.ApplyToUnit(unit)
         local elapsed = os.clock() - start
         perCallSamples[#perCallSamples + 1] = elapsed
         calls = calls + 1

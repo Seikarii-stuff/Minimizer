@@ -1,5 +1,5 @@
 local _, Minimizer = ...
-if not Minimizer or not Minimizer.Core then return end
+if not Minimizer then return end
 
 local EventFrame = CreateFrame("Frame", "MinimizerEventFrame")
 local lastInterruptReady

@@ -212,16 +212,8 @@ function Minimizer.Threat.StatesEqual(s1, s2)
         and s1.nilSpecial == s2.nilSpecial
 end
 
-function Minimizer.Threat.TrackUnit(unit)
-    -- Deprecated, routed via Events/Lifecycle now
-end
-
 function Minimizer.Threat.ForgetUnit(unit)
     if unit then
         nilState[unit] = nil
     end
-end
-
-function Minimizer.Threat.StartMonitor()
-    -- Deprecated, handled by Dispatcher
 end

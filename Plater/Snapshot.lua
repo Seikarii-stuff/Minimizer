@@ -35,9 +35,7 @@ function Minimizer.Snapshot.Build(unit, nameplate)
 
     s.eliteType = Minimizer.Classification and Minimizer.Classification.GetEliteType and Minimizer.Classification.GetEliteType(unit)
     s.hasAbsorb = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
-    s.hasHadAbsorb = (Minimizer.Absorb and Minimizer.Absorb.MarkSeen and Minimizer.Absorb.MarkSeen(unit, nameplate, s.hasAbsorb))
-        or (Minimizer.Absorb and Minimizer.Absorb.MarkAbsorbSeen and Minimizer.Absorb.MarkAbsorbSeen(unit, nameplate, s.hasAbsorb))
-        or false
+    s.hasHadAbsorb = (Minimizer.Absorb and Minimizer.Absorb.MarkSeen and Minimizer.Absorb.MarkSeen(unit, nameplate, s.hasAbsorb)) or false
 
     local details = Minimizer.Threat and Minimizer.Threat.GetThreatDetails and Minimizer.Threat.GetThreatDetails(unit)
     s.threatSituation = details and details.situation or nil
@@ -68,14 +66,7 @@ function Minimizer.Snapshot.ComputeDisplayKind(unit, nameplate)
     local isNilSpecial = Minimizer.Threat and Minimizer.Threat.IsNilSpecial and Minimizer.Threat.IsNilSpecial(unit) or false
     local hasAggro = Minimizer.Threat and Minimizer.Threat.PlayerHasAggro and Minimizer.Threat.PlayerHasAggro(unit) or false
     local hasAbsorbNow = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
-    local hasHadAbsorb = (Minimizer.Absorb and Minimizer.Absorb.MarkSeen and Minimizer.Absorb.MarkSeen(unit, nameplate, hasAbsorbNow))
-        or (Minimizer.Absorb and Minimizer.Absorb.MarkAbsorbSeen and Minimizer.Absorb.MarkAbsorbSeen(unit, nameplate, hasAbsorbNow))
-        or false
+    local hasHadAbsorb = (Minimizer.Absorb and Minimizer.Absorb.MarkSeen and Minimizer.Absorb.MarkSeen(unit, nameplate, hasAbsorbNow)) or false
     local eliteType = Minimizer.Classification and Minimizer.Classification.GetEliteType and Minimizer.Classification.GetEliteType(unit)
     return ResolveDisplayKind(unit, isFocus, isNilSpecial, hasAggro, hasHadAbsorb, eliteType)
 end
-
--- Backward compatibility aliases
-Minimizer.Core = Minimizer.Core or {}
-Minimizer.Core.BuildSnapshot = Minimizer.Snapshot.Build
-Minimizer.Core.ComputeDisplayKind = Minimizer.Snapshot.ComputeDisplayKind

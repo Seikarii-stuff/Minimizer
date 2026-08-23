@@ -73,9 +73,9 @@ Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
 
 -- Advance time to trigger any throttled updates or cast bars
 Mocks.AdvanceTime(0.5)
-if addonTable.Core and addonTable.Core.ApplyToAll then
-    print("Calling Minimizer.Core.ApplyToAll")
-    addonTable.Core.ApplyToAll()
+if addonTable.Dispatcher and addonTable.Dispatcher.ApplyToAll then
+    print("Calling Minimizer.Dispatcher.ApplyToAll")
+    addonTable.Dispatcher.ApplyToAll()
 end
 
 Mocks.AdvanceTime(0.5)
@@ -403,7 +403,7 @@ do
     Mocks.CreateTestUnit("nameplate5", { level = 70, faction = "Horde", threatSituation = 3 })
     Mocks.CreateTestNameplate("nameplate5")
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate5")
-    addonTable.Core.ApplyToUnit("nameplate5")
+    addonTable.Dispatcher.ApplyToUnit("nameplate5")
 
     local cachedBefore = addonTable.Cache and addonTable.Cache.GetUnitKeyWithGeneration and addonTable.Cache.GetUnitKeyWithGeneration("nameplate5", "threat:player")
     check(cachedBefore == 3, "Precondition: threat cached for unit A")
@@ -411,7 +411,7 @@ do
     Mocks.CreateTestUnit("nameplate5", { level = 70, faction = "Horde", threatSituation = 0 })
     Mocks.CreateTestNameplate("nameplate5")
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate5")
-    addonTable.Core.ApplyToUnit("nameplate5")
+    addonTable.Dispatcher.ApplyToUnit("nameplate5")
 
     local situationNow = addonTable.Threat.GetSituation("nameplate5", "player")
     check(situationNow == 0, "Token recycled: Threat.GetSituation returns new unit's situation, not stale cached value")
@@ -438,7 +438,7 @@ do
     local np = Mocks.CreateTestNameplate(token)
 
     -- Ejecutar ApplyToUnit como lo haria el core
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
 
     -- HealthBar NO debe haberse hookeado ni cambiado de color
     local hb = addonTable.Utils.GetHealthBar(np)
@@ -502,7 +502,7 @@ do
     Mocks.unitCastingInfoCallCounts[token] = 0
     Mocks.unitChannelInfoCallCounts[token] = 0
 
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
 
     check(Mocks.unitCastingInfoCallCounts[token] == 1,
         "CastingBar: UnitCastingInfo se llama UNA sola vez por ApplyToUnit (BuildSnapshot), no dos")
@@ -528,7 +528,7 @@ do
         cast = { name = "Interruptible Cast", startTime = 0, endTime = 2000, uninterruptible = false }
     })
     local np = Mocks.CreateTestNameplate(token)
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
 
     local hb = addonTable.Utils.GetHealthBar(np)
     local r, g, b = hb:GetStatusBarColor()
@@ -541,7 +541,7 @@ do
     Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
     Mocks.CreateTestNameplate(token)
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
 
     local np2 = Mocks.nameplates[token]
     hb = addonTable.Utils.GetHealthBar(np2)
@@ -565,7 +565,7 @@ do
     Mocks.CreateTestUnit(token, { level = -1, classification = "elite", faction = "Horde" })
     local npBoss = Mocks.CreateTestNameplate(token)
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
 
     check(npBoss.MinimizerDesimplifiedPersistent == true,
         "GAP2: boss no simplificable queda marcado como persistente")
@@ -573,7 +573,7 @@ do
     Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde" })
     Mocks.CreateTestNameplate(token)
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
 
     local simplify, reason = addonTable.Decision.ShouldSimplifyUnit(token, Mocks.nameplates[token])
     check(simplify == true and reason == "simplify",
@@ -589,7 +589,7 @@ do
     local hb1 = addonTable.Utils.GetHealthBar(np1)
     Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde" })
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
 
     check(np1.MinimizerHitTestRegion == hb1,
         "GAP3: el hit-test de la primera nameplate apunta al healthBar actual")
@@ -598,7 +598,7 @@ do
     local npRecycled = Mocks.CreateTestNameplate(token)
     local hbRecycled = addonTable.Utils.GetHealthBar(npRecycled)
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
 
     check(npRecycled.MinimizerHitTestRegion == hbRecycled,
         "GAP3: al reciclar el token, el hit-test se sincroniza con la nueva healthBar")
@@ -632,7 +632,7 @@ do
     })
     local np = Mocks.CreateTestNameplate(token)
     addonTable.Cast.InvalidateState(token)
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
 
     local hb = addonTable.Utils.GetHealthBar(np)
     local r, g, b = hb:GetStatusBarColor()
@@ -651,7 +651,7 @@ do
     -- Terminar channel
     Mocks.units[token].channel = nil
     addonTable.Cast.InvalidateState(token)
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
 
         local r2, g2, b2 = addonTable.Utils.GetHealthBar(np):GetStatusBarColor()
         check(math.abs(r2 - addonTable.Constants.HealthColors.superiorUninterruptible[1]) < 0.01 and
@@ -669,7 +669,7 @@ do
         cast = { name = "Secret Cast", startTime = 0, endTime = 2000, uninterruptible = Mocks.Secret(false) }
     })
     local np = Mocks.CreateTestNameplate(token)
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
 
     local hb = addonTable.Utils.GetHealthBar(np)
     local r, g, b = hb:GetStatusBarColor()
@@ -688,7 +688,7 @@ do
     -- Terminar cast pero persiste
     Mocks.units[token].cast = nil
     addonTable.Cast.InvalidateState(token)
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
 
         check(np.MinimizerPersistentCastColor ~= nil and math.abs(np.MinimizerPersistentCastColor[1] - addonTable.Constants.HealthColors.castInterruptible[1]) < 0.01 and
                     math.abs(np.MinimizerPersistentCastColor[2] - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
@@ -708,7 +708,7 @@ do
     })
     local npMelee = Mocks.CreateTestNameplate("nameplate10")
     addonTable.Cast.InvalidateState("nameplate10")
-    addonTable.Core.ApplyToUnit("nameplate10")
+    addonTable.Dispatcher.ApplyToUnit("nameplate10")
     local hbMelee = addonTable.Utils.GetHealthBar(npMelee)
     local r, g, b = hbMelee:GetStatusBarColor()
     check(math.abs(r - 0.10) < 0.01 and math.abs(g - 1.00) < 0.01 and math.abs(b - 0.10) < 0.01,
@@ -717,7 +717,7 @@ do
     -- 1b. Melee termina el cast -> persiste verde (flag)
     Mocks.units["nameplate10"].cast = nil
     addonTable.Cast.InvalidateState("nameplate10")
-    addonTable.Core.ApplyToUnit("nameplate10")
+    addonTable.Dispatcher.ApplyToUnit("nameplate10")
     r, g, b = hbMelee:GetStatusBarColor()
     check(math.abs(r - 0.10) < 0.01 and math.abs(g - 1.00) < 0.01 and math.abs(b - 0.10) < 0.01,
         "HealthBarColor: inferior (melee) termina cast -> PERSISTE verde (flag)")
@@ -729,7 +729,7 @@ do
     })
     local npCaster = Mocks.CreateTestNameplate("nameplate13")
     addonTable.Cast.InvalidateState("nameplate13")
-    addonTable.Core.ApplyToUnit("nameplate13")
+    addonTable.Dispatcher.ApplyToUnit("nameplate13")
     local hbCaster = addonTable.Utils.GetHealthBar(npCaster)
     r, g, b = hbCaster:GetStatusBarColor()
     check(math.abs(r - 0.20) < 0.01 and math.abs(g - 0.55) < 0.01 and math.abs(b - 1.00) < 0.01,
@@ -738,7 +738,7 @@ do
     -- 2b. Caster termina cast -> persiste verde
     Mocks.units["nameplate13"].cast = nil
     addonTable.Cast.InvalidateState("nameplate13")
-    addonTable.Core.ApplyToUnit("nameplate13")
+    addonTable.Dispatcher.ApplyToUnit("nameplate13")
     r, g, b = hbCaster:GetStatusBarColor()
     check(math.abs(r - 0.20) < 0.01 and math.abs(g - 0.55) < 0.01 and math.abs(b - 1.00) < 0.01,
         "HealthBarColor: inferior (caster/azul) termina cast -> NO cambia (permanece azul)")
@@ -750,7 +750,7 @@ do
     })
     local npMeleeUnint = Mocks.CreateTestNameplate("nameplate14")
     addonTable.Cast.InvalidateState("nameplate14")
-    addonTable.Core.ApplyToUnit("nameplate14")
+    addonTable.Dispatcher.ApplyToUnit("nameplate14")
     local hbMeleeUnint = addonTable.Utils.GetHealthBar(npMeleeUnint)
     r, g, b = hbMeleeUnint:GetStatusBarColor()
     check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01,
@@ -763,7 +763,7 @@ do
     })
     local npMeleeChannelUnint = Mocks.CreateTestNameplate("nameplate140")
     addonTable.Cast.InvalidateState("nameplate140")
-    addonTable.Core.ApplyToUnit("nameplate140")
+    addonTable.Dispatcher.ApplyToUnit("nameplate140")
     local hbMeleeChannelUnint = addonTable.Utils.GetHealthBar(npMeleeChannelUnint)
     r, g, b = hbMeleeChannelUnint:GetStatusBarColor()
     check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01,
@@ -772,7 +772,7 @@ do
     -- 3c. Inferior termina cast ininterrumpible -> el COLOR persiste (gris), la desimplificacion sigue siendo temporal
     Mocks.units["nameplate14"].cast = nil
     addonTable.Cast.InvalidateState("nameplate14")
-    addonTable.Core.ApplyToUnit("nameplate14")
+    addonTable.Dispatcher.ApplyToUnit("nameplate14")
     r, g, b = hbMeleeUnint:GetStatusBarColor()
     check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01,
         "HealthBarColor: inferior termina cast ininterrumpible -> el COLOR persiste gris (desimplificacion sigue siendo temporal)")
@@ -785,7 +785,7 @@ do
     })
     local npBossUnint = Mocks.CreateTestNameplate("nameplate11")
     addonTable.Cast.InvalidateState("nameplate11")
-    addonTable.Core.ApplyToUnit("nameplate11")
+    addonTable.Dispatcher.ApplyToUnit("nameplate11")
     local hbBossUnint = addonTable.Utils.GetHealthBar(npBossUnint)
     r, g, b = hbBossUnint:GetStatusBarColor()
     check(math.abs(r - addonTable.Constants.HealthColors.boss[1]) < 0.01 and
@@ -800,7 +800,7 @@ do
     })
     local npBossInt = Mocks.CreateTestNameplate("nameplate12")
     addonTable.Cast.InvalidateState("nameplate12")
-    addonTable.Core.ApplyToUnit("nameplate12")
+    addonTable.Dispatcher.ApplyToUnit("nameplate12")
     local hbBossInt = addonTable.Utils.GetHealthBar(npBossInt)
     r, g, b = hbBossInt:GetStatusBarColor()
     check(math.abs(r - 0.65) < 0.01 and math.abs(g - 0.25) < 0.01 and math.abs(b - 1.00) < 0.01,
@@ -817,7 +817,7 @@ do
         local bossGuid = Mocks.units[token].guid
         Mocks.CreateTestUnit("focus", { guid = bossGuid, name = "Focus Boss" })
         local np = Mocks.CreateTestNameplate(token)
-        addonTable.Core.ApplyToUnit(token)
+        addonTable.Dispatcher.ApplyToUnit(token)
 
         local hb = addonTable.Utils.GetHealthBar(np)
         local r, g, b = hb:GetStatusBarColor()
@@ -834,7 +834,7 @@ do
         local token = "nameplate51"
         Mocks.CreateTestUnit(token, { level = -1, classification = "elite", faction = "Horde", threatSituation = 3 })
         local np = Mocks.CreateTestNameplate(token)
-        addonTable.Core.ApplyToUnit(token)
+        addonTable.Dispatcher.ApplyToUnit(token)
 
         local hb = addonTable.Utils.GetHealthBar(np)
         local r, g, b = hb:GetStatusBarColor()
@@ -855,7 +855,7 @@ do
         np.UnitFrame.healthBar.totalAbsorbOverlay = CreateFrame("Frame")
         np.UnitFrame.healthBar.totalAbsorbOverlay:Show()
 
-        addonTable.Core.ApplyToUnit(token)
+        addonTable.Dispatcher.ApplyToUnit(token)
         local hb = addonTable.Utils.GetHealthBar(np)
         local r, g, b = hb:GetStatusBarColor()
         local ac = addonTable.Constants.HealthColors.absorb
@@ -878,7 +878,7 @@ do
     np.UnitFrame.healthBar.totalAbsorbOverlay:Show()
 
     -- Ensure ApplyToUnit paints the absorb color
-    addonTable.Core.ApplyToUnit(token)
+    addonTable.Dispatcher.ApplyToUnit(token)
     local hb = addonTable.Utils.GetHealthBar(np)
     local r, g, b = hb:GetStatusBarColor()
     local ac = addonTable.Constants.HealthColors.absorb
@@ -988,7 +988,7 @@ do
     check(addonTable.ActiveNameplates[tokenA] ~= nil and addonTable.ActiveNameplates[tokenB] ~= nil,
         "ApplyToAll: ambas unidades quedan registradas en ActiveNameplates tras NAME_PLATE_UNIT_ADDED")
 
-    local okAll = pcall(addonTable.Core.ApplyToAll, true)
+    local okAll = pcall(addonTable.Dispatcher.ApplyToAll, true)
     check(okAll == true,
         "ApplyToAll: se ejecuta sin error iterando ActiveNameplates")
 
@@ -1003,13 +1003,19 @@ do
     check(addonTable.ActiveNameplates[tokenB] ~= nil,
         "ApplyToAll: ActiveNameplates NO afecta a otros tokens al remover uno")
 
-    local okAfterRemoval = pcall(addonTable.Core.ApplyToAll, true)
+    local okAfterRemoval = pcall(addonTable.Dispatcher.ApplyToAll, true)
     check(okAfterRemoval == true,
         "ApplyToAll: sigue funcionando sin error tras remover una unidad del registro")
 end
 
--- --- TEST: UNIT_ABSORB_AMOUNT_CHANGED triggers Dispatcher.ApplyToUnit ---
+-- --- TEST: UNIT_ABSORB_AMOUNT_CHANGED Event Registration and Dispatch ---
 do
+    -- 1. Assert EventFrame actually registered UNIT_ABSORB_AMOUNT_CHANGED
+    local eventFrame = _G.MinimizerEventFrame
+    check(eventFrame ~= nil and eventFrame.registeredEvents and eventFrame.registeredEvents["UNIT_ABSORB_AMOUNT_CHANGED"] == true,
+        "Events: MinimizerEventFrame tiene registrado UNIT_ABSORB_AMOUNT_CHANGED")
+
+    -- 2. Assert firing UNIT_ABSORB_AMOUNT_CHANGED invokes Dispatcher.ApplyToUnit
     local unit = "nameplate99"
     Mocks.CreateTestUnit(unit, { level = 70, classification = "normal", faction = "Horde" })
     Mocks.CreateTestNameplate(unit)

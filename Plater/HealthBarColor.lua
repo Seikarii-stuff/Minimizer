@@ -1,5 +1,5 @@
 local _, Minimizer = ...
-if not Minimizer or not Minimizer.Core then return end
+if not Minimizer then return end
 
 local HealthBarColor = {}
 Minimizer.HealthBarColor = HealthBarColor
@@ -103,17 +103,14 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     local indicator = healthBar.totalAbsorbOverlay or healthBar.totalAbsorb
     if indicator then HookIndicator(indicator, healthBar) end
 
-    local isStale
-    if Minimizer.Lifecycle and Minimizer.Lifecycle.IsGenerationStale then
-        isStale = Minimizer.Lifecycle.IsGenerationStale(unit, nameplate.MinimizerHealthBarColorGen)
-            or (nameplate.MinimizerHealthBarColorUnit ~= unit)
-    else
-        local currentGen = Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit) or 0
+    local isStale = (Minimizer.Lifecycle and Minimizer.Lifecycle.IsGenerationStale and Minimizer.Lifecycle.IsGenerationStale(unit, nameplate.MinimizerHealthBarColorGen))
+        or (nameplate.MinimizerHealthBarColorUnit ~= unit)
+    if isStale == nil then
+        local currentGen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit)) or 0
         isStale = (nameplate.MinimizerHealthBarColorGen ~= currentGen or nameplate.MinimizerHealthBarColorUnit ~= unit)
     end
     if isStale then
-        local currentGen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
-            or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit)) or 0
+        local currentGen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit)) or 0
         nameplate.MinimizerHealthBarColorUnit = unit
         nameplate.MinimizerHealthBarColorGen = currentGen
         nameplate.MinimizerPersistentCastColor = nil
@@ -123,7 +120,8 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     if snapshot then
         baseKind = snapshot.displayKind
     else
-        baseKind = Minimizer.Core and Minimizer.Core.ComputeDisplayKind and Minimizer.Core.ComputeDisplayKind(unit, nameplate) or Minimizer.Classification.GetEliteType(unit)
+        baseKind = (Minimizer.Snapshot and Minimizer.Snapshot.ComputeDisplayKind and Minimizer.Snapshot.ComputeDisplayKind(unit, nameplate))
+            or (Minimizer.Classification and Minimizer.Classification.GetEliteType and Minimizer.Classification.GetEliteType(unit))
     end
 
     local color = GetSafeHealthColor(baseKind)
@@ -144,9 +142,7 @@ function HealthBarColor:UpdateNamePlate(unit, nameplate, snapshot)
     if hasHadAbsorb == nil then
         local liveAbsorb = snapshot and snapshot.hasAbsorb
         if liveAbsorb == nil then liveAbsorb = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate) end
-        hasHadAbsorb = (Minimizer.Absorb and Minimizer.Absorb.MarkSeen and Minimizer.Absorb.MarkSeen(unit, nameplate, liveAbsorb))
-            or (Minimizer.Absorb and Minimizer.Absorb.MarkAbsorbSeen and Minimizer.Absorb.MarkAbsorbSeen(unit, nameplate, liveAbsorb))
-            or false
+        hasHadAbsorb = (Minimizer.Absorb and Minimizer.Absorb.MarkSeen and Minimizer.Absorb.MarkSeen(unit, nameplate, liveAbsorb)) or false
     end
 
     if hasHadAbsorb then
@@ -233,8 +229,6 @@ HookIndicator = function(indicator, healthBar)
             if unit then
                 if Minimizer and Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
                     Minimizer.Dispatcher.ApplyToUnit(unit)
-                elseif Minimizer and Minimizer.Core and Minimizer.Core.ApplyToUnit then
-                    Minimizer.Core.ApplyToUnit(unit)
                 else
                     HealthBarColor:UpdateNamePlate(unit, nameplate, nil)
                 end

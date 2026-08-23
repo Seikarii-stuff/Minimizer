@@ -90,10 +90,3 @@ function Minimizer.Lifecycle.ClearNeverSimplify(unit)
     end
     Minimizer.ActiveNameplates[unit] = nil
 end
-
--- Backward compatibility aliases on Minimizer.Core
-Minimizer.Core = Minimizer.Core or {}
--- Export for backward compatibility hooks
-Minimizer.Core.GetPlateGeneration = Minimizer.Lifecycle.GetGeneration
-Minimizer.Core.IncrementPlateGeneration = Minimizer.Lifecycle.IncrementGeneration
-Minimizer.Core.ClearNeverSimplify = Minimizer.Lifecycle.ClearNeverSimplify

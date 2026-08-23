@@ -1,5 +1,5 @@
 local _, Minimizer = ...
-if not Minimizer or not Minimizer.Core then return end
+if not Minimizer then return end
 
 local function ClampSimplifyPercent(value)
     value = tonumber(value) or 0
@@ -55,8 +55,8 @@ SlashCmdList["MINIMIZER"] = function(msg)
     local function RequestUpdate()
         if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
             Minimizer.Dispatcher.RequestFullUpdate()
-        elseif Minimizer.Core and Minimizer.Core.ApplyToAll then
-            Minimizer.Core.ApplyToAll()
+        elseif Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToAll then
+            Minimizer.Dispatcher.ApplyToAll()
         end
     end
 

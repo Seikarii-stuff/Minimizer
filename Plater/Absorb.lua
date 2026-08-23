@@ -28,17 +28,13 @@ end
 
 function Minimizer.Absorb.MarkSeen(unit, nameplate, hasAbsorbNow)
     if not nameplate then return hasAbsorbNow == true end
-    local isStale
-    if Minimizer.Lifecycle and Minimizer.Lifecycle.IsGenerationStale then
-        isStale = Minimizer.Lifecycle.IsGenerationStale(unit, nameplate.MinimizerAbsorbPersistentGen)
-    else
-        local currentGen = (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit)) or 0
+    local isStale = (Minimizer.Lifecycle and Minimizer.Lifecycle.IsGenerationStale and Minimizer.Lifecycle.IsGenerationStale(unit, nameplate.MinimizerAbsorbPersistentGen))
+    if isStale == nil then
+        local currentGen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit)) or 0
         isStale = nameplate.MinimizerAbsorbPersistentGen ~= currentGen
     end
     if isStale then
-        local currentGen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
-            or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit))
-            or 0
+        local currentGen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit)) or 0
         nameplate.MinimizerAbsorbPersistentGen = currentGen
         nameplate.MinimizerHasHadAbsorb = nil
     end

@@ -456,6 +456,122 @@ do
     assert_eq(castCalls, 1, "Invariant: UnitCastingInfo called exactly once per ApplyToUnit pass")
 end
 
+-- --------------------------------------------------------------------------
+-- 10. Event Registration & Propagation Invariants
+-- --------------------------------------------------------------------------
+do
+    print("\n--- Testing EventFrame Registration & Event Dispatch ---")
+    local eventFrame = _G.MinimizerEventFrame
+    assert_true(eventFrame ~= nil, "EventFrame: MinimizerEventFrame exists")
+    assert_true(eventFrame.registeredEvents ~= nil, "EventFrame: registeredEvents table exists")
+    assert_eq(eventFrame.registeredEvents["UNIT_ABSORB_AMOUNT_CHANGED"], true, "EventFrame: UNIT_ABSORB_AMOUNT_CHANGED is registered")
+    assert_eq(eventFrame.registeredEvents["NAME_PLATE_UNIT_ADDED"], true, "EventFrame: NAME_PLATE_UNIT_ADDED is registered")
+    assert_eq(eventFrame.registeredEvents["NAME_PLATE_UNIT_REMOVED"], true, "EventFrame: NAME_PLATE_UNIT_REMOVED is registered")
+    assert_eq(eventFrame.registeredEvents["UNIT_SPELLCAST_START"], true, "EventFrame: UNIT_SPELLCAST_START is registered")
+    assert_eq(eventFrame.registeredEvents["UNIT_THREAT_SITUATION_UPDATE"], true, "EventFrame: UNIT_THREAT_SITUATION_UPDATE is registered")
+
+    -- Verify UNIT_ABSORB_AMOUNT_CHANGED fires and dispatches to Dispatcher.ApplyToUnit
+    local dispatchedUnit = nil
+    local origApply = addonTable.Dispatcher.ApplyToUnit
+    addonTable.Dispatcher.ApplyToUnit = function(u, force)
+        dispatchedUnit = u
+        return origApply(u, force)
+    end
+
+    Mocks.FireEvent("UNIT_ABSORB_AMOUNT_CHANGED", "nameplate15")
+    addonTable.Dispatcher.ApplyToUnit = origApply
+    assert_eq(dispatchedUnit, "nameplate15", "EventFrame: Firing UNIT_ABSORB_AMOUNT_CHANGED triggers Dispatcher.ApplyToUnit")
+end
+
+-- --------------------------------------------------------------------------
+-- 11. Cross-Generation Recycle Leak-Prevention Invariant
+-- --------------------------------------------------------------------------
+do
+    print("\n--- Testing Cross-Generation Recycle Invariant ---")
+    _G.MinimizerDB = { simplifyEnabled = true }
+    Mocks.units = {}
+    Mocks.nameplates = {}
+    Mocks.CreateTestUnit("player", { name = "Player", level = 70, faction = "Alliance", isPlayer = true, role = "DAMAGER" })
+    addonTable.Threat.RefreshPlayerTankCache()
+
+    local token = "nameplate20"
+
+    -- Unit A: Inferior casting interruptible with absorb + cast color
+    Mocks.CreateTestUnit(token, {
+        name = "Old Mob", level = 70, classification = "normal", faction = "Horde", powerType = 1,
+        cast = { name = "Interruptible Cast", startTime = 0, endTime = 2000, uninterruptible = false }
+    })
+    local npOld = Mocks.CreateTestNameplate(token)
+    npOld.UnitFrame.healthBar.totalAbsorbOverlay = CreateFrame("Frame", nil, npOld.UnitFrame.healthBar)
+    npOld.UnitFrame.healthBar.totalAbsorbOverlay:Show()
+
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
+    addonTable.Dispatcher.ApplyToUnit(token, true)
+
+    assert_eq(npOld.MinimizerHasHadAbsorb, true, "Recycle Test: Old unit flagged as MinimizerHasHadAbsorb")
+    assert_true(npOld.MinimizerPersistentCastColor ~= nil, "Recycle Test: Old unit has MinimizerPersistentCastColor")
+    assert_eq(npOld.simplified, false, "Recycle Test: Old unit with absorb/cast is NOT simplified")
+
+    -- Remove Unit A
+    Mocks.FireEvent("NAME_PLATE_UNIT_REMOVED", token)
+    if NamePlateDriverFrame and NamePlateDriverFrame.OnNamePlateRemoved then
+        NamePlateDriverFrame:OnNamePlateRemoved(token)
+    end
+
+    -- Recycle to Unit B: Normal melee trash mob
+    Mocks.CreateTestUnit(token, {
+        name = "New Melee Trash", level = 70, classification = "normal", faction = "Horde", powerType = 1
+    })
+    local npNew = Mocks.CreateTestNameplate(token)
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
+    addonTable.Dispatcher.ApplyToUnit(token, true)
+
+    assert_eq(npNew.MinimizerDesimplifiedPersistent, nil, "Recycle Test: Recycled unit does NOT inherit MinimizerDesimplifiedPersistent")
+    assert_eq(npNew.MinimizerHasHadAbsorb, nil, "Recycle Test: Recycled unit does NOT inherit MinimizerHasHadAbsorb")
+    assert_eq(npNew.MinimizerPersistentCastColor, nil, "Recycle Test: Recycled unit does NOT inherit MinimizerPersistentCastColor")
+    assert_eq(npNew.simplified, true, "Recycle Test: Recycled unit correctly simplified for normal melee")
+    assert_eq(npNew.MinimizerState, true, "Recycle Test: Recycled unit MinimizerState is true")
+end
+
+-- --------------------------------------------------------------------------
+-- 12. Absorb Indicator Hook Safe Reentrancy Invariant
+-- --------------------------------------------------------------------------
+do
+    print("\n--- Testing Absorb Indicator Hook Reentrancy Safety ---")
+    Mocks.units = {}
+    Mocks.nameplates = {}
+    Mocks.CreateTestUnit("player", { name = "Player", level = 70, faction = "Alliance", isPlayer = true, role = "DAMAGER" })
+    addonTable.Threat.RefreshPlayerTankCache()
+
+    local token = "nameplate25"
+    Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
+    local np = Mocks.CreateTestNameplate(token)
+    local overlay = CreateFrame("Frame", nil, np.UnitFrame.healthBar)
+    np.UnitFrame.healthBar.totalAbsorbOverlay = overlay
+    overlay:Hide()
+
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
+    addonTable.Dispatcher.ApplyToUnit(token, true)
+
+    -- Triggering Show on absorb overlay triggers HookIndicator -> Dispatcher.ApplyToUnit
+    local applyCount = 0
+    local origApply = addonTable.Dispatcher.ApplyToUnit
+    addonTable.Dispatcher.ApplyToUnit = function(u, force)
+        applyCount = applyCount + 1
+        return origApply(u, force)
+    end
+
+    overlay:Show()
+    addonTable.Dispatcher.ApplyToUnit = origApply
+
+    assert_true(applyCount >= 1, "HookIndicator: Show on absorb overlay invoked Dispatcher.ApplyToUnit")
+    local hb = addonTable.Utils.GetHealthBar(np)
+    local r, g, b = hb:GetStatusBarColor()
+    local ac = addonTable.Constants.HealthColors.absorb
+    assert_true(math.abs(r - ac[1]) < 0.01 and math.abs(g - ac[2]) < 0.01 and math.abs(b - ac[3]) < 0.01,
+        "HookIndicator: HealthBar color updated to absorb pink without infinite loop")
+end
+
 print(string.format("\n=== EQUIVALENCE TEST SUMMARY: %d/%d passed ===", testsRun - testsFailed, testsRun))
 if testsFailed > 0 then
     os.exit(1)

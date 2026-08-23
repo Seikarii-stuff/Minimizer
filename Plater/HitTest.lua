@@ -40,9 +40,7 @@ end
 
 local function ScheduleRetry(unit)
     if pendingRetries[unit] then return end
-    local gen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit))
-        or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(unit))
-        or 0
+    local gen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit)) or 0
     pendingRetries[unit] = { remaining = MAX_RETRY_TICKS, gen = gen }
 
     local function tick()

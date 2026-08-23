@@ -45,8 +45,8 @@ function Focus:SetFaceEnabled(enabled)
     end
     if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
         Minimizer.Dispatcher.RequestFullUpdate()
-    elseif Minimizer.Core then
-        Minimizer.Core.ApplyToAll()
+    elseif Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToAll then
+        Minimizer.Dispatcher.ApplyToAll()
     end
 end
 
@@ -54,8 +54,8 @@ function Focus:SetArrowsEnabled(enabled)
     MinimizerDB.enableFocusArrows = enabled == true
     if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
         Minimizer.Dispatcher.RequestFullUpdate()
-    elseif Minimizer.Core then
-        Minimizer.Core.ApplyToAll()
+    elseif Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToAll then
+        Minimizer.Dispatcher.ApplyToAll()
     end
 end
 

@@ -26,14 +26,11 @@ local function ApplyToUnitInternal(unit, forceUpdate)
         Minimizer.ActiveNameplates[npToken] = nameplate
     end
 
-    local snapshot = (Minimizer.Snapshot and Minimizer.Snapshot.Build and Minimizer.Snapshot.Build(npToken, nameplate))
-        or (Minimizer.Core and Minimizer.Core.BuildSnapshot and Minimizer.Core.BuildSnapshot(npToken, nameplate))
+    local snapshot = Minimizer.Snapshot and Minimizer.Snapshot.Build and Minimizer.Snapshot.Build(npToken, nameplate)
 
     local shouldSimplify = false
     local reason = ""
-    local currentGen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(npToken))
-        or (Minimizer.Core and Minimizer.Core.GetPlateGeneration and Minimizer.Core.GetPlateGeneration(npToken))
-        or 0
+    local currentGen = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(npToken)) or 0
 
     local isStale
     if Minimizer.Lifecycle and Minimizer.Lifecycle.IsGenerationStale then
@@ -242,10 +239,3 @@ end
 function Minimizer.Dispatcher.StartMonitor()
     Minimizer.Dispatcher.UpdateMonitorState()
 end
-
--- Backward compatibility aliases on Minimizer.Core
-Minimizer.Core = Minimizer.Core or {}
-Minimizer.Core.ApplyToUnit = Minimizer.Dispatcher.ApplyToUnit
-Minimizer.Core.ApplyToAll = Minimizer.Dispatcher.ApplyToAll
-Minimizer.Core.RequestApplyToAll = Minimizer.Dispatcher.RequestApplyToAll
-Minimizer.Core.StartSafetyNet = Minimizer.Dispatcher.StartSafetyNet

@@ -42,7 +42,7 @@ local s1, s2, s3, s4 = addonTable.Cast.GetState(token)
 print("Cast.GetState before ApplyToUnit ->", s1, s2, s3 and "<secret>" or s3, s4)
 print("Interrupt.IsReady() ->", addonTable.Interrupt.IsReady())
 
-addonTable.Core.ApplyToUnit(token)
+addonTable.Dispatcher.ApplyToUnit(token)
 
 local castCalls = Mocks.unitCastingInfoCallCounts[token] or 0
 local channelCalls = Mocks.unitChannelInfoCallCounts[token] or 0

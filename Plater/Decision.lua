@@ -51,9 +51,7 @@ function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
         if liveAbsorb == nil then
             liveAbsorb = Minimizer.Absorb and Minimizer.Absorb.HasAbsorb and Minimizer.Absorb.HasAbsorb(unit, nameplate)
         end
-        hasHadAbsorb = (Minimizer.Absorb and Minimizer.Absorb.MarkSeen and Minimizer.Absorb.MarkSeen(unit, nameplate, liveAbsorb))
-            or (Minimizer.Absorb and Minimizer.Absorb.MarkAbsorbSeen and Minimizer.Absorb.MarkAbsorbSeen(unit, nameplate, liveAbsorb))
-            or false
+        hasHadAbsorb = (Minimizer.Absorb and Minimizer.Absorb.MarkSeen and Minimizer.Absorb.MarkSeen(unit, nameplate, liveAbsorb)) or false
     end
     if hasHadAbsorb then return false, "no simp" end
 
