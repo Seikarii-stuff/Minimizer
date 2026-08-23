@@ -198,6 +198,16 @@ do
     Mocks.nameplates = {}
     Mocks.time = 400.0
 
+    -- Re-create the player unit that the dispatcher’s pipeline expects.
+    Mocks.CreateTestUnit("player", {
+        name = "Player",
+        level = 70,
+        faction = "Alliance",
+        isPlayer = true,
+        class = "WARRIOR",
+        role = "DAMAGER",
+    })
+
     Mocks.CreateTestUnit("nameplate10", { name = "Mob A", level = 70, classification = "worldboss" })
     Mocks.CreateTestUnit("nameplate11", { name = "Mob B", level = 70, classification = "normal" })
     local np10 = Mocks.CreateTestNameplate("nameplate10")
