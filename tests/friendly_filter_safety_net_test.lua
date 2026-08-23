@@ -125,7 +125,7 @@ check(moduleCalls == 0,
     "Friendly NPC: no atraviesa Modules")
 
 -- --------------------------------------------------------------------------
--- 3. Enemy plates still enter the normal pipeline.
+-- 3. Enemy plates, including hostile PvP players, still enter the pipeline.
 -- --------------------------------------------------------------------------
 Mocks.CreateTestUnit("nameplate3", {
     name = "Enemy",
@@ -143,6 +143,23 @@ check(snapshotCalls > 0,
     "Enemy: sigue atravesando Snapshot")
 check(moduleCalls > 0,
     "Enemy: sigue atravesando Modules")
+
+Mocks.CreateTestUnit("nameplate6", {
+    name = "Enemy Player",
+    level = 70,
+    faction = "Horde",
+    isPlayer = true,
+    classification = "normal",
+})
+Mocks.CreateTestNameplate("nameplate6")
+Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate6")
+
+check(addonTable.ActiveNameplates["nameplate6"] ~= nil,
+    "PvP enemigo: sigue entrando en ActiveNameplates")
+check(snapshotCalls > 1,
+    "PvP enemigo: sigue atravesando Snapshot")
+check(moduleCalls > 1,
+    "PvP enemigo: sigue atravesando Modules")
 
 -- --------------------------------------------------------------------------
 -- 4. Target/Focus overlays remain event-driven even when their friendly plate
