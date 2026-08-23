@@ -318,7 +318,7 @@ do
     addonTable.Dispatcher.ApplyToUnit("nameplate15", false)
     Mocks.AdvanceTime(0)
     local noCastCalls = Mocks.unitCastingInfoCallCounts["nameplate15"] or 0
-    assert_eq(noCastCalls, 0, "Invariant: UnitCastingInfo not called when no cast present")
+    assert_eq(noCastCalls, 1, "Invariant: Cast.lua sigue leyendo UnitCastingInfo una vez aunque no haya cast (sin cache, por diseño)")
 
     -- Case B: with cast
     Mocks.unitCastingInfoCallCounts = {}
@@ -483,8 +483,12 @@ do
     Mocks.unitCastingInfoCallCounts = {}
     Mocks.unitChannelInfoCallCounts = {}
 
+    -- Add player fixture for pipeline relevance
+    Mocks.CreateTestUnit("player", { name = "Player", level = 70, faction = "Alliance", isPlayer = true, class = "WARRIOR", role = "DAMAGER" })
+    addonTable.Threat.InvalidatePlayerTankCache()
+    addonTable.Threat.RefreshPlayerTankCache()
     -- Verify displayKind priorities: Focus (1) > Aggro (2) > Absorb (3) > Boss (4) > Caster (5) > Melee (6)
-    Mocks.CreateTestUnit("nameplate15", { name = "Boss Mob", level = 70, classification = "worldboss", inCombat = true })
+    Mocks.CreateTestUnit("nameplate15", { name = "Boss Mob", level = 70, classification = "worldboss", inCombat = true, faction = "Alliance" })
     local npP1 = Mocks.CreateTestNameplate("nameplate15")
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate15")
 
@@ -504,7 +508,7 @@ do
     Mocks.units["nameplate15"].cast = nil
     addonTable.Dispatcher.ApplyToUnit("nameplate15", false)
     local noCastCalls = Mocks.unitCastingInfoCallCounts["nameplate15"] or 0
-    assert_eq(noCastCalls, 0, "Invariant: UnitCastingInfo not called when no cast present")
+    assert_eq(noCastCalls, 1, "Invariant: Cast.lua sigue leyendo UnitCastingInfo una vez aunque no haya cast (sin cache, por diseño)")
 
     -- Case B: unit with a cast should call UnitCastingInfo exactly once
     Mocks.unitCastingInfoCallCounts = {}
@@ -536,6 +540,8 @@ do
         dispatchedFriendly = u
         return origApply(u, force)
     end
+    assert_true(addonTable.Dispatcher.IsPipelineRelevant("nameplate15") == false,
+        "Pre-check: nameplate15 should not be pipeline-relevant for friendly UNIT_ABSORB")
     Mocks.FireEvent("UNIT_ABSORB_AMOUNT_CHANGED", "nameplate15")
     addonTable.Dispatcher.ApplyToUnit = origApply
     assert_eq(dispatchedFriendly, nil, "EventFrame: Friendly UNIT_ABSORB does not dispatch Dispatcher")
@@ -544,6 +550,8 @@ do
     Mocks.CreateTestUnit("nameplate99", { name = "Enemy Mob", level = 70, classification = "normal", faction = "Horde" })
     Mocks.CreateTestNameplate("nameplate99")
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate99")
+    assert_true(addonTable.Dispatcher.IsPipelineRelevant("nameplate99") == true,
+        "Pre-check: nameplate99 must be pipeline-relevant before UNIT_ABSORB_AMOUNT_CHANGED")
     local dispatchedEnemy = nil
     addonTable.Dispatcher.ApplyToUnit = function(u, force)
         dispatchedEnemy = u
