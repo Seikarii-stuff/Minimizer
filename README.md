@@ -1,472 +1,402 @@
 # Minimizer
 
-> Simplifica nameplates enemigas usando las APIs nativas de Blizzard (`C_NamePlateManager`), con lógica adicional de color, marcadores de target/focus y widgets de cooldown, todo diseñado para sobrevivir a los "secretos" (Secrets/Midnight) sin taintear la UI.
+> Simplifica nameplates enemigas usando las APIs nativas de Blizzard (`C_NamePlateManager`), y añade encima color de healthbar/castbar según una leyenda de prioridades ("M+"), marcadores de target/focus, y widgets de cooldown (halo de target, retrato de focus, pips compartidos) — todo diseñado para sobrevivir a los "secretos" (Secrets/Midnight) sin taintear la UI.
 
-Este documento es la **referencia técnica canónica** del addon: arquitectura, APIs de WoW verificadas contra cliente real, patrones seguros de manejo de taint/secrets, y el estado actual de cada feature. Todo lo que hay aquí está verificado línea por línea contra el código fuente que compila y corre en cliente — no es una guía teórica ni copia de ningún otro addon.
+Este documento es la **referencia técnica canónica** del addon: arquitectura actual, contratos entre módulos, comportamiento verificado por tests, y guía de uso de la suite de tests/benchmark. Refleja el estado del proyecto **tras el split arquitectónico** (Lifecycle → Dispatcher → Snapshot → Decision → Rendering), no el diseño previo a esa migración.
 
-**Objetivo:** que cualquiera que toque este código pueda buscar "¿cómo resolvemos X?" y encontrar la respuesta ya verificada, en vez de tener que releer todos los `.lua` o arriesgarse a re-descubrir a base de crashes por qué comparar un secreto revienta el cliente.
-
-**Fuera de alcance:** panel de opciones/localización propios — el producto final que consume este addon ya tiene su propio menú, implementar uno aquí duplicaría trabajo. `Menu.lua` existe solo como fallback de desarrollo/debug vía `/simp menu`.
-
-**Estado del proyecto:** todas las features funcionales están implementadas y estables (ver [§8](#8-known-issues)). Lo único pendiente es benchmarking continuo y optimización de procesos que se disparan más veces de las necesarias / generación de basura (ver [§9](#9-optimización-pendiente)).
+**Qué NO pretende hacer:** no reemplaza Plater ni ningún addon de nameplates completo; no gestiona friendly/PvP (las deja sin tocar deliberadamente); no implementa su propio panel de opciones más allá de un menú mínimo de desarrollo/fallback (`Menu.lua`, `/mini menu`); no persigue exactitud milimétrica en unidades fuera de combate justo al aparecer (ver [§13 Known Issues](#13-known-issues)).
 
 ---
 
 ## Índice
 
-1. [SpellData: formato y uso](#1-spelldata-formato-y-uso)
-2. [Mapa de módulos](#2-mapa-de-módulos)
-3. [APIs de WoW verificadas y cómo las usamos](#3-apis-de-wow-verificadas-y-cómo-las-usamos)
-4. [Checklist canónico de taint / secrets](#4-checklist-canónico-de-taint--secrets)
-5. [Leyenda de color M+ (prioridades)](#5-leyenda-de-color-m-prioridades)
-6. [Historial de fixes (contexto de por qué el código es como es)](#6-historial-de-fixes)
-7. [Candidatos futuros — evaluados, no adoptados todavía](#7-candidatos-futuros--evaluados-no-adoptados-todavía)
-8. [Known Issues](#8-known-issues)
-9. [Optimización pendiente](#9-optimización-pendiente)
-10. [Baseline de performance](#10-baseline-de-performance)
+1. [Qué es Minimizer](#1-qué-es-minimizer)
+2. [Arquitectura actual](#2-arquitectura-actual)
+3. [Pipeline de una nameplate](#3-pipeline-de-una-nameplate)
+4. [Snapshot / estado](#4-snapshot--estado)
+5. [Threat Monitor](#5-threat-monitor)
+6. [Cast y Absorb](#6-cast-y-absorb)
+7. [Dispatcher y reentrancy](#7-dispatcher-y-reentrancy)
+8. [Recycling de nameplates y seguridad de generación](#8-recycling-de-nameplates-y-seguridad-de-generación)
+9. [Filtrado friendly / PvP](#9-filtrado-friendly--pvp)
+10. [Eventos](#10-eventos)
+11. [SpellData: formato y uso](#11-spelldata-formato-y-uso)
+12. [Taint / Secrets: checklist canónico](#12-taint--secrets-checklist-canónico)
+13. [Known Issues](#13-known-issues)
+14. [Testing](#14-testing)
+15. [Benchmarking](#15-benchmarking)
+16. [Performance: qué garantiza el código vs. qué observa el benchmark](#16-performance-qué-garantiza-el-código-vs-qué-observa-el-benchmark)
+17. [Mapa de módulos y orden de carga](#17-mapa-de-módulos-y-orden-de-carga)
+18. [Leyenda de color M+ (prioridades)](#18-leyenda-de-color-m-prioridades)
 
 ---
 
-## 1. SpellData: formato y uso
+## 1. Qué es Minimizer
 
-Minimizer centraliza las listas de spells usadas por widgets en `data/SpellData.lua`. El archivo admite dos formatos de entrada en cada lista:
+Minimizer usa `C_NamePlateManager.SetNamePlateSimplified(unit, bool)` para colapsar nameplates enemigas "sin nada interesante" a una versión reducida, y deja las importantes (target, focus, jefes, unidades casteando algo peligroso, unidades con aggro, etc.) en su tamaño completo. Sobre esa base añade:
 
-- Entrada legacy (número): `12345` — sigue funcionando tal cual.
+- **Color de healthbar y castbar** según una leyenda de prioridad fija ([§18](#18-leyenda-de-color-m-prioridades)): quién tiene tu aggro, quién mostró un escudo, quién es un jefe, quién está casteando algo interrumpible.
+- **Marcadores de flecha** sobre target y (opcionalmente) focus.
+- **Halo de cooldown ofensivo** sobre el target y **retrato con cooldown de interrupt** sobre el focus, más **pips** compartidos (CDs secundarios) en ambos.
+- **Sincronización del hit-test** (región de clic) de la nameplate con la healthbar real tras cada cambio de estado de simplificación.
+
+Todo el trabajo se hace intentando nunca comparar en Lua un valor que la API de WoW pueda entregar como "secreto" (Secrets/Midnight) — ver [§12](#12-taint--secrets-checklist-canónico).
+
+---
+
+## 2. Arquitectura actual
+
+El pipeline de procesamiento de una nameplate es unidireccional:
+
+```
+Lifecycle  →  Dispatcher  →  Snapshot  →  Decision  →  Rendering (Core.UpdateModules / Overlays)
+```
+
+- **`Plater/Lifecycle.lua`** (`Minimizer.Lifecycle`): única autoridad sobre qué nameplates están activas (`Minimizer.ActiveNameplates`) y sobre el contador de generación por token (`plateGeneration`). Expone `GetGeneration`, `IncrementGeneration`, `IsGenerationStale`, `RegisterNameplate`/`UnregisterNameplate`, `GetActiveNameplates`, y `ClearNeverSimplify` (teardown genérico al remover una nameplate).
+- **`Plater/Dispatcher.lua`** (`Minimizer.Dispatcher`): motor de orquestación. Decide **cuándo** se reprocesa una unidad (`ApplyToUnit`) o todas (`ApplyToAll`), filtra unidades irrelevantes para el pipeline (`IsPipelineRelevant`, ver [§9](#9-filtrado-friendly--pvp)), gestiona una cola de reentrancia coalescida ([§7](#7-dispatcher-y-reentrancy)), y aloja el **monitor dinámico de Threat** ([§5](#5-threat-monitor)).
+- **`Plater/Snapshot.lua`** (`Minimizer.Snapshot`): construye, una vez por unidad por pase, el estado combinado (`eliteType`, `hasAbsorb`/`hasHadAbsorb`, datos de threat, `isPvP`/`isFriendly`, estado de cast/channel, `displayKind`) usando un **pool de tablas por profundidad de recursión** ([§4](#4-snapshot--estado)).
+- **`Plater/Decision.lua`** (`Minimizer.Decision`): reglas de negocio puras — `ShouldSimplifyUnit`, `ShouldUnsimplify`, `ShouldLetBlizzardPaint` — que consumen el Snapshot cuando está disponible.
+- **Rendering**: `Plater/Core.lua` mantiene el registro de módulos visuales (`RegisterModule`/`UpdateModules`) que consumen el Snapshot: `HealthBarColor`, `CastingBar`, `Markers`. `Overlays/Overlays.lua` hace lo propio para los overlays de unidad especial (`Target`, `Focus`), que **no** iteran nameplates y no pasan por `Core.RegisterModule` (ver más abajo).
+- **`Plater/HitTest.lua`**: sincroniza la región de clic con la healthbar real tras cada aplicación de `SetNamePlateSimplified`, con reintentos generation-safe si Blizzard aún no permite mutar el hit-test.
+- **`Core/Cache.lua`**: cache genérico `unit -> key -> valor`, atado a `Lifecycle.GetGeneration` (una entrada cuya generación no coincide con la actual se trata como cache-miss). Lo usan `Classification` y `Threat`.
+
+`Plater/Core.lua` **ya no** contiene lifecycle, snapshot, dispatch ni decisión — quedó reducido a registro y fan-out de módulos visuales (`RegisterModule`, `UpdateModules`), manteniendo ese nombre por motivos históricos/compatibilidad con los tests, que siguen accediendo a `addonTable.Core.*`.
+
+**Overlays (`Target`/`Focus`) frente a Módulos de Plater (`HealthBarColor`/`CastingBar`/`Markers`):** ambos consumen infraestructura común (Widgets, Interrupt, Pips), pero tienen ciclos de vida distintos y deliberadamente separados:
+
+- Los **módulos de Plater** se registran en `Core.RegisterModule` y se actualizan para **cada** nameplate activa, dentro de `Dispatcher.ApplyToUnit` → `Core.UpdateModules`.
+- Los **overlays** (`Target`, `Focus`) se registran en `Overlays.Register` y atienden **una única unidad especial cada uno** (el target actual, el focus actual). Se actualizan vía `Overlays.OnUnitChanged(unit, reason)` (cambios de target/focus, altas/bajas de nameplate) y `Overlays.OnCooldownTick()` (throttle a 30 FPS enganchado a `SPELL_UPDATE_COOLDOWN`). No recorren `ActiveNameplates` ni dependen de que su unidad esté en el pipeline principal — por eso siguen funcionando incluso si esa unidad es friendly ([§9](#9-filtrado-friendly--pvp)).
+
+---
+
+## 3. Pipeline de una nameplate
+
+**Aparición (`NAME_PLATE_UNIT_ADDED`):**
+
+1. `Events.lua` incrementa la generación del token (`Lifecycle.IncrementGeneration`) y limpia cualquier estado residual de Threat para ese token (`Threat.ForgetUnit`).
+2. Se comprueba `Dispatcher.IsPipelineRelevant(unit)` (filtra friendly y PvP, ver [§9](#9-filtrado-friendly--pvp)):
+   - Si es relevante: `Dispatcher.TrackUnit(unit)` (marca el monitor de Threat como "dirty" para que reconstruya su lista), `Threat.Invalidate(unit)`, `Dispatcher.ApplyToUnit(unit)` inmediato, y además se programa un pase completo debounced (`Dispatcher.RequestApplyToAll` vía `UpdateNameplates()`) para mitigar el caso de unidades fuera de combate repintadas por Blizzard al final del mismo frame ([§13](#13-known-issues)).
+   - Si NO es relevante: `Dispatcher.ForgetUnit(unit)` — importante para que un token reciclado no herede el estado de monitor de Threat de la unidad anterior que ocupó ese mismo token.
+3. `Overlays.OnUnitChanged(unit, "added")` — Target/Focus reevalúan si la unidad que acaba de aparecer es su unidad especial, independientemente de si entró o no al pipeline principal.
+
+**`Dispatcher.ApplyToUnit(unit, forceUpdate)` (vía `ApplyToUnitInternal`):**
+
+1. `IsPipelineRelevant(unit)` — si es friendly o PvP, no hace nada más (ver [§9](#9-filtrado-friendly--pvp)).
+2. Resuelve `nameplate` y el token válido; registra la nameplate en Lifecycle (`Lifecycle.RegisterNameplate`, que alimenta `ActiveNameplates`).
+3. `Snapshot.Build(unit, nameplate)` — un snapshot por esta invocación, aislado de cualquier invocación anidada ([§4](#4-snapshot--estado)).
+4. Fast-path de "no simplificar": si `nameplate.MinimizerDesimplifiedPersistent` sigue vigente para la generación actual, se salta `Decision.ShouldSimplifyUnit` y se asume `false` directamente. Si no hay fast-path vigente, se llama a `Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)`; si la razón devuelta es `"no simp"`, se activa el fast-path para el resto de esta generación.
+5. Si `C_NamePlateManager.SetNamePlateSimplified` está disponible y (`forceUpdate` o cambió el estado deseado): se llama a la API nativa, se actualiza `nameplate.MinimizerState`, y se sincroniza el hit-test (`HitTest.Sync`).
+6. `Core.UpdateModules(unit, nameplate, snapshot)` — fan-out a `HealthBarColor`, `CastingBar`, `Markers`.
+
+**Actualización continua:** eventos de WoW (`UNIT_SPELLCAST_*`, `UNIT_THREAT_*`, `UNIT_ABSORB_AMOUNT_CHANGED`, `UNIT_DISPLAYPOWER`, etc. — ver [§10](#10-eventos)) disparan `Dispatcher.ApplyToUnit(unit)` para la unidad concreta; eventos globales (cambio de zona, roster, dificultad) programan un pase completo debounced. El **monitor de Threat** ([§5](#5-threat-monitor)), cuando está activo, también puede solicitar un reproceso puntual de una unidad si detecta un cambio de estado de amenaza que ningún evento explícito haya cubierto.
+
+**Retirada (`NAME_PLATE_UNIT_REMOVED`):**
+
+1. El handler del evento limpia el estado de Threat (`Threat.ForgetUnit`) y del monitor del Dispatcher (`Dispatcher.ForgetUnit`), y notifica a los overlays (`Overlays.OnUnitChanged(unit, "removed")`).
+2. Por separado, un `hooksecurefunc` sobre `NamePlateDriverFrame:OnNamePlateRemoved` (no hay evento nativo fiable de "esta nameplate específica ya desapareció") dispara `Lifecycle.ClearNeverSimplify(unit)`: invalida el `Cache` genérico, cancela reintentos de `HitTest`, olvida el estado de Threat, ejecuta `OnNamePlateRemoved` de cada módulo de Plater registrado (cada uno limpia sus propios campos en la nameplate), limpia los campos genéricos de Lifecycle (`MinimizerDesimplifiedPersistent*`, `MinimizerState`, `MinimizerCastBar`, `MinimizerHasHadAbsorb`, `MinimizerAbsorbPersistentGen`) y borra el token de `ActiveNameplates`.
+
+**Reciclaje (misma nameplate, unidad nueva):** ver [§8](#8-recycling-de-nameplates-y-seguridad-de-generación).
+
+---
+
+## 4. Snapshot / estado
+
+`Minimizer.Snapshot.Build(unit, nameplate)` produce, una vez por invocación, una tabla con:
+
+- `eliteType` (`Classification.GetEliteType`), `hasAbsorb` (lectura **live** del indicador visual), `hasHadAbsorb` (persistente, ver [§6](#6-cast-y-absorb)).
+- Datos de threat: `threatSituation`, `otherTankAggro`, `isNilSpecial`, `nilSince`, `inCombat`, `isPlayerTank`, `hasAggro`.
+- `isPvP`, `isFriendly`.
+- Estado de cast/channel (`isCasting`, `isUninterruptible`, `rawUninterruptible`, `isChanneling`) leído en vivo desde `Cast.GetState` — sin cache, ver [§6](#6-cast-y-absorb).
+- `displayKind`: el color/prioridad visual resuelto por `ResolveDisplayKind` (focus > prioridad especial de threat > aggro > absorb > `eliteType`), la **única** implementación de esa tabla de prioridad usada por el pase normal.
+
+**Pooling y aislamiento frente a reentrancia:** `Snapshot.Build` mantiene un contador `currentDepth` que se incrementa al entrar y decrementa al salir. Cada profundidad de recursión tiene su propia tabla en `snapshotPool[depth]` (creada perezosamente si no existe), que se limpia (`wipe`) antes de rellenarla. Esto significa que si, durante la construcción o el consumo del snapshot de una unidad A, algo dispara una construcción anidada de snapshot para la unidad B (p. ej. un módulo que fuerza el reprocesamiento de otra unidad), ambas tablas son instancias distintas — no hay corrupción de datos entre ellas. Esto está cubierto explícitamente por tests de reentrancia (`tests/equivalence_test.lua`, grupo 4), que verifican que instancias en profundidades distintas (incluida profundidad ≥10) son objetos distintos.
+
+**Restricción importante, no relajada por el pooling:** el snapshot de una unidad **solo es válido durante el pase síncrono que lo construyó**. Ningún consumidor debe guardar la referencia para usarla en un pase posterior o de otra unidad; si un consumidor necesita datos para trabajo diferido, debe copiarlos/congelarlos explícitamente.
+
+**Fallback sin Snapshot:** `Minimizer.Snapshot.ComputeDisplayKind(unit, nameplate)` reimplementa el mismo cálculo de `displayKind` para los casos en que un módulo se invoca **fuera** del pase normal (hooks de repintado nativo de Blizzard, donde no hay snapshot disponible). Esta duplicación es conocida y está documentada como deuda residual — ver `revision.md` §1.
+
+---
+
+## 5. Threat Monitor
+
+El monitor de Threat vive en `Plater/Dispatcher.lua` (no en `Threat.lua`, que quedó como proveedor de datos puro).
+
+**Activación/desactivación dinámica:** `Dispatcher.UpdateMonitorState()` habilita el monitor (crea/relanza el `OnUpdate` de `monitorFrame`) solo si `Threat.IsThreatEnabled()` es verdadero — es decir, el jugador está en grupo, en raid, o es tank — y lo detiene (`SetScript("OnUpdate", nil)`) en caso contrario. Esto significa que, en solo (sin grupo, sin ser tank), el monitor **no consume ciclos de CPU en absoluto**: no hay ningún `OnUpdate` corriendo. `UpdateMonitorState` es idempotente — llamarla repetidamente con el mismo estado no crea frames ni scripts duplicados (cubierto por `tests/equivalence_test.lua`, grupo 5).
+
+`UpdateMonitorState()` se invoca desde `Events.lua` en los eventos que pueden cambiar la respuesta de `IsThreatEnabled()`: `PLAYER_ENTERING_WORLD`, cambios de roster/rol/especialización (`HandleRosterOrSpecChange`), y explícitamente desde `Dispatcher.StartMonitor()` (llamada una vez al cargar `Events.lua`).
+
+**Selección de unidades a vigilar:** `RebuildMonitorUnits` reconstruye, solo cuando `monitorDirty` está activo, la lista `monitorUnits` a partir de `Lifecycle.GetActiveNameplates()`, filtrando por tokens con forma `nameplate%d+`. `Dispatcher.TrackUnit(unit)`/`Dispatcher.ForgetUnit(unit)` marcan la lista como sucia cuando una unidad entra o sale del pipeline.
+
+**Cadencia:** round-robin, una unidad cada `0.25 / monitorCount` segundos (si hay más unidades vigiladas, se procesan más rápido en conjunto, pero cada una individual se revisita con la misma frecuencia agregada de 4 veces por segundo repartida entre todas). Esta fórmula es un invariante a preservar.
+
+**Detección de cambio — estado estable sin generar basura:** `Threat.GetUnitThreatState(unit)` construye (o reutiliza) una tabla `{generation, situation, otherTankAggro, combat, nilSpecial}` por unidad, cacheada en `unitThreatStateCache`. Solo se crea una tabla **nueva** cuando alguno de esos campos difiere del estado previamente cacheado para esa unidad (comparando también la generación de plate, para invalidar automáticamente en un reciclaje de token); si nada cambió, se devuelve la **misma referencia** ya existente. `Threat.StatesEqual(s1, s2)` compara dos de estas tablas campo a campo (incluida la generación).
+
+`ProcessMonitoredUnit` compara el estado actual contra el último estado procesado (`monitorState[unit]`) usando `StatesEqual`; solo si difieren, actualiza `monitorState[unit]` y llama a `Dispatcher.RequestUpdate(unit)` (que termina en `ApplyToUnit(unit, false)`). Es decir: **el monitor de Threat no fuerza un reprocesamiento en cada tick** — solo cuando el estado de amenaza de esa unidad concreta realmente cambió desde la última vez que se miró.
+
+Este diseño (reutilizar tablas de estado cuando no hay cambios, en vez de crear una tabla nueva por tick por unidad) es lo que valida `tests/threat_monitor/stable_state_test.lua`: 1000 ticks de `ApplyToAll` sobre una unidad estática no deben generar más de 5 KB de deriva de memoria acumulada.
+
+**Integración con Snapshot/Decision:** el monitor **nunca** llama directamente a `Decision` ni pinta nada — solo decide, a través del Dispatcher, si vale la pena reprocesar una unidad. El propio `Dispatcher.ApplyToUnit` es quien construye un snapshot fresco y deja que `Decision`/`Core.UpdateModules` hagan el resto, exactamente igual que si el reproceso viniera de un evento normal.
+
+---
+
+## 6. Cast y Absorb
+
+**Cast (`Plater/Cast.lua`):** lectura **siempre fresca**, deliberadamente sin cache. `Cast.GetState(unit)` llama a `UnitCastingInfo`/`UnitChannelInfo` en cada invocación. `Cast.InvalidateState(unit)` es un no-op mantenido solo por compatibilidad de API (varios call-sites históricos la siguen llamando). Esta decisión de diseño evita una clase entera de bug de reciclaje de token que existía con una versión anterior con cache de una sola entrada (el estado de una unidad podía "filtrarse" a la unidad siguiente que ocupara el mismo token de nameplate si la invalidación no corría exactamente antes de la siguiente lectura). `UnitCastingInfo`/`UnitChannelInfo` son lo bastante baratas como para no valer la pena ese riesgo.
+
+Invariante verificado por tests (`tests/equivalence_test.lua` y `tests/smoke_test.lua`): `UnitCastingInfo` se llama **exactamente una vez** por `ApplyToUnit`, tanto si la unidad está casteando como si no — porque `Snapshot.Build` es el único punto que llama a `Cast.GetState` en el pase normal, y los módulos de rendering (`CastingBar`, `HealthBarColor`, `Decision`) reutilizan `snapshot.isCasting`/`isUninterruptible`/`rawUninterruptible`/`isChanneling` en vez de volver a leer el estado. Solo cuando un módulo se invoca **sin** snapshot (hook de repintado nativo fuera de pase) vuelve a llamar a `Cast.GetState` directamente.
+
+**Absorb (`Plater/Absorb.lua`):** única fuente de verdad para dos conceptos relacionados pero distintos:
+
+- `Absorb.HasAbsorb(unit, nameplate)` — booleano **live**: ¿el indicador visual nativo (`totalAbsorbOverlay`/`totalAbsorb`) está `:IsShown()` ahora mismo? No se lee el número de absorb para esto, para no arriesgarse a comparar un valor potencialmente secreto.
+- `Absorb.MarkSeen(unit, nameplate, hasAbsorbNow)` — persistencia: una vez que una unidad mostró absorb, `nameplate.MinimizerHasHadAbsorb` queda en `true` de forma persistente, invalidado únicamente cuando la generación de la nameplate (`Lifecycle.IsGenerationStale`) indica que el token fue reciclado. `MarkSeen` es la **única** función que escribe este flag; `Snapshot.Build` la llama una vez por pase y expone el resultado como `snapshot.hasHadAbsorb`.
+- `Absorb.GetTotalAbsorbs(unit)` expone el valor numérico (usado únicamente por `HealthBarColor` para dimensionar la barra de overshield), propagando el valor tal cual si viniera marcado como secreto.
+
+Mientras exista al menos un consumidor que pueda ser invocado sin snapshot (los hooks de repintado nativo de `HealthBarColor`/`Decision`), esos caminos siguen llamando a `Absorb.HasAbsorb` + `Absorb.MarkSeen` directamente como fallback — ver `revision.md` §4 para el estado de esa consolidación pendiente.
+
+**Consecuencia de diseño aceptada, no un bug:** el color asociado a un cast (verde interrumpible / gris ininterrumpible) puede persistir visualmente en la healthbar después de que el cast termine, incluso aunque la simplificación ya vuelva a estar disponible para el caso ininterrumpible. Es intencional (ver [§18](#18-leyenda-de-color-m-prioridades)) y no debe "arreglarse" quitando la persistencia de color.
+
+---
+
+## 7. Dispatcher y reentrancy
+
+`Dispatcher.ApplyToUnit` es la única entrada al pipeline normal por unidad; `Dispatcher.ApplyToAll` es la entrada para un pase completo (itera `Lifecycle.GetActiveNameplates()`).
+
+**Protección contra reentrancia:** una variable module-level `_isApplying` marca si ya hay un `ApplyToUnit` en curso. Si, mientras se procesa la unidad A, algo (un hook de repintado nativo, un módulo visual, etc.) llama a `Dispatcher.ApplyToUnit` para la unidad B, esa llamada **no se ejecuta inmediatamente** — se encola en `_pendingReentrantUnits[B]`. Si la unidad B ya estaba encolada con `forceUpdate=false` y la nueva petición pide `forceUpdate=true`, domina el `true` (nunca se pierde una petición de forzado por coalescing).
+
+Una vez termina el procesamiento de la unidad que disparó la reentrancia, el propio `ApplyToUnit` de nivel superior drena la cola: procesa todas las unidades pendientes en un "pase" y, si esas llamadas generaron **más** peticiones pendientes, repite el proceso hasta un máximo de `MAX_REENTRANT_PASSES = 10` pasadas. Si se alcanza ese límite y aún quedan unidades pendientes, se registra un error (`Utils.LogGuardedError` o `print` de emergencia) y se descarta la cola restante — esto indica un bug de un módulo que dispara actualizaciones en bucle, y el límite existe exactamente para evitar un desbordamiento de pila o un cuelgue por recursión infinita, no para ser alcanzado en operación normal. Este comportamiento (incluido el disparo del límite ante una recursión artificial de prueba) está cubierto por `tests/equivalence_test.lua`, grupo 4.
+
+**No existe ya un "safety net" con ticker periódico.** Versiones anteriores de la arquitectura contemplaban un `C_Timer.NewTicker` de 2s que forzaba un pase completo incondicional como red de seguridad; ese mecanismo **ha sido eliminado**. `Minimizer.Dispatcher.StartSafetyNet` no existe, y no se crea ningún timer periódico al cargar el addon — confirmado explícitamente por `tests/friendly_filter_safety_net_test.lua` (`Dispatcher.StartSafetyNet == nil`, `#Mocks.timers == 0` tras `ADDON_LOADED`). La actualización de nameplates depende exclusivamente de eventos, del monitor dinámico de Threat, y de las peticiones explícitas de pase completo (`RequestApplyToAll`, debounced a 0 frames vía `Utils.Debounce`).
+
+---
+
+## 8. Recycling de nameplates y seguridad de generación
+
+Blizzard reutiliza los mismos tokens de nameplate (`"nameplate3"`, etc.) para unidades distintas a lo largo de una sesión: un mob muere, su nameplate desaparece, y el mismo token puede asignarse poco después a un mob completamente distinto. Si el estado que Minimizer guarda "colgado" de la nameplate (flags de color persistente, de simplificación persistente, de absorb visto, de estado de monitor de Threat) no se invalida correctamente en ese momento, la unidad nueva puede heredar visualmente el estado de la anterior — dos unidades con condiciones reales opuestas mostrando el mismo color o el mismo estado de simplificación.
+
+La defensa es un contador de generación por token (`Lifecycle.plateGeneration[token]`), incrementado en `NAME_PLATE_UNIT_ADDED`, contra el que se comparan varios flags persistentes:
+
+- `nameplate.MinimizerDesimplifiedPersistentGen` (fast-path de "no simplificar", en `Dispatcher`).
+- `nameplate.MinimizerAbsorbPersistentGen` (persistencia de `hasHadAbsorb`, en `Absorb.MarkSeen`).
+- `nameplate.MinimizerHealthBarColorGen` (persistencia de color de cast, en `HealthBarColor`).
+- El propio `Core/Cache.lua` (usado por `Classification`/`Threat`) trata una entrada como cache-miss si su generación guardada no coincide con la actual.
+- `Threat.GetUnitThreatState` incluye la generación como parte de la tabla de estado comparada por `StatesEqual`, así que un cambio de generación por sí solo ya invalida el "estado estable" cacheado por el monitor.
+
+`Lifecycle.IsGenerationStale(tokenOrNameplate, storedGen)` centraliza la comparación (acepta tanto un token string como una nameplate, de la que intenta derivar el token). Aun así, **cada consumidor sigue guardando su propio campo de generación** en vez de apoyarse en un único mecanismo — ver `revision.md` §5 para el estado de esa unificación pendiente; no se debe intentar colapsar estos campos sin pruebas de equivalencia cruzada por cada uno (absorb, color persistente, fast-path de simplificación).
+
+Cubierto extensivamente por tests: `tests/smoke_test.lua` (grupos "Token recycle", "GAP1", "GAP2", tests de secrets A/B) y `tests/equivalence_test.lua` (sección "Cross-Generation Recycle Leak-Prevention Invariant", y el reciclaje de `hasHadAbsorb` en la sección de Absorb).
+
+---
+
+## 9. Filtrado friendly / PvP
+
+`Dispatcher.IsPipelineRelevant(unit)` es el predicado canónico y único punto de exclusión: una unidad se considera **no relevante** para el pipeline principal si es friendly (`Utils.IsFriendlyUnit`, basado en `UnitCanAttack`) o si es un jugador enemigo en PvP (`Utils.IsPvPUnit` — jugador + puede atacar al jugador). Blizzard ya gestiona nativamente esas nameplates mejor de lo que Minimizer podría, así que se dejan sin tocar.
+
+Efecto concreto de la exclusión (verificado por `tests/friendly_filter_safety_net_test.lua`):
+
+- La unidad **nunca entra** en `Lifecycle.ActiveNameplates`.
+- **No se construye Snapshot** para ella (`Snapshot.Build` no se llama).
+- **No se ejecuta ningún módulo registrado** (`Core.UpdateModules` no se llama) — ni `HealthBarColor`, ni `CastingBar`, ni `Markers` la tocan.
+- Si el token que ocupaba se recicla más tarde hacia una unidad enemiga, el `Dispatcher.ForgetUnit` disparado cuando la unidad friendly llegó (en vez de `TrackUnit`) asegura que el monitor de Threat no arrastre estado del token.
+
+Las unidades enemigas normales (PvE) siguen entrando en el pipeline con normalidad; solo se excluyen friendly y PvP enemigo.
+
+**Los overlays Target/Focus no dependen de esta exclusión.** Resuelven su nameplate directamente vía `C_NamePlate.GetNamePlateForUnit("target"/"focus")`, no a través de `ActiveNameplates`, así que siguen reaccionando correctamente a `PLAYER_TARGET_CHANGED`/`PLAYER_FOCUS_CHANGED` y a las altas/bajas de nameplate (`Overlays.OnUnitChanged`) **incluso si la unidad en cuestión es friendly** y por tanto nunca pasó por el pipeline principal. Esto es intencional: puedes tener de focus a un compañero de grupo y seguir viendo su halo/retrato con normalidad.
+
+---
+
+## 10. Eventos
+
+Un único `EventFrame` (`MinimizerEventFrame`, en `Plater/Events.lua`) centraliza el registro de eventos de WoW y traduce cada uno a una llamada al Dispatcher (o a una invalidación de cache de dominio). Categorías, sin listar cada evento individual:
+
+- **Pase completo debounced** (`Dispatcher.RequestApplyToAll`): cambios de zona/dificultad, entrar/salir de combate, cambio de roster/rol/especialización (que además invalidan caches de Threat/Widgets/Interrupt y refrescan el estado del monitor de Threat).
+- **Reproceso inmediato de una unidad concreta** (`Dispatcher.ApplyToUnit(unit)`): eventos de cast (`UNIT_SPELLCAST_*`), threat con unidad específica, `UNIT_DISPLAYPOWER`, `UNIT_CLASSIFICATION_CHANGED`, `UNIT_LEVEL`, `UNIT_ABSORB_AMOUNT_CHANGED` — todos pasan primero por `IsPipelineRelevant` para no procesar friendly/PvP.
+- **`NAME_PLATE_UNIT_ADDED`/`NAME_PLATE_UNIT_REMOVED`**: gestión de lifecycle (incremento de generación, registro/olvido en Dispatcher y Threat) y notificación a Overlays, según el flujo descrito en [§3](#3-pipeline-de-una-nameplate).
+- **`SPELL_UPDATE_COOLDOWN`**: refresca el cache de "interrupt listo" (`Interrupt.RefreshReadyCache`) y, si cambió el estado de "listo", dispara un pase completo; además llama a `Overlays.OnCooldownTick()` para que Target/Focus repinten (con su propio throttle a 30 FPS).
+- **Hooks globales** (no eventos, pero parte del mismo modelo de "escuchar, no interceptar"): `hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", ...)` dispara el teardown de Lifecycle; `hooksecurefunc("CompactUnitFrame_UpdateHealthColor", ...)` dispara `Dispatcher.ApplyToUnit(unit)` para que Minimizer reafirme su color inmediatamente después de que Blizzard repinte nativamente.
+
+Todo evento relacionado con el ciclo de vida de nameplates o de unidades entra exclusivamente por este `EventFrame`; ningún otro archivo registra sus propios eventos de WoW para este propósito.
+
+---
+
+## 11. SpellData: formato y uso
+
+Minimizer centraliza las listas de spells usadas por widgets en `Data/SpellData.lua`. El archivo admite dos formatos de entrada en cada lista:
+
+- Entrada legacy (número): `12345`.
 - Entrada enriquecida (recomendada): `{ id = 12345, name = "Avatar" }`.
 
 Reglas:
 
-- El campo `name` (cuando está presente) es el que se muestra en los dropdowns del menú (`Menu.lua`).
-- El orden de las entradas en cada tabla es significativo: `Minimizer.Utils.FindKnownSpell` elige el **primer** `spellID` conocido por el jugador en ese orden.
-- En cliente real, preferir `name = GetSpellInfo(id)` (o validar que esté localizado) para compatibilidad multi-idioma.
-- `Minimizer.Utils.FindKnownSpell` y `Minimizer.Widgets.GetCDSpellID` aceptan ambos formatos y siempre devuelven el `spellID` numérico.
+- El campo `name` (cuando está presente) se muestra en los dropdowns de `Menu.lua`.
+- El orden de las entradas es significativo: `Utils.FindKnownSpell` elige el **primer** `spellID` conocido por el jugador en ese orden.
+- `Utils.FindKnownSpell` y `Widgets.GetCDSpellID` aceptan ambos formatos y siempre devuelven el `spellID` numérico.
 
-Para añadir/corregir spells por clase, editar `data/SpellData.lua` respetando el orden. Ver `Docs/debt.md` para el procedimiento recomendado al completar spells faltantes.
-
----
-
-## 2. Mapa de módulos
-
-Orden de carga tal como aparece en `Minimizer.toc`:
-
-```
-Bootstrap.lua             Minimizer (inicialización global, ADDON_LOADED)
-Core/Utils.lua            Minimizer.Utils (helpers puros, guardas de secretos, debounce/throttle, tokens)
-Overlays/Widgets.lua      Minimizer.Widgets (búsqueda de castbars, halos, pips, cooldowns)
-Plater/HitTest.lua        Minimizer.HitTest (sincroniza hit-test con healthBar real, retry scheduler generation-safe)
-Config.lua                Minimizer.Config (SavedVariables MinimizerDB, defaults, migraciones)
-Core/Constants.lua        Minimizer.Constants (paletas de color de salud/cast/pips)
-Data/SpellData.lua        Minimizer.Data (spellIDs por clase: interrupts, CDs of./def., CC masivo)
-Plater/Lifecycle.lua      Minimizer.Lifecycle (generaciones de plates, registro de plates activas, teardown)
-Core/Cache.lua            Minimizer.Cache (cache genérico unit -> {kind -> valor}, atado a Lifecycle.GetGeneration)
-Plater/Threat.lua         Minimizer.Threat (threat data, aggro/tanque, ThreatState desacoplado)
-Plater/Absorb.lua         Minimizer.Absorb (owner único de absorb y persistencia)
-Plater/Cast.lua           Minimizer.Cast (lectura SIN cache de casts/canalizaciones, ver §3.5)
-Plater/Classification.lua Minimizer.Classification (boss/miniboss/caster/melee/trivial)
-Plater/Decision.lua       Minimizer.Decision (motor ShouldSimplifyUnit, ShouldUnsimplify, ShouldLetBlizzardPaint)
-Plater/Interrupt.lua      Minimizer.Interrupt (spellID de interrupción + cache de "listo" a nivel de pase)
-Plater/Snapshot.lua       Minimizer.Snapshot (snapshot pool sin colisiones, Build, ComputeDisplayKind)
-Plater/Core.lua           Minimizer.Core (registro de módulos visuales, UpdateModules, compatibilidad)
-Plater/Dispatcher.lua     Minimizer.Dispatcher (orquestación, cola de reentrancia con coalescing, monitor dinámico)
-Plater/Markers.lua        Minimizer.Markers (flechas de target/focus)
-Plater/HealthBarColor.lua módulo registrado: coloreo de healthbars nativas y overshield
-Plater/CastingBar.lua     módulo registrado: coloreo de castbars nativas, visuales de "me está casteando"
-Overlays/Pips.lua         Minimizer.Pips (gestión compartida de pips para Target y Focus)
-Overlays/Overlays.lua     Minimizer.Overlays (registro y enrutamiento central de overlays: OnCooldownTick, OnUnitChanged)
-Overlays/Focus.lua        Minimizer.Focus (retrato de focus, CD de interrupt, pip de CC masivo)
-Overlays/Target.lua       Minimizer.Target (halo de CD ofensivo + pip de CD defensivo sobre el target)
-Menu.lua                  Minimizer.Menu (frame propio, dropdowns/checkboxes; uso interno/dev)
-Options.lua               Minimizer.Options (panel de opciones de Blizzard Settings)
-Plater/Events.lua         Minimizer (EventFrame centralizado, traducción de eventos)
-SlashCommands.lua         Minimizer (/mini)
-```
-
-### Arquitectura de Ejecución
-
-El pipeline de ejecución sigue el flujo unidireccional desacoplado:
-
-$$\text{Lifecycle} \longrightarrow \text{Dispatcher} \longrightarrow \text{Snapshot} \longrightarrow \text{Decision} \longrightarrow \text{Rendering/Modules}$$
-
-- **Lifecycle** (`Plater/Lifecycle.lua`): Autoridad única sobre las nameplates activas y los números de generación de tokens (`GetGeneration`, `IncrementGeneration`, `IsGenerationStale`, `ClearNeverSimplify`).
-- **Dispatcher** (`Plater/Dispatcher.lua`): Motor de orquestación de pases (`ApplyToUnit`, `ApplyToAll`). Cuenta con una **cola de reentrancia coalescida** (`_pendingReentrantUnits` con dominancia de `forceUpdate` y límite de seguridad anti-bucles) para evitar recursiones sincrónicas durante hooks nativos, y un **monitor dinámico de Threat** con ciclo de vida activo/inactivo según el rol/grupo del jugador.
-- **Snapshot** (`Plater/Snapshot.lua`): Construye el estado unificado de la unidad para el pase mediante un **pool preasignado circular** (`snapshotPool[1..8]`), garantizando aislamiento total frente a invocaciones anidadas sin generar basura en el recolector de basura (GC).
-- **Decision** (`Plater/Decision.lua`): Reglas de negocio puras (`ShouldSimplifyUnit`, `ShouldUnsimplify`, `ShouldLetBlizzardPaint`).
-- **Overlays** (`Overlays/Overlays.lua`): Registry unificado que distribuye eventos a `Target` y `Focus` vía `OnCooldownTick()` y `OnUnitChanged(unit, reason)`.
-- **Core** (`Plater/Core.lua`): Registro y despacho de módulos visuales (`RegisterModule`, `UpdateModules`), manteniendo aliases hacia los propietarios reales para garantizar compatibilidad con tests y extensiones.
-
-`Target.lua` y `Focus.lua` usan dos familias visuales intencionalmente distintas: el halo/donut del target y los pips circulares pequeños de cooldown, más el retrato del focus con color de estado listo/CD.
-
-`Minimizer.Core.RegisterModule(name, module)` es el punto de entrada para que un módulo visual se enganche al ciclo de vida de las nameplates. Un módulo registrado expone:
-
-- `module:UpdateNamePlate(unit, nameplate, snapshot)` — llamado desde `Core.UpdateModules` en cada pase de `ApplyToUnit`.
-- `module:OnNamePlateRemoved(unit, nameplate)` — llamado desde `Lifecycle.ClearNeverSimplify`.
+Para añadir/corregir spells por clase, ver `Docs/debt.md`.
 
 ---
 
-## 3. APIs de WoW verificadas y cómo las usamos
+## 12. Taint / Secrets: checklist canónico
 
-Todas verificadas en cliente real (Interface 120100 / Midnight). Se puede confiar en estos patrones tal cual durante cualquier trabajo futuro.
-
-### 3.1 Simplificación de nameplate
-
-```lua
-C_NamePlateManager.SetNamePlateSimplified(unitToken, bool)
-```
-
-- Verificado en `Core.lua`, `Minimizer.Core.ApplyToUnit`.
-- Se llama **solo cuando cambia el estado deseado** (`nameplate.MinimizerState ~= shouldSimplify`), o cuando se pide `forceUpdate` explícito.
-- Disponibilidad comprobada primero con `Minimizer.Utils.IsSimplifiedAvailable()` (`C_NamePlateManager and type(...) == "function"`). **Nunca** se llama sin este guard.
-
-### 3.2 Sincronización del hit-test con la healthbar
-
-```lua
-nameplate:SetAllHitTestPoints(healthBar)
-nameplate:CanChangeHitTestPoints()
-```
-
-- Verificado en `HitTest.lua`, `Minimizer.HitTest.Sync`.
-- Se llama justo después de `C_NamePlateManager.SetNamePlateSimplified` para que la región de clic siga a la healthbar visual real del nameplate.
-- Blizzard no siempre permite mutar el hit-test inmediatamente tras `NAME_PLATE_UNIT_ADDED`; por eso `Sync` comprueba `CanChangeHitTestPoints()` y reintenta con `C_Timer.After` hasta 6 veces a 0.05s.
-- Si la API aún no está disponible, no se fuerza nada: se deja el reintento en cola, no se queda el click region desincronizado con la barra visible.
-
-### 3.3 Resolución de nameplate por unit token
-
-```lua
-Minimizer.Utils.GetNamePlateForUnit(unit)
-```
-
-- Camino rápido: si `unit` hace match con `^nameplate%d+$`, llama directo a `C_NamePlate.GetNamePlateForUnit(unit)`.
-- Camino lento (para `target`, `focus`, `bossN`, etc.): itera `C_NamePlate.GetNamePlates()` (⚠️ aloca una tabla nueva cada vez, ver §9) y compara con `UnitIsUnit(token, unit)`.
-- Para `target`/`focus` específicamente, `Target.lua`/`Focus.lua` llaman directo a `C_NamePlate.GetNamePlateForUnit("target"/"focus")` en vez de pasar por este camino lento.
-
-### 3.3b Ciclo de vida de nameplates: eventos + un único hook seguro
-
-```lua
--- Events.lua
-EventFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
--- ...
-hooksecurefunc(NamePlateDriverFrame, "OnNamePlateRemoved", function(_, unit)
-    if not unit or not unit:match("^nameplate%d+$") then return end
-    Minimizer.Core.ClearNeverSimplify(unit)
-end)
-```
-
-- **`OnNamePlateAdded` NO se hookea.** Toda la lógica de llegada (incremento de generación + `Core.ApplyToUnit`) vive en el handler del evento `NAME_PLATE_UNIT_ADDED`, para evitar doble incremento del mismo spawn en el mismo frame si además se hookeara `OnNamePlateAdded`.
-- `OnNamePlateRemoved` sí necesita hook propio (`hooksecurefunc`) porque no existe un evento equivalente y fiable de "acaba de desaparecer" para esa limpieza específica.
-- Mismo patrón de "escuchar sin interceptar" aplicado al re-coloreo nativo:
-  ```lua
-  hooksecurefunc("CompactUnitFrame_UpdateHealthColor", function(unitFrame) ... end)
-  hooksecurefunc(castBar, "SetStatusBarColor", function() ... end)   -- CastingBar.lua
-  hooksecurefunc(healthBar, "SetStatusBarColor", function() ... end) -- HealthBarColor.lua
-  ```
-  Blizzard repinta las barras después de sus propios eventos; en vez de pelear por el orden de ejecución, dejamos que Blizzard pinte primero y **reaplicamos color encima vía hook**.
-- Regla general: **nunca llamar directamente** a `NamePlateDriverFrame:OnNamePlateAdded/Removed`. Solo se escucha con `hooksecurefunc` o eventos.
-
-### 3.4 Guardas de reentrancia en hooks de auto-repintado
-
-```lua
-Minimizer.Utils.GuardedCall(obj, flagName, fn)
-```
-
-```lua
-Minimizer.Utils.GuardedCall(castBar, "MinimizerApplyingColor", function()
-    castBar:SetStatusBarColor(r, g, b, a or 1)
-end)
-```
-
-- `GuardedCall` pone un flag en el objeto antes de ejecutar `fn` (con `pcall`) y lo limpia después. El propio hook de `SetStatusBarColor` comprueba ese flag y no hace nada si ya estamos "dentro" de nuestra propia llamada — evita bucle infinito de auto-disparo.
-- Errores dentro de `fn` se loguean vía `print` con throttle de 10s por `flagName` (`Minimizer.Utils.LogGuardedError`) para no inundar el chat si algo falla en cada frame.
-- Usado por `CastingBar.lua` y `HealthBarColor.lua`.
-
-### 3.5 Lectura de estado de cast/channel — SIN CACHE, siempre fresco
-
-```lua
-local castName, _, _, _, _, _, _, castUninterruptible = UnitCastingInfo(unit)
-local channelName, _, _, _, _, _, channelUninterruptible = UnitChannelInfo(unit)
-```
-
-- Verificado en `Cast.lua` → `ReadCastState`. Índice `[8]` para cast, `[7]` para channel.
-- Se usa `if/elseif` explícito en vez de `and/or` para evitar coerción de secretos.
-- Devuelve `isCasting, uninterruptible, rawUninterruptible, isChanneling`.
-
-**Importante — decisión de diseño deliberada:** `Minimizer.Cast` **no cachea nada**. `Minimizer.Cast.InvalidateState(unit)` es un **no-op** que se mantiene únicamente porque `Core.lua`/`Events.lua` la siguen llamando en varios sitios (mantener la API estable evita tocar N call-sites).
-
-Hubo una versión anterior con un slot único (escalar, no tabla por unidad) que dependía de que `InvalidateState()` se disparase *siempre* antes de que un token de nameplate reciclado (ej. `"nameplate3"` pasando de un mob muerto a uno nuevo) fuera vuelto a leer. Esa invalidación vivía en un hook distinto (`NamePlateDriverFrame.OnNamePlateRemoved`) del que lee el estado nuevo (`NAME_PLATE_UNIT_ADDED` / hooks de `SetStatusBarColor`), sin garantía dura de orden entre ambos. Si esa carrera se perdía una sola vez, una unidad podía heredar el `rawUninterruptible` de la unidad **anterior** que ocupó el mismo token — dos mobs con estados reales opuestos mostrando el mismo color.
-
-`UnitCastingInfo`/`UnitChannelInfo` son baratas: no vale la pena el riesgo por un cache que en la práctica casi nunca se reutilizaba (`BuildSnapshot` solo llama una vez por unidad por pase; las llamadas fuera de pase vienen de hooks de Blizzard repintando barras, casi siempre para unidades distintas de todos modos). Leer siempre fresco elimina la clase de bug entera, no solo el síntoma. **No reintroducir un cache aquí sin resolver primero la garantía de orden entre invalidación y lectura.**
-
-### 3.6 Resolver un valor potencialmente secreto sin compararlo en Lua
-
-```lua
-Minimizer.Utils.EvaluateColorRGB(state, colorTrue, colorFalse)
-Minimizer.Utils.EvaluateBoolean(state, ifTrue, ifFalse)
-```
-
-Ambas encapsulan:
-
-```lua
-C_CurveUtil.EvaluateColorValueFromBoolean(state, valueIfTrue:number, valueIfFalse:number) -> number
-```
-
-- `EvaluateColorRGB` la llama 3 veces (canal por canal) para resolver un color completo:
-  ```lua
-  return C_CurveUtil.EvaluateColorValueFromBoolean(state, colorTrue[1], colorFalse[1]),
-         C_CurveUtil.EvaluateColorValueFromBoolean(state, colorTrue[2], colorFalse[2]),
-         C_CurveUtil.EvaluateColorValueFromBoolean(state, colorTrue[3], colorFalse[3])
-  ```
-- Ambas funciones tienen fallback si `C_CurveUtil` no existe (clientes viejos): usan `Minimizer.Utils.IsSecretValue` para decidir con seguridad sin comparar el secreto directamente.
-- Patrón de uso — decidir color de cast/channel sin taint:
-  ```lua
-  local r, g, b = Minimizer.Utils.EvaluateColorRGB(rawUninterruptible, COLORS.superiorUninterruptible, COLORS.castInterruptible)
-  ```
-- **Nunca usar** `if rawUninterruptible then ... end` ni `if rawUninterruptible == true then ... end` — ambos pueden taintear la UI.
-
-### 3.7 `SetAlphaFromBoolean` — aceptar un secreto directamente en un sink C-side
-
-```lua
-if visuals.targetContainer.SetAlphaFromBoolean then
-    visuals.targetContainer:SetAlphaFromBoolean(targeted)
-end
-```
-
-- Verificado y en uso en `CastingBar.lua` para el borde pulsante de "este cast me apunta a mí" (`IsSpellTargetingPlayer`, que puede devolver un booleano secreto vía `UnitIsSpellTarget`). Se pasa el valor tal cual al sink; nunca se compara antes.
-
-### 3.8 `ApplyReadyShade` — shade de portrait vía sink escalar (patrón actual)
-
-```lua
-Minimizer.Utils.ApplyReadyShade(texture, ready)
-```
-
-- Usado por `Focus.lua` para oscurecer el retrato del focus cuando el interrupt está en cooldown.
-- Implementación actual: **un único `EvaluateColorValueFromBoolean`** que resuelve un `shade` escalar (1.0 si listo, 0.38 si no) y lo aplica a los 3 canales de `SetVertexColor` a la vez. No usa 3 llamadas por canal porque los 3 canales comparten el mismo valor (blanco/gris, no un color con tonalidad).
-- Ver [§7](#7-candidatos-futuros--evaluados-no-adoptados-todavía) para una API alternativa (`SetVertexColorFromBoolean`) evaluada pero **no adoptada** todavía.
-
-### 3.9 Amenaza (threat) sin coerción de secretos
-
-```lua
--- GetSituation
-local situation = UnitThreatSituation(source, unit)
-if Minimizer.Utils.IsSecretValue(situation) or type(situation) ~= "number" then situation = nil end
-
--- GetThreatDetails (player)
-local rawSituation = UnitThreatSituation("player", unit)
-local situation = (Minimizer.Utils.IsSecretValue(rawSituation) or type(rawSituation) ~= "number") and nil or rawSituation
-
--- GetThreatDetails (cada tank token)
-local rawTankSit = UnitThreatSituation(tankUnit, unit)
-if not Minimizer.Utils.IsSecretValue(rawTankSit) and rawTankSit == 3 then ... end
-```
-
-- Aplicado en `Threat.lua` → `GetSituation` **y** `GetThreatDetails`. Solo después de este doble guard (`IsSecretValue` + `type ~= "number"`) se compara `situation == 3` (aggro sólido) o `situation < 3`.
-- `Threat.PlayerHasAggro` tiene rama especial para tanks (usa `GetThreatDetails`/`tankTokens`, refrescados en `RefreshTankTokens`). **No es la misma función** que `ShouldUnsimplify` — no sustituir una por otra sin revisar `Threat.lua`.
-
-### 3.10 Absorb: depender EXCLUSIVAMENTE del indicador visual
-
-```lua
-local indicator = healthBar and (healthBar.totalAbsorbOverlay or healthBar.totalAbsorb)
-return indicator and indicator.IsShown and indicator:IsShown() == true or false
-```
-
-- Verificado en `Absorb.lua`. No se calcula el valor numérico del absorb (`UnitGetTotalAbsorbs`) porque el indicador visual nativo ya resume correctamente si hay absorb visible o no, sin arriesgarse a leer un número que podría venir secreto.
-
-### 3.11 Cache genérico invalidado por generación de plate
-
-```lua
-Minimizer.Cache.GetUnitKeyWithGeneration(unit, key)
-Minimizer.Cache.SetUnitKeyWithGeneration(unit, key, value)
-```
-
-- Usado por `Classification.GetEliteType` (`"eliteType"`) y `Threat.GetSituation` (`"threat:" .. source`).
-- Cada entrada se guarda junto a `Minimizer.Core.GetPlateGeneration(unit)` (contador monotónico por token, incrementado en `Core.IncrementPlateGeneration` cuando una unidad **llega** a un token vía `NAME_PLATE_UNIT_ADDED`). Al leer, si `entry.gen ~= generación actual`, se trata como cache-miss.
-- Esto es la defensa contra el mismo problema de fondo que motivó quitar el cache de `Cast.lua` (§3.5): **reciclaje de tokens de nameplate**. La diferencia es que aquí sí compensa cachear (clasificación y threat son más caras de recalcular y no dependen de un orden de invalidación externo tan frágil), así que se mantiene el cache pero atado a un contador de generación explícito en vez de a un hook de invalidación separado.
-- `SetUnitKeyWithGeneration` reutiliza la entry existente (`entry.value = ...; entry.gen = ...`) en vez de crear una tabla nueva en cada escritura, porque esta función se llama por unidad/clave/pase.
-
-### 3.12 Cache de interrupción "listo" — refrescado una vez por pase, no por nameplate
-
-```lua
-Minimizer.Interrupt.RefreshReadyCache()  -- llamado en Core.ApplyToAll y en SPELL_UPDATE_COOLDOWN
-Minimizer.Interrupt.IsReady()            -- solo LEE el cache, nunca llama a C_Spell
-```
-
-- Elimina ~100 llamadas/frame a `C_Spell.GetSpellCooldownDuration` que antes ocurrían una vez por nameplate.
-- `Interrupt.GetSpellID()` tiene su propio cache (`cachedSpellIDResolved`), invalidado explícitamente en `PLAYER_TALENT_UPDATE` / `PLAYER_SPECIALIZATION_CHANGED` (ver `Events.lua` → `HandleRosterOrSpecChange`).
-
-### 3.13 Otros cachés con la misma filosofía ("recalcular es más caro que cachear con invalidación explícita")
-
-- `Widgets.cdSpellCache` — cache fuerte por clave `dbTable:override` para `GetCDSpellID`. Invalidado manualmente vía `Minimizer.Widgets.InvalidateCDSpellCache()` en cambio de talento/spec.
-- `CastingBar:GetCastBar` — cachea el widget de castbar encontrado por duck-typing (`nameplate.MinimizerCastBar`), validado en cada lectura con `type(cached.SetStatusBarColor) == "function" and type(cached.GetValue) == "function"` antes de confiar en él. Ver §7 para el estado de esto.
-
----
-
-## 4. Checklist canónico de taint / secrets
-
-1. **Nunca evaluar un valor potencialmente secreto con `and/or`, `not`, `==`, `>`, etc.** directamente en Lua. Comprobar primero con `issecretvalue(value)` (envuelto en `Minimizer.Utils.IsSecretValue`).
-2. **Si el valor es secreto, no lo conviertas a booleano.** Propágalo crudo hacia una API C-side (`SetAlphaFromBoolean`, `EvaluateColorValueFromBoolean`, etc.).
-3. **Cuando no exista una API C-side para el dato secreto**, comprobar si Blizzard ya expone la misma información en un widget nativo (`indicator:IsShown()`).
-4. `EvaluateColorValueFromBoolean` es **escalar**: respeta el orden `(state, valueIfTrue, valueIfFalse)`.
+1. **Nunca evaluar un valor potencialmente secreto con `and/or`, `not`, `==`, `>`, etc.** directamente en Lua. Comprobar primero con `issecretvalue(value)` (envuelto en `Utils.IsSecretValue`).
+2. **Si el valor es secreto, no lo conviertas a booleano.** Propágalo crudo hacia un sink C-side (`SetAlphaFromBoolean`, `C_CurveUtil.EvaluateColorValueFromBoolean`, etc.).
+3. **Cuando no exista una API C-side para el dato secreto**, comprobar si Blizzard ya expone la misma información en un widget nativo (`indicator:IsShown()` — así es como Absorb evita leer el número).
+4. `EvaluateColorValueFromBoolean` es **escalar**: `(state, valueIfTrue, valueIfFalse)`; `Utils.EvaluateColorRGB` la envuelve para resolver un color de 3 canales.
 5. **Nunca llamar directamente** a `NamePlateDriverFrame:OnNamePlateAdded/Removed`. Solo escuchar con `hooksecurefunc` o eventos.
-6. **Proteger hooks de auto-repintado con guardas de reentrancia** (`Minimizer.Utils.GuardedCall`).
-7. **Solo simplificar/tocar nameplates a través de** `C_NamePlateManager.SetNamePlateSimplified`, con guard de disponibilidad.
+6. **Proteger hooks de auto-repintado con guardas de reentrancia** (`Utils.GuardedCall`, `Utils.HookRepaintGuard`).
+7. **Solo simplificar/tocar nameplates a través de** `C_NamePlateManager.SetNamePlateSimplified`, con guard de disponibilidad (`Utils.IsSimplifiedAvailable`).
 8. **Aplicar `SetNamePlateSimplified` solo cuando el estado deseado cambia** (o hay `forceUpdate` explícito).
 9. **Toda lectura de threat situation debe verificar `issecretvalue` y `type(x) == "number"`** antes de comparar contra `3`.
-10. **Todo dato cacheado debe invalidarse explícitamente** — por evento (`Cast` ya no cachea nada, ver §3.5) o por contador de generación de plate (`Cache.lua`, ver §3.11). No confiar en "probablemente se invalida a tiempo".
-11. **No resolver un secreto con `EvaluateBoolean(x,1,0)==1` para luego compararlo.** El resultado de un sink C-side sigue tainted; compararlo revienta el cliente con `attempt to compare (secret number value) tainted`. Los sinks son de un solo sentido, hacia la API C-side final (`SetStatusBarColor`, `SetVertexColor`, `SetAlpha`), no hacia más lógica en Lua.
+10. **Todo dato cacheado debe invalidarse explícitamente** — por evento, o por contador de generación de plate (`Core/Cache.lua`, `Lifecycle.IsGenerationStale`). `Cast.lua` es la única excepción deliberada (no cachea nada, ver [§6](#6-cast-y-absorb)).
+11. **No resolver un secreto con `EvaluateBoolean(x,1,0)==1` para luego compararlo.** El resultado de un sink C-side sigue tainted; compararlo revienta el cliente. Los sinks son de un solo sentido, hacia la API C-side final (`SetStatusBarColor`, `SetVertexColor`, `SetAlpha`), no hacia más lógica en Lua.
 
 ---
 
-## 5. Leyenda de color M+ (prioridades)
+## 13. Known Issues
 
-Prioridad descendente — la primera regla que aplica gana:
+**Unidades fuera de combate al aparecer (mitigado, no cerrado).** Una unidad recién aparecida puede evaluarse a "simplificar" en su primer `ApplyToUnit`, pero Blizzard puede repintarla maximizada al final de ese mismo frame de inicialización. `NAME_PLATE_UNIT_ADDED` dispara tanto un `ApplyToUnit` inmediato como un pase completo debounced (`forceUpdate=true`) para mitigarlo, pero el propio código reconoce que no está cerrado del todo.
+
+**Target/Focus siempre desimplificados por diseño.** `Decision.ShouldSimplifyUnit` devuelve explícitamente `false, "target"` / `false, "focus"` para alinear el comportamiento del addon con el hecho de que Blizzard ya fuerza esas nameplates a tamaño completo. No es un bug.
+
+**Nameplates que no aparecen en pulls masivos:** limitación del motor de WoW, no de Minimizer. Blizzard tiene un pool interno limitado de nameplates simultáneas; una unidad sin nameplate asignada (`GetNamePlateForUnit` devuelve `nil`) simplemente no tiene widget que pintar hasta que Blizzard le asigne una. En cuanto ocurre (`NAME_PLATE_UNIT_ADDED`), el pipeline normal la procesa sin delay perceptible.
+
+**Persistencia de color de cast tras terminar el cast:** ver [§6](#6-cast-y-absorb) — comportamiento de producto intencional, no un bug.
+
+**Duplicaciones arquitectónicas residuales conocidas y toleradas** (no bloquean funcionalidad, documentadas con más detalle en `revision.md`): `Snapshot.ComputeDisplayKind` como fallback duplicado de la lógica normal de `displayKind`; fallbacks sin Snapshot en `Decision`/`HealthBarColor` que aún llaman a `Threat`/`Absorb`/`Cast` directamente; varios campos de generación ad-hoc (`MinimizerDesimplifiedPersistentGen`, `MinimizerAbsorbPersistentGen`, `MinimizerHealthBarColorGen`) en vez de un único mecanismo.
+
+---
+
+## 14. Testing
+
+Runner principal:
+
+```bash
+lua tests/test_all.lua
+```
+
+Ejecuta, en procesos separados, y reporta solo los fallos al final:
+
+- `tests/equivalence_test.lua`
+- `tests/smoke_test.lua`
+- `tests/friendly_filter_safety_net_test.lua`
+- `tests/threat_monitor/stable_state_test.lua`
+- `tests/benchmark/benchmark.lua`
+
+Cada uno también puede ejecutarse suelto, p. ej. `lua tests/smoke_test.lua`.
+
+Qué garantiza cada familia:
+
+- **`equivalence_test.lua`** — batería de invariantes arquitectónicos post-split: lifecycle de `nilSince`/`nilSpecial` en Threat; `Decision.ShouldUnsimplify`/`ShouldLetBlizzardPaint` consumiendo Snapshot correctamente; persistencia y reciclaje de `hasHadAbsorb` (dueño único: `Absorb`); aislamiento del pool de Snapshot frente a reentrancia (incluida profundidad >10 y el límite de recursión del Dispatcher); ciclo de vida dinámico del monitor de Threat (activo/inactivo según grupo/rol) e idempotencia de `UpdateMonitorState`; estructura y comparación (`StatesEqual`) del estado de Threat; enrutamiento de eventos en `Overlays`; cancelación de reintentos de `HitTest` al reciclar generación; matriz de invariantes de comportamiento (prioridad de `displayKind`, número de llamadas a `UnitCastingInfo`); registro y despacho de eventos (incluyendo que `UNIT_ABSORB_AMOUNT_CHANGED` sí dispara `Dispatcher.ApplyToUnit` para enemigos pero no para friendly); prevención de fugas en reciclaje cross-generación; seguridad de reentrancia del hook de indicador de absorb.
+- **`smoke_test.lua`** — suite más amplia y original del proyecto: clasificación (`Classification.GetEliteType`), invalidación de cache de Interrupt en cambio de spec, reglas completas de `Decision.ShouldSimplifyUnit`, lectura de `Cast.GetState`, ambas ramas de `Threat.PlayerHasAggro`, migración de configuración legacy, `Cache.InvalidateUnit`/`InvalidateAll`, reutilización del snapshot por `CastingBar` (sin doble lectura de `UnitCastingInfo`), invalidación de flags persistentes en reciclaje de token (grupos "GAP1"/"GAP2"/"GAP3"), manejo de valores secretos en persistencia de color, toda la tabla de prioridad de color ("PRIORITY"), halo/pips de target, registro `ActiveNameplates` usado por `ApplyToAll`, y una serie final de comprobaciones de "ownership" arquitectónico (qué módulo es dueño de qué responsabilidad).
+- **`friendly_filter_safety_net_test.lua`** — confirma que el safety-net por ticker **ya no existe** (`Dispatcher.StartSafetyNet == nil`, cero timers tras `ADDON_LOADED`), y que el filtro friendly/PvP excluye correctamente del pipeline principal (`ActiveNameplates`, Snapshot, Modules) sin afectar a Overlays.
+- **`threat_monitor/stable_state_test.lua`** — verifica que 1000 ticks de `ApplyToAll` sobre una unidad con threat estático no generan más de 5 KB de deriva de memoria — valida que la reutilización de tablas de estado en `Threat.GetUnitThreatState` funciona como se espera.
+- **`benchmark/benchmark.lua`** — ver [§15](#15-benchmarking); también actúa como test de regresión (falla el proceso si se supera el umbral de rendimiento).
+
+---
+
+## 15. Benchmarking
+
+```bash
+lua tests/benchmark/benchmark.lua            # ejecución estándar
+lua tests/benchmark/benchmark.lua compare     # además guarda una copia con timestamp y "benchmark_latest.txt"
+```
+
+**Qué simula:** 50 nameplates con datos aleatorios (nivel, salud, clasificación, cast inicial, aura). Ejecuta 6 corridas independientes (semillas distintas derivadas de `os.time()`), cada una de 1000 "frames" simulados. En cada frame se avanza el reloj mock 0.01s y se disparan entre 1 y 5 `ApplyToUnit` sobre unidades elegidas al azar (con un 2% de probabilidad de "ráfaga": entre 10 y 30 actualizaciones simultáneas, simulando un pull grande o un cambio de estado masivo). El estado de cada unidad (cast, absorb, threat) se muta aleatoriamente con cierta probabilidad en cada actualización, para ejercitar invalidaciones de cache y flags persistentes, no solo el camino "sin cambios".
+
+**Qué mide, por corrida:**
+
+- `Avg ApplyToUnit` — tiempo medio (ms) por llamada a `Dispatcher.ApplyToUnit`.
+- `P50/P90/P99/Max` — percentiles de tiempo por llamada individual. **Nota de resolución:** el reloj de Lua puro (`os.clock()`) tiene granularidad insuficiente para medir llamadas de microsegundos de forma fiable por percentil individual; los números agregados por módulo/función (ver más abajo) son más representativos que estos percentiles crudos.
+- `Basura generada (GC)` — KB totales asignados durante la ventana medida (con el recolector detenido explícitamente durante esa ventana, para que el número refleje asignación bruta y no el neto tras recolecciones automáticas a mitad de camino) y KB por llamada a `ApplyToUnit`.
+- **Module Breakdown** — tiempo total/por-llamada de cada módulo registrado (`HealthBarColor`, `CastingBar`, `Markers`), mediante wrapping de `UpdateNamePlate`.
+- **Funciones no-módulo instrumentadas** — `Decision.ShouldSimplifyUnit`, `Classification.GetEliteType`, `Threat.PlayerHasAggro`, `Absorb.HasAbsorb`, envueltas individualmente porque no aparecerían en el desglose de módulos.
+- **Throttle check Target/Focus** — simula 100 eventos `SPELL_UPDATE_COOLDOWN` en ~1s y cuenta cuántas veces se ejecuta realmente `Target:UpdateTargetCDs()`/`Focus:UpdateFace()`; sirve para confirmar que el throttle a 30 FPS sigue limitando el repintado real.
+- Un bloque adicional mide de forma aislada el coste de asignación de `Dispatcher.ApplyToAll` en sí mismo (200 muestras, GC detenido), para poder rastrear si iterar `ActiveNameplates` introduce alguna asignación por llamada.
+
+**Agregación y umbral:** tras las 6 corridas, se calcula la **mediana** de `p90`, `avgApplyToUnit` y KB/llamada. Si la mediana de `p90` supera `REGRESSION_THRESHOLD_MS = 2.5` ms, el script termina con `os.exit(1)` — esto es lo que convierte al benchmark en un test de regresión de rendimiento, no solo en una herramienta de medición.
+
+**Dónde se guardan los resultados:**
+
+- Ejecución estándar (`lua tests/benchmark/benchmark.lua`, sin argumento): sobreescribe `tests/results/benchmark_aggregated.txt` con el reporte completo de las 6 corridas más el resumen agregado.
+- Con el argumento `compare`: además de lo anterior con otro nombre, escribe una copia con timestamp (`tests/results/benchmark_pre_<fecha>_<hora>.txt`) y una copia sin versionar `tests/results/benchmark_latest.txt`, pensadas para diffear una corrida "antes" contra una corrida "después" de un cambio.
+- El `.gitignore` del repositorio preserva explícitamente los archivos `tests/results/BASELINE_*.txt` si existieran, como snapshots de referencia manual.
+
+**Flujo recomendado antes de optimizar algo:** correr el benchmark, guardar el resultado como baseline, cambiar **una** cosa, volver a correrlo, comparar contra el baseline y contra `REGRESSION_THRESHOLD_MS`. No optimizar a ciegas ni interpretar ruido de una sola corrida como una regresión real — por eso se agregan 6 corridas por mediana.
+
+---
+
+## 16. Performance: qué garantiza el código vs. qué observa el benchmark
+
+**Garantías de diseño (verificadas por tests, no solo observadas en benchmark):**
+
+- `UnitCastingInfo`/`UnitChannelInfo` se llaman como máximo una vez por `ApplyToUnit` en el pase normal (ver [§6](#6-cast-y-absorb)).
+- El monitor de Threat no genera trabajo de CPU en absoluto cuando está deshabilitado (solo/no-tank), y no fuerza reprocesamiento de unidades cuyo estado de threat no cambió (ver [§5](#5-threat-monitor)).
+- El Dispatcher nunca permite recursión sin límite; el techo es `MAX_REENTRANT_PASSES = 10` (ver [§7](#7-dispatcher-y-reentrancy)).
+- No existe ningún ticker periódico incondicional (el "safety net" fue eliminado, ver [§7](#7-dispatcher-y-reentrancy)).
+
+**Observaciones de benchmark (estado actual, no una promesa de hardware/runtime futuro):** las últimas corridas agregadas guardadas en `tests/results/benchmark_aggregated.txt` y `tests/results/benchmark_latest.txt` muestran, de forma consistente entre ejecuciones:
+
+- Mediana de `p90` en `0.0000 ms` (muy por debajo del umbral de `2.5 ms`) y `avgApplyToUnit` en torno a `0.06 ms` por llamada.
+- Basura generada en torno a `0.86 KB` por llamada a `ApplyToUnit`.
+- `HealthBarColor` y `CastingBar` como los módulos más caros (en torno a `8–12 µs`/llamada según la corrida), `Markers` consistentemente el más barato.
+- El throttle de Target/Focus reduce ~100 eventos simulados de `SPELL_UPDATE_COOLDOWN` a ~25 repintados reales.
+
+Estos números son el resultado de un entorno de test en Lua puro con mocks, no del cliente real de WoW — sirven como indicador de tendencia y como red de regresión relativa (comparar una corrida contra otra), no como cifra de rendimiento en juego. Si una corrida puntual difiere mucho de las guardadas, no se debe asumir automáticamente una regresión sin repetir la medición.
+
+---
+
+## 17. Mapa de módulos y orden de carga
+
+Orden de carga tal como aparece en `Minimizer.toc` (el orden importa: cada archivo asume que las dependencias que declara arriba en esta lista ya existen):
+
+```
+Bootstrap.lua              Minimizer (namespace global, ADDON_LOADED -> Config.Initialize + Options.Initialize)
+Core/Utils.lua             Minimizer.Utils (helpers puros, guardas de secretos, debounce/throttle)
+Overlays/Widgets.lua       Minimizer.Widgets (castbars, halos, pips, cooldowns, cache de override de CD)
+Plater/HitTest.lua         Minimizer.HitTest (sincroniza hit-test con healthBar, retry generation-safe)
+Config.lua                 Minimizer.Config (SavedVariables, defaults, migraciones legacy)
+Core/Constants.lua         Minimizer.Constants (paletas de color)
+Data/SpellData.lua         Minimizer.Data (spellIDs por clase)
+Plater/Lifecycle.lua       Minimizer.Lifecycle (ActiveNameplates, generación de plates, teardown genérico)
+Core/Cache.lua             Minimizer.Cache (cache genérico gen-gated vía Lifecycle)
+Plater/Dispatcher.lua      Minimizer.Dispatcher (orquestación, reentrancia, monitor dinámico de Threat)
+Plater/Threat.lua          Minimizer.Threat (datos de threat/tank, ThreatState desacoplado)
+Plater/Absorb.lua          Minimizer.Absorb (dueño único de absorb live + persistente)
+Plater/Cast.lua            Minimizer.Cast (lectura SIN cache de cast/channel)
+Plater/Classification.lua  Minimizer.Classification (boss/miniboss/caster/melee/trivial)
+Plater/Snapshot.lua        Minimizer.Snapshot (pool por profundidad, Build, ComputeDisplayKind fallback)
+Plater/Decision.lua        Minimizer.Decision (ShouldSimplifyUnit, ShouldUnsimplify, ShouldLetBlizzardPaint)
+Plater/Interrupt.lua       Minimizer.Interrupt (spellID de interrupt + cache "listo" por pase)
+Plater/Core.lua            Minimizer.Core (registro/fan-out de módulos visuales, RegisterModule/UpdateModules)
+Plater/Markers.lua         módulo registrado: flechas de target/focus
+Plater/HealthBarColor.lua  módulo registrado: color de healthbar nativa + overshield
+Plater/CastingBar.lua      módulo registrado: color de castbar nativa + borde "me apunta a mí"
+Overlays/Pips.lua          Minimizer.Pips (pips compartidos por Target y Focus)
+Overlays/Overlays.lua      Minimizer.Overlays (registro y enrutamiento: OnCooldownTick, OnUnitChanged)
+Overlays/Focus.lua         Minimizer.Focus (retrato de focus, CD de interrupt, pip)
+Overlays/Target.lua        Minimizer.Target (halo de CD ofensivo + pip sobre el target)
+Menu.lua                   Minimizer.Menu (frame propio de opciones, dev/fallback, /mini menu)
+Options.lua                Minimizer.Options (panel de Blizzard Settings que abre Menu)
+Plater/Events.lua          EventFrame centralizado, traducción de eventos al Dispatcher
+SlashCommands.lua          /mini
+```
+
+---
+
+## 18. Leyenda de color M+ (prioridades)
+
+Prioridad descendente — la primera regla que aplica gana. Implementada una sola vez en `Snapshot.ResolveDisplayKind` y consumida por `Decision` y por los módulos de rendering vía `snapshot.displayKind`.
 
 | Prioridad | Condición | Color | Simplificación |
 |-----------|-----------|-------|-----------------|
 | 1 | **Focus** | Amarillo | Sin cambio (focus no altera simplificación) |
-| 2 | **Aggro** (situación 3) | Rojo gestionado por Blizzard | TEMPORAL (mientras dura) |
-| 3 | **Shield/Absorb** visto alguna vez | Rosa (`absorb`), **PERSISTENTE** | **PERSISTENTE** (desimp y color) |
-| 4 | **Superior** (boss/miniboss) | Morado, SIEMPRE, cast o no | "no simp" **PERSISTENTE** (los superiores nunca fueron simplificables) |
-| 5 | **Inferior** + cast/channel **interrumpible** | Verde, **PERSISTENTE** (color) | **PERSISTENTE** ("no simp") |
-| 6 | **Inferior** + cast/channel **ininterrumpible** | Gris, **PERSISTENTE** (color) | **TEMPORAL** (vuelve a poder simplificarse al terminar el cast) |
-| 6 | **Azul** + **PERSISTENTE** (color) | **PERSISTENTE** (los azules nunca fueron simplificables) |
+| 2 | **Prioridad especial de threat** (`nilSpecial`: no puede atacarte y lleva ≥1s de threat `nil` en combate) | Naranja | — |
+| 3 | **Aggro** (situación 3, o rama especial de tank) | Rojo gestionado por Blizzard | TEMPORAL (mientras dura) |
+| 4 | **Shield/Absorb** visto alguna vez | Rosa (`absorb`), **PERSISTENTE** | **PERSISTENTE** (desimp y color) |
+| 5 | **Superior** (boss/miniboss) | Morado, SIEMPRE, cast o no | "no simp" **PERSISTENTE** |
+| 6 | **Caster** (inferior con maná) | Azul, no cambia por cast/channel | **PERSISTENTE** (nunca fue simplificable) |
+| 7 | **Inferior** (melee/trivial) + cast/channel **interrumpible** | Verde, **PERSISTENTE** (color) | **PERSISTENTE** ("no simp") |
+| 8 | **Inferior** + cast/channel **ininterrumpible** | Gris, **PERSISTENTE** (color) | **TEMPORAL** (vuelve a poder simplificarse al terminar el cast) |
 
-Definiciones:
+Definiciones: **superior** = `boss`/`miniboss` (nivel skull, worldboss, o elite + 2 niveles por encima del jugador). **Inferior** = cualquier unidad que no sea superior. **Persistente** = el flag/color permanece incluso después de terminar la condición que lo causó, hasta reciclaje de token. **Temporal** = desaparece en cuanto desaparece la condición.
 
-- **Superior**: `boss` o `miniboss` (morado). Determinado por nivel skull / worldboss / elite + 2 niveles (`Classification.lua` → `GetSuperiorKind`).
-- **Inferior**: cualquier unidad que no sea superior — melee (blanco), caster/hasmana (azul), trivial (negro), esbirros, menores.
-- **Los azules (caster/hasmana) NO siguen las reglas de cast** — solo cambian de color por aggro, focus o shield. Esto es intencional (ver rationale abajo).
-- **Persistente**: el flag/color permanece incluso después de que termine el cast o el escudo.
-- **Temporal**: el flag/color desaparece en cuanto desaparece la condición.
-
-**Rationale M+:** en Mythic+, cualquier inferior que castee algo interrumpible ES wipe potencial si no se para. El verde persistente le dice al grupo que esa unidad ya demostró capacidad de castear y hay que priorizarla incluso después del cast actual. El gris (ininterrumpible) es peligroso pero no interrumpible — no hace falta mantenerlo desimplificado una vez termina. Cuando una unidad ya mostró absorb, se considera parte del historial visual de esa plate: tanto el color rosa como la desimplificación quedan persistentes para evitar que el significado del shield se pierda al reciclar la plate o al pasar por un repintado nativo. Los superiores son siempre peligrosos (morado); su color no depende de si su cast es o no interrumpible porque el grupo ya sabe que hay que interrumpirlos si pueden.
-
-Implementado en `HealthBarColor.lua` (barra de vida) y `CastingBar.lua` (misma leyenda para la castbar: verde si interrumpible + corte listo, rosa si interrumpible + corte en CD, sin tocar si ininterrumpible porque Blizzard ya pinta gris por defecto ahí).
-
----
-
-## 6. Historial de fixes
-
-Esta sección explica **por qué** el código actual toma las decisiones que toma. No es documentación de trabajo pendiente — todo lo descrito como "fix real / vigente" está aplicado y verificado; las secciones marcadas DEPRECATED son intencionalmente históricas para que nadie reintroduzca el mismo bug sin saber que ya se intentó y falló.
-
-### 6.1 Persistencia de color de cast (v2, vigente)
-
-**Root cause real:** no hay forma soportada de comparar en Lua un valor de interrumpibilidad que llega como secreto, ni directamente ni "resuelto" vía `EvaluateBoolean`/`EvaluateColorRGB` (ambos son sinks de un solo sentido hacia APIs C-side; el resultado sigue tainted). Cualquier intento de decidir un flag booleano (`"kind"`) a partir de ese valor está condenado a fallar de una forma u otra.
-
-**Fix aplicado (`HealthBarColor.lua`):** se dejó de decidir un "kind". En su lugar se persiste directamente el `r,g,b` ya resuelto por `EvaluateColorRGB` (el mismo sink válido que usa `CastingBar.lua` para la castbar nativa) en `nameplate.MinimizerPersistentCastColor`. No hay ninguna comparación sobre `rawUninterruptible` ni sobre nada derivado de él.
-
-**Consecuencia aceptada:** el color gris (cast ininterrumpible) ahora TAMBIÉN persiste visualmente tras terminar el cast — antes debía volver al color base. La **simplificación** no cambia: `Decision.lua` sigue devolviendo `"temporal"` para el caso ininterrumpible, así que el bicho vuelve a ser simplificable en cuanto termina el cast aunque la barra se quede en gris hasta el próximo repintado (nuevo cast, cambio de generación de plate, o `nameplate.MinimizerPersistentCastColor = nil` en `OnNamePlateRemoved`).
-
-**Cambio adicional del mismo parche:** los superiores (`boss`/`miniboss`) dejan de cambiar de color al castear — se mantienen siempre morados; su desimplificación persistente no depende del color.
-
-### 6.2 DEPRECATED — persistencia por "kind" (v1, NO reintroducir)
-
-```lua
--- NO FUNCIONA -- no reintroducir bajo ningun concepto:
-if Minimizer.Utils.IsSecretValue(rawUninterruptible) or safeUninterruptible == false then
-    nameplate.MinimizerPersistentCastColorKind = "castInterruptible"
-end
-```
-
-Dos fallos independientes, ambos confirmados en cliente real:
-
-1. Como el valor de interrumpibilidad llega secreto casi siempre en cliente real, `IsSecretValue(raw) or ...` entra casi incondicionalmente — sin mirar si el cast era realmente interrumpible. Un bicho que solo casteaba gris terminaba marcado `"castInterruptible"` y pintado de verde persistente al terminar. Este fue el bug original reportado.
-2. Intentar "arreglarlo" resolviendo el secreto explícitamente (`EvaluateBoolean(raw,1,0)==1`) tampoco sirve: el resultado sigue tainted y la comparación revienta el cliente con `attempt to compare (secret number value) tainted`.
-
-### 6.3 DEPRECATED — regla de color para superiores casteando (v1, NO reintroducir)
-
-Antes de v2, un superior casteando algo ininterrumpible se pintaba gris TEMPORAL (volvía a morado al terminar el cast). Se retiró porque forzaba a decidir en Lua si el cast del superior era o no interrumpible — la misma clase de comparación-sobre-secreto que causaba el bug de los inferiores. Dado que un superior siempre desimplifica de forma persistente igualmente (nunca dependió del color para eso), y que ya resulta obvio en pantalla cuando un superior está casteando, se sacrificó el cambio de color a cambio de eliminar esa comparación.
-
-### 6.4 Cast.lua: de "cache con invalidación por hook" a "sin cache" (vigente, ver §3.5)
-
-Cubierto en detalle en §3.5. Resumen: el cache de una sola entrada dependía de un orden de invalidación entre dos hooks distintos que no estaba garantizado; se eliminó por completo en vez de parchear el orden, porque `UnitCastingInfo`/`UnitChannelInfo` son lo bastante baratas.
-
----
-
-## 7. Candidatos futuros — evaluados, no adoptados todavía
-
-### 7.1 `Region:SetVertexColorFromBoolean(value, colorIfTrue, colorIfFalse)`
-
-API de la Widget API de Midnight, aplicable a `Texture`/`Region` (no a `StatusBar`). A diferencia de `C_CurveUtil.EvaluateColorValueFromBoolean` (escalar, obliga a 3 llamadas por canal), acepta tablas de color completas de una sola vez.
-
-**Estado: NO adoptada.** `Focus.lua`/`Utils.ApplyReadyShade` (§3.8) sigue usando el patrón escalar de 3 llamadas — o, más exactamente, una sola llamada escalar porque el shade del retrato es un gris puro (mismo valor en los 3 canales), así que el ahorro real de adoptar esta API ahí es mínimo. Sería candidata directa si en el futuro el shade del portrait dejara de ser un gris puro y necesitara un color con tonalidad. **No portar a `HealthBarColor.lua`/`CastingBar.lua`**: ahí el consumidor final es `SetStatusBarColor` (no un `Texture`), así que no aplica.
-
-Antes de adoptarla en cualquier `Texture`/`Region` nuevo: validar con `/dump <objeto>:HasSecretValues()` en cliente real que el objeto en cuestión soporta el método, porque no está en la lista de APIs verificadas de §3.
-
-### 7.2 `FrameScriptObject:HasSecretValues()` / `HasAnySecretAspect()` / `HasSecretAspect(aspect)`
-
-Permiten preguntarle a un objeto/frame "¿tienes algo secreto ahora mismo?" sin tocar el valor en sí.
-
-**Estado: NO usada todavía.** Podría servir como guard adicional antes de intentar cualquier lectura de un widget, pero **no sustituye** a `issecretvalue()` para valores sueltos (sirve para objetos/frames completos, no para el `duration`/`uninterruptible` escalares que ya manejamos vía `Minimizer.Utils.IsSecretValue`). Candidata a evaluar si en el futuro se añaden más widgets con estado potencialmente secreto embebido.
-
-### 7.3 `CastingBar:GetCastBar` duck-typing
-
-`CastingBar:GetCastBar` sigue validando el cache con duck-typing (`type(cached.SetStatusBarColor) == "function"`) en vez de una interfaz más formal. No es taint-unsafe ni un bug — es deuda técnica de estilo. Baja prioridad; no tocar sin motivo concreto.
-
----
-
-## 8. Known Issues
-
-**Minimizar fuera de combate (EN DESARROLLO).** A día de hoy, TODAS las demás features del addon funcionan correctamente. El resto del código (Decision, Classification, Threat, Absorb, Cast, HealthBarColor, CastingBar, Markers, Target, Focus) se considera correcto y estable. No usar esta sección como excusa para "arreglar" código fuera-de-combate sin contexto adicional — hablar primero con el desarrollador principal.
-
-Causa raíz conocida y ya parcheada parcialmente: las unidades fuera de combate se evaluaban a `true` (simplificar) al aparecer, pero Blizzard las repintaba maximizadas al final de ese mismo frame de inicialización. `Minimizer.Core.ApplyToUnit` acepta un parámetro `forceUpdate`, enviado a `true` mediante `RequestApplyToAll` (debounce) disparado justo después de `NAME_PLATE_UNIT_ADDED` — mitiga el problema pero no lo cierra del todo.
-
-**Sincronización con Target/Focus nativos:** el Target y el Focus están forzados a maximizarse por Blizzard. `Minimizer.Decision.ShouldSimplifyUnit` devuelve `false, "target"` / `false, "focus"` explícitamente para alinear la respuesta del addon con lo que Blizzard impone. Esto es intencional, no un bug.
-
-**Nameplates que no aparecen en pulls masivos:** (limitación del motor, NO bug
-de Minimizer).** Confirmado en pulls de ~80 unidades: algunas nameplates no
-reciben plate del cliente hasta que muere otra unidad y libera un slot del
-pool interno de Blizzard. `C_NamePlate.GetNamePlateForUnit` devuelve `nil`
-para esas unidades mientras tanto — no hay widget que Minimizer pueda
-pintar, sea cual sea su color/estado. En cuanto Blizzard asigna el plate
-(`NAME_PLATE_UNIT_ADDED`), `Core.ApplyToUnit` corre de inmediato y pinta
-correctamente sin delay perceptible. No existe API de addon para forzar
-más plates simultáneas ni para priorizar qué unidad recibe una. No
-"arreglar" esto buscando el bug en Absorb/HealthBarColor — no está ahí.
-
----
-
-## 9. Optimización pendiente
-
-**Nota (2026-08-17):** Desde 2026-08-17, `HealthBarColor` y `CastingBar` también saltan unidades amistosas (no solo PvP). Esto alinea el comportamiento con la política del parche 12.1 de Blizzard, que gestiona nativamente las nameplates amistosas y evita tocar sus barras.
-
-Esta es la única área de trabajo activo en el proyecto aparte de benchmarking continuo. No hay bugs funcionales conocidos fuera de §8.
-
-- **`C_NamePlate.GetNamePlates()` aloca una tabla nueva en cada llamada** (comentario explícito en `Utils.lua`). Se llama en el camino lento de `GetNamePlateForUnit`, en `Core.ApplyToAll`, y en `Events.lua` (`HandleFullRefreshEvent` para limpiar flags persistentes en `PLAYER_REGEN_ENABLED`). Candidato a revisar cuántas de estas llamadas son realmente necesarias por pase vs. cuántas podrían compartir un único snapshot de la lista de plates activas.
-- **Llamadas redundantes a módulos cuando Blizzard repinta fuera de nuestro pase normal.** Los hooks de `SetStatusBarColor` en `HealthBarColor.lua`/`CastingBar.lua` llaman `UpdateNamePlate` con `snapshot = nil`, lo que fuerza un fallback que recalcula `ComputeDisplayKind`/`Cast.GetState` fuera del snapshot cacheado del pase. Si Blizzard repinta varias veces por frame, esto puede multiplicar trabajo que el snapshot ya evitaba para el pase normal.
-- **Presión de GC en closures de `Throttle`/`Debounce`.** Cada llamada a una función throttled que cae en la rama "pending" crea una closure nueva pasada a `C_Timer.After`. Con ráfagas de `SPELL_UPDATE_COOLDOWN` (ver benchmark §10) esto puede ser una fuente de basura medible; evaluar si vale la pena una versión con menos allocaciones.
-- **Benchmark en sí mismo tiene ruido alto** (ver §10 — el `P50/P90` reportado por `os.clock()` en llamadas individuales de microsegundos tiene resolución insuficiente en el entorno de test Lua puro; los números agregados por módulo/función son más fiables que los percentiles por-llamada). Si se decide invertir en tooling de benchmark, mejorar la resolución del reloj o medir en bloques de N llamadas en vez de por llamada individual.
-- Antes de optimizar nada de lo anterior: correr `tests/benchmark/benchmark.lua`, guardar el resultado como nuevo baseline, cambiar UNA cosa, volver a correrlo y comparar contra el `REGRESSION_THRESHOLD_MS` (actualmente 2.5ms de p90). No optimizar a ciegas.
-
----
-
-## 10. Baseline de performance
-
-Correr desde la raíz del proyecto:
-
-```bash
-lua tests/benchmark/benchmark.lua
-lua tests/smoke_test.lua
-```
-
-`benchmark.lua` simula 50 nameplates con churn aleatorio de casts/threat/absorbs a lo largo de 1000 frames, en 6 runs con distinta semilla, y agrega los resultados por mediana. Falla el proceso (`os.exit(1)`) si la mediana de p90 supera `REGRESSION_THRESHOLD_MS = 2.5` ms.
-
-### Última corrida agregada (`tests/results/benchmark_aggregated_20260816_052057.txt`)
-
-- **Resultado:** `median p90 = 0.0000 ms`, `median avgApplyToUnit = 0.062139 ms` — dentro del umbral (2.5 ms) con amplio margen.
-- Reparto de coste por módulo (runs con más carga, `run 6` con 23k llamadas acumuladas):
-  - `HealthBarColor` ~10.7 µs/call — el módulo más caro, consistente entre runs.
-  - `CastingBar` ~10.3 µs/call.
-  - `Markers` ~3.1 µs/call — notablemente el más barato de los tres módulos registrados.
-- Funciones no-módulo instrumentadas (parte de `Decision.ShouldSimplifyUnit`, invisibles en el desglose de módulos si no se instrumentan aparte): `HasAbsorb`, `PlayerHasAggro`, `GetEliteType`, `ShouldSimplifyUnit` — su coste combinado es comparable al de `HealthBarColor` en los runs más cargados, y crece con el número de llamadas igual que el resto (esperado: no hay caching roto, escala linealmente).
-- **Throttle Target/Focus:** ante 100 eventos `SPELL_UPDATE_COOLDOWN` simulados en ~1s, las llamadas reales a `Target:UpdateTargetCDs()`/`Focus:UpdateFace()` se mantienen en **25** en todas las corridas — el throttle a 30 FPS (`Minimizer.Utils.Throttle(fn, 0.033)`) está funcionando como se espera y elimina ~75% de los repintados redundantes.
-
-### Referencia histórica (comparación pre/post-refactor del snapshot)
-
-| | Pre-refactor (2026-08-14) | Post-refactor (2026-08-15) |
-|---|---|---|
-| Avg/Frame (`ApplyToAll`) | 1.748 ms | 1.935 ms* |
-| `HealthBarColor` | 40.66% del tiempo | 16.43% del tiempo (**-55%** aprox.) |
-| `CastingBar` | 15.93% | 14.06% |
-| `Markers` | 11.02% | 9.72% |
-
-\* El aumento del "post-refactor" se debe a profiling extra activo (`GetEliteType`, `HasAbsorb`, `ShouldSimplifyUnit`, `PlayerHasAggro` instrumentados individualmente), no a una regresión real — la mejora de `HealthBarColor` gracias al snapshot compartido es la cifra que importa de esta comparación.
-
-Ver §9 para las áreas identificadas como candidatas a la próxima ronda de optimización.
+**Rationale M+:** en Mythic+, cualquier inferior que castee algo interrumpible es wipe potencial si no se para; el verde persistente le dice al grupo que esa unidad ya demostró capacidad de castear y merece seguir priorizada aunque el cast actual haya terminado. El gris (ininterrumpible) es peligroso pero no accionable — no hace falta mantenerlo desimplificado una vez termina. El absorb, una vez visto, queda en el "historial visual" de la plate: tanto el color como la desimplificación persisten para no perder esa información al reciclar la plate o ante un repintado nativo. Los superiores son siempre peligrosos; su color no depende de si su cast es interrumpible porque el grupo ya sabe que hay que interrumpirlos de todas formas. Los casters (azules) intencionalmente no siguen la regla de cast — solo cambian de color por focus/aggro/absorb.
