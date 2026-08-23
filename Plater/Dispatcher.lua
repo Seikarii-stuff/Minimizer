@@ -15,13 +15,20 @@ local MAX_REENTRANT_PASSES = 10
 
 local function IsPipelineRelevant(unit)
     if not unit or not UnitExists(unit) then return false end
-    if Minimizer.Utils and Minimizer.Utils.IsFriendlyUnit then
-        return not Minimizer.Utils.IsFriendlyUnit(unit)
+    if Minimizer.Utils then
+        if Minimizer.Utils.IsFriendlyUnit and Minimizer.Utils.IsFriendlyUnit(unit) then
+            return false
+        end
+        -- PvP nameplates are owned by Blizzard; reuse the canonical PvP
+        -- predicate that the rendering modules already use.
+        if Minimizer.Utils.IsPvPUnit and Minimizer.Utils.IsPvPUnit(unit) then
+            return false
+        end
     end
     return true
 end
 
--- Friendly nameplates are intentionally excluded before registration/snapshot/module work.
+-- Friendly and PvP nameplates are intentionally excluded before registration/snapshot/module work.
 -- Target/Focus overlays resolve their plates directly and do not depend on ActiveNameplates.
 Minimizer.Dispatcher.IsPipelineRelevant = IsPipelineRelevant
 

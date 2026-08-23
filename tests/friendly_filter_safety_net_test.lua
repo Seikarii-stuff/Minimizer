@@ -1,6 +1,6 @@
 -- tests/friendly_filter_safety_net_test.lua
--- Focused regression tests for the friendly-nameplate pipeline filter and the
--- intentionally disabled Dispatcher safety net.
+-- Focused regression tests for the friendly/PvP nameplate pipeline filter and
+-- the intentionally disabled Dispatcher safety net.
 local Mocks = dofile("tests/wow_mock.lua")
 
 local ADDON_NAME = "Minimizer"
@@ -125,10 +125,11 @@ check(moduleCalls == 0,
     "Friendly NPC: no atraviesa Modules")
 
 -- --------------------------------------------------------------------------
--- 3. Enemy plates, including hostile PvP players, still enter the pipeline.
+-- 3. Enemy PvE NPCs still enter the normal pipeline, while enemy PvP players
+--    are excluded by the canonical Utils.IsPvPUnit predicate.
 -- --------------------------------------------------------------------------
 Mocks.CreateTestUnit("nameplate3", {
-    name = "Enemy",
+    name = "Enemy PvE",
     level = 70,
     faction = "Horde",
     isPlayer = false,
@@ -138,14 +139,16 @@ Mocks.CreateTestNameplate("nameplate3")
 Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate3")
 
 check(addonTable.ActiveNameplates["nameplate3"] ~= nil,
-    "Enemy: sigue entrando en ActiveNameplates")
+    "Enemy PvE: sigue entrando en ActiveNameplates")
 check(snapshotCalls > 0,
-    "Enemy: sigue atravesando Snapshot")
+    "Enemy PvE: sigue atravesando Snapshot")
 check(moduleCalls > 0,
-    "Enemy: sigue atravesando Modules")
+    "Enemy PvE: sigue atravesando Modules")
 
+local pvpSnapshotCalls = snapshotCalls
+local pvpModuleCalls = moduleCalls
 Mocks.CreateTestUnit("nameplate6", {
-    name = "Enemy Player",
+    name = "Enemy PvP Player",
     level = 70,
     faction = "Horde",
     isPlayer = true,
@@ -154,12 +157,14 @@ Mocks.CreateTestUnit("nameplate6", {
 Mocks.CreateTestNameplate("nameplate6")
 Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate6")
 
-check(addonTable.ActiveNameplates["nameplate6"] ~= nil,
-    "PvP enemigo: sigue entrando en ActiveNameplates")
-check(snapshotCalls > 1,
-    "PvP enemigo: sigue atravesando Snapshot")
-check(moduleCalls > 1,
-    "PvP enemigo: sigue atravesando Modules")
+check(addonTable.Utils.IsPvPUnit("nameplate6") == true,
+    "PvP enemigo: usa el predicado canónico IsPvPUnit")
+check(addonTable.ActiveNameplates["nameplate6"] == nil,
+    "PvP enemigo: no entra en ActiveNameplates")
+check(snapshotCalls == pvpSnapshotCalls,
+    "PvP enemigo: no atraviesa Snapshot")
+check(moduleCalls == pvpModuleCalls,
+    "PvP enemigo: no atraviesa Modules")
 
 -- --------------------------------------------------------------------------
 -- 4. Target/Focus overlays remain event-driven even when their friendly plate
