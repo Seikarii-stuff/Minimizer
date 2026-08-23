@@ -23,6 +23,7 @@ local NIL_SPECIAL_CONFIRM = 1.0
 local playerTankCache
 local playerTankCacheValid = false
 local nilState = {}
+local unitThreatStateCache = {}
 
 function Minimizer.Threat.RefreshTankTokens()
     local tokens = Minimizer.Threat.tankTokens
@@ -107,6 +108,7 @@ function Minimizer.Threat.GetThreatDetails(unit)
         if cached ~= nil then
             local generation = Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit) or 0
             local combat = Minimizer.Threat.IsInCombatWith(unit, cached)
+            cached.combat = combat == true
             return UpdateNilState(unit, cached, generation, combat)
         end
     end
@@ -126,6 +128,7 @@ function Minimizer.Threat.GetThreatDetails(unit)
     end
     local generation = Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit) or 0
     local combat = Minimizer.Threat.IsInCombatWith(unit, result)
+    result.combat = combat == true
     result = UpdateNilState(unit, result, generation, combat)
     if Minimizer.Cache and Minimizer.Cache.SetUnitKeyWithGeneration then Minimizer.Cache.SetUnitKeyWithGeneration(unit, cacheKey, result) end
     return result
@@ -134,6 +137,7 @@ end
 function Minimizer.Threat.Invalidate(unit)
     if not unit then return end
     if Minimizer.Cache and Minimizer.Cache.InvalidateUnit then Minimizer.Cache.InvalidateUnit(unit, "threat") end
+    unitThreatStateCache[unit] = nil
 end
 
 function Minimizer.Threat.IsInCombatWith(unit, threatDetails)
@@ -191,15 +195,31 @@ function Minimizer.Threat.GetUnitThreatState(unit)
     if not unit or not UnitExists(unit) then return nil end
     local details = Minimizer.Threat.GetThreatDetails(unit)
     if not details then return nil end
-    local combat = Minimizer.Threat.IsInCombatWith(unit, details)
+
     local generation = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetGeneration and Minimizer.Lifecycle.GetGeneration(unit)) or 0
-    return {
+    local situation = details.situation
+    local otherTankAggro = details.otherTankAggro == true
+    local combat = details.combat == true
+    local nilSpecial = details.nilSpecial == true
+
+    local state = unitThreatStateCache[unit]
+    if state and state.generation == generation
+        and state.situation == situation
+        and state.otherTankAggro == otherTankAggro
+        and state.combat == combat
+        and state.nilSpecial == nilSpecial then
+        return state
+    end
+
+    state = {
         generation     = generation,
-        situation      = details.situation,
-        otherTankAggro = details.otherTankAggro == true,
-        combat         = combat == true,
-        nilSpecial     = details.nilSpecial == true,
+        situation      = situation,
+        otherTankAggro = otherTankAggro,
+        combat         = combat,
+        nilSpecial     = nilSpecial,
     }
+    unitThreatStateCache[unit] = state
+    return state
 end
 
 function Minimizer.Threat.StatesEqual(s1, s2)
@@ -215,5 +235,6 @@ end
 function Minimizer.Threat.ForgetUnit(unit)
     if unit then
         nilState[unit] = nil
+        unitThreatStateCache[unit] = nil
     end
 end
