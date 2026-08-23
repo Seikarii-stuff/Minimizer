@@ -345,6 +345,10 @@ do
     local npThreat = Mocks.CreateTestNameplate("nameplate12")
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate12")
 
+    local details = addonTable.Threat.GetThreatDetails("nameplate12")
+    assert_true(details ~= nil, "Threat: GetThreatDetails returned cached details")
+    assert_true(details.combat == true, "Threat: GetThreatDetails caches combat once per sample")
+
     local state1 = addonTable.Threat.GetUnitThreatState("nameplate12")
     assert_true(state1 ~= nil, "Threat: GetUnitThreatState returned state table")
     assert_eq(state1.situation, 3, "ThreatState: situation is 3")
@@ -353,12 +357,14 @@ do
     assert_eq(state1.nilSpecial, false, "ThreatState: nilSpecial is false")
 
     local state2 = addonTable.Threat.GetUnitThreatState("nameplate12")
+    assert_true(state1 == state2, "Threat: stable state is reused instead of allocating a fresh table")
     assert_true(addonTable.Threat.StatesEqual(state1, state2), "Threat: StatesEqual returns true for identical states")
 
     -- Mutate mock to simulate change
     Mocks.units["nameplate12"].threatSituation = 1
     addonTable.Threat.Invalidate("nameplate12")
     local state3 = addonTable.Threat.GetUnitThreatState("nameplate12")
+    assert_true(state3 ~= state1, "Threat: changed state creates a new state object")
     assert_eq(addonTable.Threat.StatesEqual(state1, state3), false, "Threat: StatesEqual returns false when situation changes")
 end
 
