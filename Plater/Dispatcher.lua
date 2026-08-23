@@ -13,8 +13,21 @@ local _pendingReentrantUnits = {}
 -- Reaching this limit indicates a bug in module event handling.
 local MAX_REENTRANT_PASSES = 10
 
+local function IsPipelineRelevant(unit)
+    if not unit or not UnitExists(unit) then return false end
+    if Minimizer.Utils and Minimizer.Utils.IsFriendlyUnit then
+        return not Minimizer.Utils.IsFriendlyUnit(unit)
+    end
+    return true
+end
+
+-- Friendly nameplates are intentionally excluded before registration/snapshot/module work.
+-- Target/Focus overlays resolve their plates directly and do not depend on ActiveNameplates.
+Minimizer.Dispatcher.IsPipelineRelevant = IsPipelineRelevant
+
 local function ApplyToUnitInternal(unit, forceUpdate)
-    if not unit then return end
+    if not IsPipelineRelevant(unit) then return end
+
     local nameplate = Minimizer.Utils and Minimizer.Utils.GetNamePlateForUnit and Minimizer.Utils.GetNamePlateForUnit(unit)
     if not nameplate then return end
     local npToken = Minimizer.Utils and Minimizer.Utils.GetValidNamePlateToken and Minimizer.Utils.GetValidNamePlateToken(unit, nameplate)
@@ -123,17 +136,6 @@ end
 
 function Minimizer.Dispatcher.RequestFullUpdate()
     Minimizer.Dispatcher.RequestApplyToAll()
-end
-
-local SAFETY_NET_INTERVAL = 2.0
-local _safetyNetStarted = false
-
-function Minimizer.Dispatcher.StartSafetyNet()
-    if _safetyNetStarted then return end
-    _safetyNetStarted = true
-    C_Timer.NewTicker(SAFETY_NET_INTERVAL, function()
-        Minimizer.Dispatcher.ApplyToAll(false)
-    end)
 end
 
 local monitorFrame
