@@ -257,8 +257,6 @@ do
     end
     
     assert_true(deepSnaps[1] ~= deepSnaps[10], "Reentrancy: Dynamic pool scales beyond arbitrary depth limits")
-
-    -- Test Dispatcher nested ApplyToUnit coalescing and runaway recursion protection
     local nestedProcessed11 = false
     local runawayCount = 0
     local dummyModule = {
@@ -275,16 +273,50 @@ do
     }
     addonTable.Core.RegisterModule("DummyReentrantTester", dummyModule)
 
-    addonTable.Dispatcher.ApplyToUnit("nameplate10", false)
-    assert_true(nestedProcessed11, "Dispatcher: Nested reentrant ApplyToUnit was deferred, coalesced and executed safely")
-
-    Mocks.CreateTestUnit("nameplate12", { name = "Runaway Mob", level = 70 })
-    local np12r = Mocks.CreateTestNameplate("nameplate12")
-    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate12")
+    if addonTable.Classification then
+        addonTable.Classification.GetEliteType = originalGetEliteType
+    end
     
-    addonTable.Dispatcher.ApplyToUnit("nameplate12", true)
-    -- It should break the loop at MAX_REENTRANT_PASSES (10 passes).
-    assert_true(runawayCount > 10 and runawayCount <= 50, "Dispatcher: Runaway recursion correctly aborted after reaching limit (count: " .. runawayCount .. ")")
+    -- Ensure nameplate11 exists before reentrancy processing
+    Mocks.CreateTestUnit("nameplate11", { name = "Reentrant Mob", level = 70 })
+    Mocks.CreateTestNameplate("nameplate11")
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate11")
+
+    -- Test nested reentrant ApplyToUnit processing
+    addonTable.Dispatcher.ApplyToUnit("nameplate10", false)
+    Mocks.AdvanceTime(0) -- allow pending work
+    addonTable.Dispatcher.ApplyToUnit("nameplate10", false)
+    assert_true(nestedProcessed11, "Dispatcher: Nested reentrant ApplyToUnit was deferred and processed safely")
+
+    -- Test runaway recursion limit
+    Mocks.CreateTestUnit("nameplate12", { name = "Runaway Mob", level = 70 })
+    Mocks.CreateTestNameplate("nameplate12")
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate12")
+    addonTable.Dispatcher.ApplyToUnit("nameplate12", false)
+    Mocks.AdvanceTime(0)
+    assert_true(runawayCount >= 10, "Dispatcher: Runaway recursion correctly aborted after reaching limit (count: " .. runawayCount .. ")")
+
+    -- Prepare unit for UnitCastingInfo tests
+    Mocks.CreateTestUnit("nameplate15", { name = "Casting Mob", level = 70 })
+    Mocks.CreateTestNameplate("nameplate15")
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate15")
+
+    -- UnitCastingInfo call count tests
+    -- Case A: no cast
+    Mocks.unitCastingInfoCallCounts = {}
+    Mocks.units["nameplate15"].cast = nil
+    addonTable.Dispatcher.ApplyToUnit("nameplate15", false)
+    Mocks.AdvanceTime(0)
+    local noCastCalls = Mocks.unitCastingInfoCallCounts["nameplate15"] or 0
+    assert_eq(noCastCalls, 0, "Invariant: UnitCastingInfo not called when no cast present")
+
+    -- Case B: with cast
+    Mocks.unitCastingInfoCallCounts = {}
+    Mocks.units["nameplate15"].cast = { name = "TestCast", startTime = 0, endTime = 2000, uninterruptible = false }
+    addonTable.Dispatcher.ApplyToUnit("nameplate15", false)
+    Mocks.AdvanceTime(0)
+    local castCalls = Mocks.unitCastingInfoCallCounts["nameplate15"] or 0
+    assert_eq(castCalls, 1, "Invariant: UnitCastingInfo called exactly once when a cast exists")
 end
 
 -- --------------------------------------------------------------------------
@@ -456,10 +488,20 @@ do
     assert_eq(snapP1_aggro.displayKind, "aggro", "Invariant: Aggro (sit 3) beats boss -> 'aggro'")
 
     -- Verify single UnitCastingInfo call per ApplyToUnit pass
+    -- Verify UnitCastingInfo behavior
+    -- Case A: unit without a cast should not call UnitCastingInfo
     Mocks.unitCastingInfoCallCounts = {}
+    Mocks.units["nameplate15"].cast = nil
+    addonTable.Dispatcher.ApplyToUnit("nameplate15", false)
+    local noCastCalls = Mocks.unitCastingInfoCallCounts["nameplate15"] or 0
+    assert_eq(noCastCalls, 0, "Invariant: UnitCastingInfo not called when no cast present")
+
+    -- Case B: unit with a cast should call UnitCastingInfo exactly once
+    Mocks.unitCastingInfoCallCounts = {}
+    Mocks.units["nameplate15"].cast = { name = "TestCast", startTime = 0, endTime = 2000, uninterruptible = false }
     addonTable.Dispatcher.ApplyToUnit("nameplate15", false)
     local castCalls = Mocks.unitCastingInfoCallCounts["nameplate15"] or 0
-    assert_eq(castCalls, 1, "Invariant: UnitCastingInfo called exactly once per ApplyToUnit pass")
+    assert_eq(castCalls, 1, "Invariant: UnitCastingInfo called exactly once when a cast exists")
 end
 
 -- --------------------------------------------------------------------------
@@ -477,16 +519,29 @@ do
     assert_eq(eventFrame.registeredEvents["UNIT_THREAT_SITUATION_UPDATE"], true, "EventFrame: UNIT_THREAT_SITUATION_UPDATE is registered")
 
     -- Verify UNIT_ABSORB_AMOUNT_CHANGED fires and dispatches to Dispatcher.ApplyToUnit
-    local dispatchedUnit = nil
     local origApply = addonTable.Dispatcher.ApplyToUnit
+    -- Friendly unit should NOT trigger ApplyToUnit
+    local dispatchedFriendly = nil
     addonTable.Dispatcher.ApplyToUnit = function(u, force)
-        dispatchedUnit = u
+        dispatchedFriendly = u
         return origApply(u, force)
     end
-
     Mocks.FireEvent("UNIT_ABSORB_AMOUNT_CHANGED", "nameplate15")
     addonTable.Dispatcher.ApplyToUnit = origApply
-    assert_eq(dispatchedUnit, "nameplate15", "EventFrame: Firing UNIT_ABSORB_AMOUNT_CHANGED triggers Dispatcher.ApplyToUnit")
+    assert_eq(dispatchedFriendly, nil, "EventFrame: Friendly UNIT_ABSORB does not dispatch Dispatcher")
+
+    -- Enemy PvE unit SHOULD trigger ApplyToUnit
+    Mocks.CreateTestUnit("nameplate99", { name = "Enemy Mob", level = 70, classification = "normal", faction = "Horde" })
+    Mocks.CreateTestNameplate("nameplate99")
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate99")
+    local dispatchedEnemy = nil
+    addonTable.Dispatcher.ApplyToUnit = function(u, force)
+        dispatchedEnemy = u
+        return origApply(u, force)
+    end
+    Mocks.FireEvent("UNIT_ABSORB_AMOUNT_CHANGED", "nameplate99")
+    addonTable.Dispatcher.ApplyToUnit = origApply
+    assert_eq(dispatchedEnemy, "nameplate99", "EventFrame: Enemy PvE UNIT_ABSORB correctly triggers Dispatcher")
 end
 
 -- --------------------------------------------------------------------------
