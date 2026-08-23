@@ -488,7 +488,7 @@ do
     addonTable.Threat.InvalidatePlayerTankCache()
     addonTable.Threat.RefreshPlayerTankCache()
     -- Verify displayKind priorities: Focus (1) > Aggro (2) > Absorb (3) > Boss (4) > Caster (5) > Melee (6)
-    Mocks.CreateTestUnit("nameplate15", { name = "Boss Mob", level = 70, classification = "worldboss", inCombat = true, faction = "Alliance" })
+    Mocks.CreateTestUnit("nameplate15", { name = "Boss Mob", level = 70, classification = "worldboss", inCombat = true, faction = "Horde" })
     local npP1 = Mocks.CreateTestNameplate("nameplate15")
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate15")
 
@@ -535,6 +535,10 @@ do
     -- Verify UNIT_ABSORB_AMOUNT_CHANGED fires and dispatches to Dispatcher.ApplyToUnit
     local origApply = addonTable.Dispatcher.ApplyToUnit
     -- Friendly unit should NOT trigger ApplyToUnit
+    -- Ensure a friendly plate exists for this friendly-absorb pre-check
+    Mocks.CreateTestUnit("nameplate15", { name = "Friendly Ally", level = 70, classification = "normal", faction = "Alliance" })
+    Mocks.CreateTestNameplate("nameplate15")
+    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate15")
     local dispatchedFriendly = nil
     addonTable.Dispatcher.ApplyToUnit = function(u, force)
         dispatchedFriendly = u
