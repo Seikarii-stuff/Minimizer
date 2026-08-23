@@ -10,6 +10,13 @@ local function UpdateNameplates()
     end
 end
 
+local function IsPipelineRelevant(unit)
+    if Minimizer.Dispatcher and Minimizer.Dispatcher.IsPipelineRelevant then
+        return Minimizer.Dispatcher.IsPipelineRelevant(unit)
+    end
+    return true
+end
+
 local function InvalidateAllThreat()
     if Minimizer.Cache and Minimizer.Cache.InvalidateAll then
         Minimizer.Cache.InvalidateAll("threat")
@@ -73,6 +80,7 @@ end
 
 local function HandleUnitStateChange(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then
+        if not IsPipelineRelevant(unit) then return end
         if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
             Minimizer.Dispatcher.ApplyToUnit(unit)
         end
@@ -83,6 +91,7 @@ handlers["UNIT_CLASSIFICATION_CHANGED"] = HandleUnitStateChange
 handlers["UNIT_LEVEL"] = HandleUnitStateChange
 handlers["UNIT_ABSORB_AMOUNT_CHANGED"] = function(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then
+        if not IsPipelineRelevant(unit) then return end
         if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
             Minimizer.Dispatcher.ApplyToUnit(unit)
         end
@@ -91,6 +100,7 @@ end
 
 local function HandleThreatEvent(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then
+        if not IsPipelineRelevant(unit) then return end
         if Minimizer.Threat and Minimizer.Threat.Invalidate then
             Minimizer.Threat.Invalidate(unit)
         elseif Minimizer.Cache and Minimizer.Cache.InvalidateUnit then
@@ -137,6 +147,7 @@ handlers["PLAYER_SPECIALIZATION_CHANGED"] = HandleRosterOrSpecChange
 
 local function HandleCastEvent(self, event, unit)
     if not unit or not unit:match("^nameplate%d+$") then return end
+    if not IsPipelineRelevant(unit) then return end
     if Minimizer.Cast and Minimizer.Cast.InvalidateState then
         Minimizer.Cast.InvalidateState(unit)
     end
@@ -184,16 +195,24 @@ handlers["NAME_PLATE_UNIT_ADDED"] = function(self, event, unit)
         if Minimizer.Threat and Minimizer.Threat.ForgetUnit then
             Minimizer.Threat.ForgetUnit(unit)
         end
-        if Minimizer.Dispatcher and Minimizer.Dispatcher.TrackUnit then
-            Minimizer.Dispatcher.TrackUnit(unit)
+
+        if IsPipelineRelevant(unit) then
+            if Minimizer.Dispatcher and Minimizer.Dispatcher.TrackUnit then
+                Minimizer.Dispatcher.TrackUnit(unit)
+            end
+            if Minimizer.Threat and Minimizer.Threat.Invalidate then
+                Minimizer.Threat.Invalidate(unit)
+            end
+            if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
+                Minimizer.Dispatcher.ApplyToUnit(unit)
+            end
+            UpdateNameplates()
+        elseif Minimizer.Dispatcher and Minimizer.Dispatcher.ForgetUnit then
+            -- Friendly plates are not tracked by the normal pipeline, but any
+            -- recycled token must not retain monitor state from its prior unit.
+            Minimizer.Dispatcher.ForgetUnit(unit)
         end
-        if Minimizer.Threat and Minimizer.Threat.Invalidate then
-            Minimizer.Threat.Invalidate(unit)
-        end
-        if Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToUnit then
-            Minimizer.Dispatcher.ApplyToUnit(unit)
-        end
-        UpdateNameplates()
+
         if Minimizer.Overlays and Minimizer.Overlays.OnUnitChanged then
             Minimizer.Overlays.OnUnitChanged(unit, "added")
         else
