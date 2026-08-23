@@ -466,20 +466,49 @@ local agg_avg = median(avg_vals)
 local agg_kb = median(kb_vals)
 
 -- Write aggregated report into single file
-local dateTag   = os.date("%Y%m%d_%H%M%S")
-local outPath   = "tests/results/benchmark_aggregated_" .. dateTag .. ".txt"
-local fh, err   = io.open(outPath, "w")
-if fh then
-    fh:write("Aggregated Benchmark Runs: " .. #allSummaries .. "\n\n")
+-- Output handling: by default write to a fixed path so each run replaces
+-- the previous aggregated benchmark. If the script is run with the
+-- command-line argument "compare", also emit a timestamped "pre" file
+-- and an unversioned "benchmark_latest.txt" to ease diffing/comparison.
+local mode = arg and arg[1]
+local dateTag = os.date("%Y%m%d_%H%M%S")
+
+local function build_aggregated_content()
+    local buf = {}
+    table.insert(buf, "Aggregated Benchmark Runs: " .. #allSummaries .. "\n")
     for i, rep in ipairs(allReports) do
-        fh:write(rep)
-        fh:write("\n" .. string.rep("=", 72) .. "\n")
+        table.insert(buf, rep)
+        table.insert(buf, "\n" .. string.rep("=", 72) .. "\n")
     end
-    fh:write(string.format("\nAGGREGATE SUMMARY (median across runs): p90 = %.4f ms, avgApplyToUnit = %.6f ms, GC = %.4f KB/call\n", agg_p90, agg_avg, agg_kb))
+    table.insert(buf, string.format("\nAGGREGATE SUMMARY (median across runs): p90 = %.4f ms, avgApplyToUnit = %.6f ms, GC = %.4f KB/call\n", agg_p90, agg_avg, agg_kb))
+    return table.concat(buf, "")
+end
+
+local aggContent = build_aggregated_content()
+
+local resultsDir = "tests/results"
+local function try_write(path, content)
+    local fh, err = io.open(path, "w")
+    if not fh then
+        io.stderr:write("Warning: could not write results file '" .. path .. "': " .. tostring(err) .. "\n")
+        return false
+    end
+    fh:write(content)
     fh:close()
-    print("Aggregated results saved to: " .. outPath)
+    return true
+end
+
+if mode == "compare" then
+    local prePath = resultsDir .. "/benchmark_pre_" .. dateTag .. ".txt"
+    local latestPath = resultsDir .. "/benchmark_latest.txt"
+    local ok1 = try_write(prePath, aggContent)
+    local ok2 = try_write(latestPath, aggContent)
+    if ok1 then print("Aggregated results saved to: " .. prePath) end
+    if ok2 then print("Aggregated results saved to: " .. latestPath) end
 else
-    io.stderr:write("Warning: could not write aggregated results file: " .. tostring(err) .. "\n")
+    local outPath = resultsDir .. "/benchmark_aggregated.txt"
+    local ok = try_write(outPath, aggContent)
+    if ok then print("Aggregated results saved to: " .. outPath) end
 end
 
 -- Print a concise aggregated summary and perform regression check
