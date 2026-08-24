@@ -19,7 +19,6 @@ local C_SpecializationInfo = C_SpecializationInfo
 local CreateFrame = CreateFrame
 local GetTime = GetTime
 
-local NIL_SPECIAL_CONFIRM = 1.0
 local playerTankCache
 local playerTankCacheValid = false
 local nilState = {}
@@ -73,28 +72,18 @@ end
 Minimizer.Threat.IsThreatEnabled = IsThreatEnabled
 
 local function UpdateNilState(unit, result, generation, inCombat)
-    local now = GetTime()
     local state = nilState[unit]
     if not state or state.generation ~= generation then
-        state = { generation = generation, nilSince = nil, nilSpecial = false }
+        state = { generation = generation, nilSpecial = false }
         nilState[unit] = state
     end
 
     local canAttackPlayer = UnitCanAttack and UnitCanAttack(unit, "player")
     local isNilSpecialCandidate = canAttackPlayer == false
 
-    if result.situation == nil and inCombat and isNilSpecialCandidate then
-        if not state.nilSince then
-            state.nilSince = now
-        elseif not state.nilSpecial and (now - state.nilSince) >= NIL_SPECIAL_CONFIRM then
-            state.nilSpecial = true
-        end
-    else
-        state.nilSince = nil
-        state.nilSpecial = false
-    end
+    state.nilSpecial = result.situation == nil and inCombat and isNilSpecialCandidate
 
-    result.nilSince = state.nilSince
+    result.nilSince = nil
     result.nilSpecial = state.nilSpecial
     return result
 end
