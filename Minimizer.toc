@@ -3,7 +3,6 @@
 ## Notes: Simplifica nameplates enemigas usando APIs nativas de Blizzard. /simp abre el menu
 ## Author: Seikarii
 ## Version: 1.0
-## IconTexture: 136006
 ## SavedVariables: MinimizerDB
 ## SavedVariablesPerCharacter: MinimizerCharDB
 
@@ -30,6 +29,7 @@ Plater/HealthBarColor.lua
 Plater/CastingBar.lua
 Overlays/Pips.lua
 Overlays/Overlays.lua
+Overlays/MyDebuff.lua
 Overlays/Focus.lua
 Overlays/Target.lua
 Menu.lua
