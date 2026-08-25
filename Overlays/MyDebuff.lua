@@ -9,8 +9,7 @@ local ORANGE = { 1.00, 0.35, 0.00, 0.55 }
 -- Blizzard's modern aura API can return secret aura data. Calling
 -- GetAuraDataByIndex from addon code can therefore raise a taint error.
 -- Track only player-applied harmful auras from the combat log instead.
--- Combat-log GUIDs are plain event data; no aura fields are inspected or
--- compared, so this path never reads or compares secret aura values.
+-- No aura API is called and no secret aura value is inspected or compared.
 local playerGUID
 local harmfulDebuffs = {}
 
@@ -64,6 +63,19 @@ local function RefreshUnit(unit)
     end
 end
 
+local function RefreshDestination(destGUID)
+    if not destGUID then return end
+    local plates = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetActiveNameplates and Minimizer.Lifecycle.GetActiveNameplates())
+        or Minimizer.ActiveNameplates
+    if not plates or not UnitGUID then return end
+    for unit, nameplate in pairs(plates) do
+        if UnitGUID(unit) == destGUID then
+            MyDebuff:Update(unit, nameplate)
+            break
+        end
+    end
+end
+
 local CombatLogFrame = CreateFrame("Frame", "MinimizerMyDebuffCombatLogFrame")
 CombatLogFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 CombatLogFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -75,30 +87,29 @@ CombatLogFrame:SetScript("OnEvent", function(_, event)
     end
 
     if not CombatLogGetCurrentEventInfo then return end
-    local _, subEvent, _, sourceGUID, _, _, _, destGUID, _, _, _, spellID = CombatLogGetCurrentEventInfo()
+
+    local _, subEvent, _, sourceGUID, _, _, _, destGUID, _, _, _, spellID, _, _, auraType = CombatLogGetCurrentEventInfo()
+
+    -- Death/destruction events have no aura source. Clear our tracked state
+    -- before applying the player-source filter.
+    if subEvent == "UNIT_DIED" or subEvent == "UNIT_DESTROYED" then
+        ClearDebuff(destGUID)
+        RefreshDestination(destGUID)
+        return
+    end
+
     if not sourceGUID or sourceGUID ~= GetPlayerGUID() or not destGUID then return end
+    if auraType ~= "DEBUFF" then return end
 
     if subEvent == "SPELL_AURA_APPLIED"
         or subEvent == "SPELL_AURA_APPLIED_DOSE"
         or subEvent == "SPELL_AURA_REFRESH" then
         SetDebuff(destGUID, spellID)
-    elseif subEvent == "SPELL_AURA_REMOVED"
-        or subEvent == "SPELL_AURA_REMOVED_DOSE" then
+    elseif subEvent == "SPELL_AURA_REMOVED" then
         ClearDebuff(destGUID, spellID)
-    elseif subEvent == "UNIT_DIED" or subEvent == "UNIT_DESTROYED" then
-        ClearDebuff(destGUID)
     end
 
-    local plates = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetActiveNameplates and Minimizer.Lifecycle.GetActiveNameplates())
-        or Minimizer.ActiveNameplates
-    if plates then
-        for unit, nameplate in pairs(plates) do
-            if UnitGUID and UnitGUID(unit) == destGUID then
-                MyDebuff:Update(unit, nameplate)
-                break
-            end
-        end
-    end
+    RefreshDestination(destGUID)
 end)
 
 function MyDebuff:HasMyDebuff(unit)
