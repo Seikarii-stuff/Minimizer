@@ -37,54 +37,37 @@ local function SaveMenuPosition(frame)
 end
 
 local function GetWidgetText(frame)
-    if not frame then
-        return nil
-    end
+    if not frame then return nil end
     local name = frame:GetName()
-    if name and _G[name .. "Text"] then
-        return _G[name .. "Text"]
-    end
+    if name and _G[name .. "Text"] then return _G[name .. "Text"] end
     return frame.Text or nil
 end
 
 local function ResolveSpellName(spellID)
-    if type(spellID) ~= "number" then
-        return nil
-    end
-
+    if type(spellID) ~= "number" then return nil end
     if C_Spell then
         if C_Spell.GetSpellInfo then
             local info = C_Spell.GetSpellInfo(spellID)
-            if info and type(info.name) == "string" and info.name ~= "" then
-                return info.name
-            end
+            if info and type(info.name) == "string" and info.name ~= "" then return info.name end
         end
         if C_Spell.GetSpellName then
             local name = C_Spell.GetSpellName(spellID)
-            if type(name) == "string" and name ~= "" then
-                return name
-            end
+            if type(name) == "string" and name ~= "" then return name end
         end
     end
-
     return "Spell " .. tostring(spellID)
 end
 
 local function BuildSpellOptions(tableKey)
     local classToken = GetClassToken()
     local source = Minimizer.Data and Minimizer.Data[tableKey] and Minimizer.Data[tableKey][classToken]
-    local options = {
-        { text = "Automático", value = nil },
-    }
-    if type(source) ~= "table" then
-        return options
-    end
+    local options = { { text = "Automático", value = nil } }
+    if type(source) ~= "table" then return options end
     for _, entry in ipairs(source) do
         if type(entry) == "number" then
             table.insert(options, { text = ResolveSpellName(entry), value = entry })
         elseif type(entry) == "table" and type(entry.id) == "number" then
-            local spellName = entry.name or ResolveSpellName(entry.id)
-            table.insert(options, { text = spellName, value = entry.id })
+            table.insert(options, { text = entry.name or ResolveSpellName(entry.id), value = entry.id })
         end
     end
     return options
@@ -94,13 +77,12 @@ local function RequestFullUpdate()
     if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
         Minimizer.Dispatcher.RequestFullUpdate()
     end
+    if Minimizer.MyDebuff and Minimizer.MyDebuff.UpdateAll then
+        Minimizer.MyDebuff:UpdateAll()
+    end
 end
 
 local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
-    -- Interface 120100 sigue aceptando la API clásica UIDropDownMenuTemplate como la
-    -- opción recomendada para menús simples, por compatibilidad y estabilidad con el
-    -- resto de addons. No usamos MenuUtil/Selection templates aquí para evitar una
-    -- dependencia innecesaria de un patrón más nuevo en un addon pequeño y legacy-safe.
     local dropdown = CreateFrame("Frame", name, frame, "UIDropDownMenuTemplate")
     dropdown:SetSize(160, 28)
     dropdown.label = dropdown:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -115,16 +97,13 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
         info.checked = selectedValue == nil
         info.func = function()
             if MinimizerCharDB then MinimizerCharDB[dbKey] = nil end
-            if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then
-                Minimizer.Widgets.InvalidateCDSpellCache()
-            end
+            if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then Minimizer.Widgets.InvalidateCDSpellCache() end
             RequestFullUpdate()
             Menu.Refresh()
         end
         UIDropDownMenu_AddButton(info)
 
-        local options = BuildSpellOptions(tableKey)
-        for _, entry in ipairs(options) do
+        for _, entry in ipairs(BuildSpellOptions(tableKey)) do
             if entry.value ~= nil then
                 local info2 = UIDropDownMenu_CreateInfo()
                 info2.text = entry.text
@@ -132,9 +111,7 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
                 info2.checked = selectedValue == entry.value
                 info2.func = function()
                     if MinimizerCharDB then MinimizerCharDB[dbKey] = entry.value end
-                    if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then
-                        Minimizer.Widgets.InvalidateCDSpellCache()
-                    end
+                    if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then Minimizer.Widgets.InvalidateCDSpellCache() end
                     RequestFullUpdate()
                     Menu.Refresh()
                 end
@@ -149,44 +126,13 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
             UIDropDownMenu_SetText(dropdown, "Automático")
             return
         end
-        -- Try to display the name from SpellData first (respecting ordering),
-        -- fall back to GetSpellInfo if not available.
-        local classToken = GetClassToken()
-        local source = Minimizer.Data and Minimizer.Data[tableKey] and Minimizer.Data[tableKey][classToken]
-        local foundName = nil
-        if type(source) == "table" then
-            for _, entry in ipairs(source) do
-                local id = (type(entry) == "number") and entry or (type(entry) == "table" and entry.id)
-                if id == selectedValue then
-                    if type(entry) == "table" and entry.name then
-                        foundName = entry.name
-                    end
-                    break
-                end
-            end
-        end
-        if not foundName then
-            foundName = ResolveSpellName(selectedValue)
-        end
-        UIDropDownMenu_SetText(dropdown, foundName)
+        UIDropDownMenu_SetText(dropdown, ResolveSpellName(selectedValue))
     end
 
-    UIDropDownMenu_Initialize(dropdown, dropdown.initialize)
     dropdown.Refresh()
     return dropdown
 end
 
--- ============================================================================
--- Leyenda de colores: fila puramente informativa (swatch de color + texto).
--- No es interactiva -- no lleva OnClick ni estado, solo documenta en pantalla
--- lo que ya está definido en Constants.lua (HealthColors/CastColors), para
--- que el usuario no tenga que memorizar la leyenda del README.
---
--- anchorFrame: fila anterior (o el título de la sección) bajo la cual se
---   ancla esta fila. Si es nil, se ancla al TOPLEFT del parent.
--- Devuelve la fila creada, para poder encadenar la siguiente pasando
--- anchorFrame = filaAnterior.
--- ============================================================================
 local LEGEND_SWATCH_SIZE = 14
 local LEGEND_ROW_SPACING = 8
 
@@ -200,24 +146,18 @@ local function CreateLegendRow(parent, colorRGB, labelText, anchorFrame)
         row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
         row:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
     end
-
     local swatch = row:CreateTexture(nil, "ARTWORK")
     swatch:SetSize(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE)
     swatch:SetPoint("LEFT", row, "LEFT", 0, 0)
     swatch:SetColorTexture(colorRGB[1], colorRGB[2], colorRGB[3], 1)
-
     local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     label:SetPoint("LEFT", swatch, "RIGHT", 6, 0)
     label:SetPoint("RIGHT", row, "RIGHT", 0, 0)
     label:SetJustifyH("LEFT")
     label:SetText(labelText)
-
     return row
 end
 
--- Orden y etiquetas de la leyenda: coincide con la prioridad descendente de
--- la Leyenda de color M+ del README (§5). "boss"/"miniboss" comparten color
--- (morado), así que se fusionan en una sola fila.
 local HEALTH_LEGEND_ENTRIES = {
     { key = "focus", label = "Focus" },
     { key = "aggro", label = "Aggro (tuyo)" },
@@ -235,10 +175,6 @@ local CAST_LEGEND_ENTRIES = {
     { key = "channel", label = "Channeling interrupt cooldown" },
 }
 
--- Construye la columna completa de leyenda dentro de `legend` (frame vacío
--- ya posicionado por EnsureFrame). Puramente visual, no guarda referencias
--- porque nunca se refresca -- los colores de Constants.lua son estáticos en
--- runtime (no hay Menu.Refresh que los toque).
 local function BuildLegend(legend)
     local sectionTitle = legend:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     sectionTitle:SetPoint("TOPLEFT", legend, "TOPLEFT", 0, 0)
@@ -250,9 +186,7 @@ local function BuildLegend(legend)
     local healthColors = Minimizer.Constants and Minimizer.Constants.HealthColors or {}
     for _, entry in ipairs(HEALTH_LEGEND_ENTRIES) do
         local color = healthColors[entry.key]
-        if color then
-            lastRow = CreateLegendRow(legend, color, entry.label, lastRow)
-        end
+        if color then lastRow = CreateLegendRow(legend, color, entry.label, lastRow) end
     end
 
     local castTitle = legend:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -265,26 +199,16 @@ local function BuildLegend(legend)
     local castColors = Minimizer.Constants and Minimizer.Constants.CastColors or {}
     for _, entry in ipairs(CAST_LEGEND_ENTRIES) do
         local color = castColors[entry.key]
-        if color then
-            lastRow = CreateLegendRow(legend, color, entry.label, lastRow)
-        end
+        if color then lastRow = CreateLegendRow(legend, color, entry.label, lastRow) end
     end
 end
 
 local function EnsureFrame()
-    if Menu.frame then
-        return Menu.frame
-    end
+    if Menu.frame then return Menu.frame end
 
-    -- "BackdropTemplate" es obligatorio desde que Blizzard separó Backdrop
-    -- del mixin base de Frame: sin él, frame.SetBackdrop ni siquiera existe
-    -- y el "if frame.SetBackdrop then" de abajo se saltaba en silencio -- el
-    -- bug reportado de fondo 100% transparente venía de aquí, no de un alpha
-    -- mal puesto.
     local FRAME_WIDTH = 460
     local FRAME_HEIGHT = 400
     local CONTENT_WIDTH = 230
-
     local frame = CreateFrame("Frame", "MinimizerMenuFrame", UIParent, "BackdropTemplate")
     frame:SetSize(FRAME_WIDTH, FRAME_HEIGHT)
     frame:SetFrameStrata("DIALOG")
@@ -296,19 +220,13 @@ local function EnsureFrame()
         frame:SetBackdrop({
             bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
             edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-            tile = true,
-            tileSize = 32,
-            edgeSize = 32,
+            tile = true, tileSize = 32, edgeSize = 32,
             insets = { left = 11, right = 11, top = 11, bottom = 11 },
         })
         frame:SetBackdropColor(0, 0, 0, 0.92)
         frame:SetBackdropBorderColor(1, 1, 1, 1)
     end
-    frame:SetScript("OnDragStart", function(self)
-        if self:IsMovable() then
-            self:StartMoving()
-        end
-    end)
+    frame:SetScript("OnDragStart", function(self) if self:IsMovable() then self:StartMoving() end end)
     frame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         self:SetUserPlaced(true)
@@ -319,28 +237,18 @@ local function EnsureFrame()
     title:SetText("Minimizer")
     title:SetPoint("TOP", frame, "TOP", 0, -16)
 
-    -- Encapsulate controls inside a content sub-frame (the 'menu') so the
-    -- visible dialog frame can hold chrome (close button, drag area) and the
-    -- actual controls are in a separate container. La ventana ahora se
-    -- divide en dos columnas: controles (izquierda, ancho fijo) y leyenda
-    -- de colores puramente informativa (derecha, ver BuildLegend arriba).
     local content = CreateFrame("Frame", nil, frame)
     content:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -36)
     content:SetSize(CONTENT_WIDTH, FRAME_HEIGHT - 50)
 
     local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
-    closeBtn:SetScript("OnClick", function()
-        frame:Hide()
-    end)
+    closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
-    -- Simplify ON/OFF toggle (replaces the previous percentage slider).
     local simplifyToggle = CreateFrame("CheckButton", "MinimizerMenuSimplifyToggle", content, "ChatConfigCheckButtonTemplate")
     simplifyToggle:SetPoint("TOPLEFT", frame, "TOPLEFT", 24, -40)
     simplifyToggle.text = GetWidgetText(simplifyToggle)
-    if simplifyToggle.text then
-        simplifyToggle.text:SetText("Enable simplify")
-    end
+    if simplifyToggle.text then simplifyToggle.text:SetText("Enable simplify") end
     simplifyToggle:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
     simplifyToggle:SetScript("OnClick", function(self)
         if MinimizerDB then MinimizerDB.simplifyEnabled = self:GetChecked() end
@@ -351,9 +259,7 @@ local function EnsureFrame()
     targetMarkers:SetPoint("TOPLEFT", simplifyToggle, "BOTTOMLEFT", 0, -20)
     targetMarkers:SetChecked(MinimizerDB and MinimizerDB.enableTargetMarkers ~= false)
     targetMarkers.text = GetWidgetText(targetMarkers)
-    if targetMarkers.text then
-        targetMarkers.text:SetText("Enable target markers")
-    end
+    if targetMarkers.text then targetMarkers.text:SetText("Enable target markers") end
     targetMarkers:SetScript("OnClick", function(self)
         if MinimizerDB then MinimizerDB.enableTargetMarkers = self:GetChecked() end
         RequestFullUpdate()
@@ -363,73 +269,49 @@ local function EnsureFrame()
     focusMarkers:SetPoint("TOPLEFT", targetMarkers, "BOTTOMLEFT", 0, -10)
     focusMarkers:SetChecked(MinimizerDB and MinimizerDB.enableFocusMarkers ~= false)
     focusMarkers.text = GetWidgetText(focusMarkers)
-    if focusMarkers.text then
-        focusMarkers.text:SetText("Enable focus markers")
-    end
+    if focusMarkers.text then focusMarkers.text:SetText("Enable focus markers") end
     focusMarkers:SetScript("OnClick", function(self)
         if MinimizerDB then MinimizerDB.enableFocusMarkers = self:GetChecked() end
         RequestFullUpdate()
     end)
 
+    local myDebuffToggle = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
+    myDebuffToggle:SetPoint("TOPLEFT", focusMarkers, "BOTTOMLEFT", 0, -10)
+    myDebuffToggle:SetChecked(MinimizerDB and MinimizerDB.enableMyDebuffOverlay == true)
+    myDebuffToggle.text = GetWidgetText(myDebuffToggle)
+    if myDebuffToggle.text then myDebuffToggle.text:SetText("Overlay naranja si tiene perjuicios (míos)") end
+    myDebuffToggle:SetScript("OnClick", function(self)
+        if MinimizerDB then MinimizerDB.enableMyDebuffOverlay = self:GetChecked() end
+        RequestFullUpdate()
+    end)
+
     local faceToggle = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
-    faceToggle:SetPoint("TOPLEFT", focusMarkers, "BOTTOMLEFT", 0, -10)
+    faceToggle:SetPoint("TOPLEFT", myDebuffToggle, "BOTTOMLEFT", 0, -10)
     faceToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusFace == true)
     faceToggle.text = GetWidgetText(faceToggle)
-    if faceToggle.text then
-        faceToggle.text:SetText("Focus face enabled")
-    end
+    if faceToggle.text then faceToggle.text:SetText("Focus face enabled") end
     faceToggle:SetScript("OnClick", function(self)
-        if Minimizer.Focus then
-            Minimizer.Focus:SetFaceEnabled(self:GetChecked())
-        else
-            if MinimizerDB then MinimizerDB.enableFocusFace = self:GetChecked() end
-        end
+        if Minimizer.Focus then Minimizer.Focus:SetFaceEnabled(self:GetChecked()) elseif MinimizerDB then MinimizerDB.enableFocusFace = self:GetChecked() end
     end)
 
     local arrowsToggle = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
     arrowsToggle:SetPoint("TOPLEFT", faceToggle, "BOTTOMLEFT", 0, -10)
     arrowsToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusArrows == true)
     arrowsToggle.text = GetWidgetText(arrowsToggle)
-    if arrowsToggle.text then
-        arrowsToggle.text:SetText("Focus arrows enabled")
-    end
+    if arrowsToggle.text then arrowsToggle.text:SetText("Focus arrows enabled") end
     arrowsToggle:SetScript("OnClick", function(self)
-        if Minimizer.Focus then
-            Minimizer.Focus:SetArrowsEnabled(self:GetChecked())
-        else
-            if MinimizerDB then MinimizerDB.enableFocusArrows = self:GetChecked() end
-        end
+        if Minimizer.Focus then Minimizer.Focus:SetArrowsEnabled(self:GetChecked()) elseif MinimizerDB then MinimizerDB.enableFocusArrows = self:GetChecked() end
     end)
 
-    local slots = (Minimizer.Pips and Minimizer.Pips.SLOTS) or {
-        { id = 1, name = "Pip 1" },
-        { id = 2, name = "Pip 2" },
-    }
-
+    local slots = (Minimizer.Pips and Minimizer.Pips.SLOTS) or {{ id = 1, name = "Pip 1" }, { id = 2, name = "Pip 2" }}
     local dropdowns = {}
     for index, slot in ipairs(slots) do
         local slotId = slot.id or index
-        local slotName = slot.name or ("Pip " .. slotId)
-        local drop = CreateDropdown(
-            content,
-            "MinimizerMenuPip" .. slotId .. "Drop",
-            slotName,
-            "PIPS_SPELLS",
-            "pip" .. slotId
-        )
-        if #dropdowns == 0 then
-            drop:SetPoint("TOPLEFT", arrowsToggle, "BOTTOMLEFT", 0, -20)
-        else
-            drop:SetPoint("TOPLEFT", dropdowns[#dropdowns], "BOTTOMLEFT", 0, -18)
-        end
+        local drop = CreateDropdown(content, "MinimizerMenuPip" .. slotId .. "Drop", slot.name or ("Pip " .. slotId), "PIPS_SPELLS", "pip" .. slotId)
+        if #dropdowns == 0 then drop:SetPoint("TOPLEFT", arrowsToggle, "BOTTOMLEFT", 0, -20) else drop:SetPoint("TOPLEFT", dropdowns[#dropdowns], "BOTTOMLEFT", 0, -18) end
         table.insert(dropdowns, drop)
     end
 
-    -- Columna de leyenda: aprovecha el lateral derecho, que antes quedaba
-    -- vacío. Ancho = lo que sobra del frame tras la columna de controles.
-    -- Puramente informativa -- BuildLegend no crea ningún control, solo
-    -- swatches + texto, así que no hace falta guardarla en
-    -- frame.MinimizerMenuControls (Menu.Refresh no necesita tocarla).
     local divider = frame:CreateTexture(nil, "ARTWORK")
     divider:SetPoint("TOP", content, "TOPRIGHT", 9, 2)
     divider:SetPoint("BOTTOM", content, "BOTTOMRIGHT", 9, 0)
@@ -445,6 +327,7 @@ local function EnsureFrame()
         simplifyToggle = simplifyToggle,
         targetMarkers = targetMarkers,
         focusMarkers = focusMarkers,
+        myDebuffToggle = myDebuffToggle,
         faceToggle = faceToggle,
         arrowsToggle = arrowsToggle,
         dropdowns = dropdowns,
@@ -459,32 +342,23 @@ end
 function Menu.Refresh()
     local frame = EnsureFrame()
     if not frame then return end
-    if frame.MinimizerMenuControls and frame.MinimizerMenuControls.simplifyToggle then
-        local st = frame.MinimizerMenuControls.simplifyToggle
-        st:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
-    end
-    if frame.MinimizerMenuControls then
-        frame.MinimizerMenuControls.targetMarkers:SetChecked(MinimizerDB and MinimizerDB.enableTargetMarkers ~= false)
-        frame.MinimizerMenuControls.focusMarkers:SetChecked(MinimizerDB and MinimizerDB.enableFocusMarkers ~= false)
-        frame.MinimizerMenuControls.faceToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusFace == true)
-        frame.MinimizerMenuControls.arrowsToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusArrows == true)
-    end
-    for _, dropdown in ipairs(frame.MinimizerMenuControls and frame.MinimizerMenuControls.dropdowns or {}) do
-        if dropdown and dropdown.Refresh then
-            dropdown.Refresh()
-        end
+    local controls = frame.MinimizerMenuControls
+    if not controls then return end
+    controls.simplifyToggle:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
+    controls.targetMarkers:SetChecked(MinimizerDB and MinimizerDB.enableTargetMarkers ~= false)
+    controls.focusMarkers:SetChecked(MinimizerDB and MinimizerDB.enableFocusMarkers ~= false)
+    controls.myDebuffToggle:SetChecked(MinimizerDB and MinimizerDB.enableMyDebuffOverlay == true)
+    controls.faceToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusFace == true)
+    controls.arrowsToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusArrows == true)
+    for _, dropdown in ipairs(controls.dropdowns or {}) do
+        if dropdown and dropdown.Refresh then dropdown.Refresh() end
     end
 end
 
 function Menu.Toggle()
     local frame = EnsureFrame()
     if not frame then return end
-    if frame:IsShown() then
-        frame:Hide()
-    else
-        Menu.Refresh()
-        frame:Show()
-    end
+    if frame:IsShown() then frame:Hide() else Menu.Refresh(); frame:Show() end
 end
 
 function Menu.Open()
