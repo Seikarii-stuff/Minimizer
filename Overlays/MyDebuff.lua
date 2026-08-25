@@ -6,115 +6,19 @@ Minimizer.MyDebuff = MyDebuff
 
 local ORANGE = { 1.00, 0.35, 0.00, 0.55 }
 
--- Blizzard's modern aura API can return secret aura data. Calling
--- GetAuraDataByIndex from addon code can therefore raise a taint error.
--- Track only player-applied harmful auras from the combat log instead.
--- No aura API is called and no secret aura value is inspected or compared.
-local playerGUID
-local harmfulDebuffs = {}
-
-local function GetPlayerGUID()
-    if not playerGUID and UnitGUID then
-        playerGUID = UnitGUID("player")
-    end
-    return playerGUID
-end
-
-local function GetDestDebuffs(destGUID)
-    if not destGUID then return nil end
-    local debuffs = harmfulDebuffs[destGUID]
-    if not debuffs then
-        debuffs = {}
-        harmfulDebuffs[destGUID] = debuffs
-    end
-    return debuffs
-end
-
-local function SetDebuff(destGUID, spellID)
-    if not destGUID or type(spellID) ~= "number" then return end
-    local debuffs = GetDestDebuffs(destGUID)
-    debuffs[spellID] = true
-end
-
-local function ClearDebuff(destGUID, spellID)
-    local debuffs = destGUID and harmfulDebuffs[destGUID]
-    if not debuffs then return end
-    if type(spellID) == "number" then
-        debuffs[spellID] = nil
-    else
-        harmfulDebuffs[destGUID] = nil
-        return
-    end
-    if next(debuffs) == nil then
-        harmfulDebuffs[destGUID] = nil
-    end
-end
-
-local function HasMyDebuffGUID(destGUID)
-    local debuffs = destGUID and harmfulDebuffs[destGUID]
-    return debuffs ~= nil and next(debuffs) ~= nil
-end
-
-local function RefreshUnit(unit)
-    if not unit or not unit:match("^nameplate%d+$") then return end
-    local nameplate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit(unit)
-    if nameplate then
-        MyDebuff:Update(unit, nameplate)
-    end
-end
-
-local function RefreshDestination(destGUID)
-    if not destGUID then return end
-    local plates = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetActiveNameplates and Minimizer.Lifecycle.GetActiveNameplates())
-        or Minimizer.ActiveNameplates
-    if not plates or not UnitGUID then return end
-    for unit, nameplate in pairs(plates) do
-        if UnitGUID(unit) == destGUID then
-            MyDebuff:Update(unit, nameplate)
-            break
-        end
-    end
-end
-
-local CombatLogFrame = CreateFrame("Frame", "MinimizerMyDebuffCombatLogFrame")
-CombatLogFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-CombatLogFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-CombatLogFrame:SetScript("OnEvent", function(_, event)
-    if event == "PLAYER_ENTERING_WORLD" then
-        playerGUID = UnitGUID and UnitGUID("player") or nil
-        wipe(harmfulDebuffs)
-        return
+-- Midnight: do not call GetAuraDataByIndex/GetDebuffDataByIndex from addon
+-- code while unit-aura data is restricted. GetUnitAuras returns a safe
+-- container; the HARMFUL|PLAYER filter is evaluated by Blizzard's API, so
+-- we only test whether the filtered result contains an entry. We never read
+-- or compare any aura field (spellId, sourceUnit, duration, etc.).
+local function HasMyDebuff(unit)
+    if not unit or not UnitExists(unit) then return false end
+    if not C_UnitAuras or type(C_UnitAuras.GetUnitAuras) ~= "function" then
+        return false
     end
 
-    if not CombatLogGetCurrentEventInfo then return end
-
-    local _, subEvent, _, sourceGUID, _, _, _, destGUID, _, _, _, spellID, _, _, auraType = CombatLogGetCurrentEventInfo()
-
-    -- Death/destruction events have no aura source. Clear our tracked state
-    -- before applying the player-source filter.
-    if subEvent == "UNIT_DIED" or subEvent == "UNIT_DESTROYED" then
-        ClearDebuff(destGUID)
-        RefreshDestination(destGUID)
-        return
-    end
-
-    if not sourceGUID or sourceGUID ~= GetPlayerGUID() or not destGUID then return end
-    if auraType ~= "DEBUFF" then return end
-
-    if subEvent == "SPELL_AURA_APPLIED"
-        or subEvent == "SPELL_AURA_APPLIED_DOSE"
-        or subEvent == "SPELL_AURA_REFRESH" then
-        SetDebuff(destGUID, spellID)
-    elseif subEvent == "SPELL_AURA_REMOVED" then
-        ClearDebuff(destGUID, spellID)
-    end
-
-    RefreshDestination(destGUID)
-end)
-
-function MyDebuff:HasMyDebuff(unit)
-    if not unit or not UnitExists(unit) or not UnitGUID then return false end
-    return HasMyDebuffGUID(UnitGUID(unit))
+    local auras = C_UnitAuras.GetUnitAuras(unit, "HARMFUL|PLAYER")
+    return auras ~= nil and auras[1] ~= nil
 end
 
 local function EnsureOverlay(healthBar)
@@ -135,7 +39,7 @@ function MyDebuff:Update(unit, nameplate)
     if not healthBar then return end
 
     local overlay = EnsureOverlay(healthBar)
-    if MinimizerDB and MinimizerDB.enableMyDebuffOverlay == true and self:HasMyDebuff(unit) then
+    if MinimizerDB and MinimizerDB.enableMyDebuffOverlay == true and HasMyDebuff(unit) then
         overlay:Show()
     else
         overlay:Hide()
@@ -143,21 +47,21 @@ function MyDebuff:Update(unit, nameplate)
 end
 
 function MyDebuff:OnUnitChanged(unit, reason)
-    if reason == "removed" then
-        if unit and UnitGUID then
-            harmfulDebuffs[UnitGUID(unit)] = nil
-        end
-        return
-    end
+    if reason == "removed" then return end
     if unit and unit:match("^nameplate%d+$") then
-        RefreshUnit(unit)
+        local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit
+            and C_NamePlate.GetNamePlateForUnit(unit)
+        if plate then
+            self:Update(unit, plate)
+        end
     end
 end
 
 function MyDebuff:UpdateAll()
-    local plates = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetActiveNameplates and Minimizer.Lifecycle.GetActiveNameplates())
-        or Minimizer.ActiveNameplates
+    local plates = (Minimizer.Lifecycle and Minimizer.Lifecycle.GetActiveNameplates
+        and Minimizer.Lifecycle.GetActiveNameplates()) or Minimizer.ActiveNameplates
     if not plates then return end
+
     for unit, nameplate in pairs(plates) do
         self:Update(unit, nameplate)
     end
