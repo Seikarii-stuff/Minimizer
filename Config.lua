@@ -6,15 +6,12 @@ if not Minimizer then return end
 
 Minimizer.Config = Minimizer.Config or {}
 Minimizer.Config.DEFAULTS = {
-    -- Flag on/off: simplificación activada por defecto.
-    -- `simplifyPercent` se mantiene para compatibilidad de lectura legacy
-    -- en Decision.lua, pero internamente usamos `simplifyEnabled` como la
-    -- fuente de verdad a partir de esta versión.
     simplifyEnabled = true,
     enableTargetMarkers = true,
     enableFocusMarkers = true,
     enableFocusFace = true,
     enableFocusArrows = true,
+    enableMyDebuffOverlay = false,
     menuPosition = {
         point = "CENTER",
         relativePoint = "CENTER",
@@ -23,9 +20,6 @@ Minimizer.Config.DEFAULTS = {
     },
 }
 
--- No hay valores por defecto reales que asignar (todas las claves son overrides
--- manuales de usuario, "sin override" YA es nil por ausencia). Se documenta la
--- lista de claves válidas aquí en vez de fingir defaults que nunca existieron.
 Minimizer.Config.CHAR_DEFAULT_KEYS = {
     "pip1",
     "pip2",
@@ -35,10 +29,6 @@ function Minimizer.Config.Initialize()
     MinimizerDB = MinimizerDB or {}
     MinimizerCharDB = MinimizerCharDB or {}
 
-    -- Separación de persistencia:
-    --   - MinimizerDB: preferencias de cuenta / UI globales; no dependen del personaje.
-    --   - MinimizerCharDB: selección de spell por clase/spec (override manual para pips compartidos de target/focus),
-    --     además de cualquier ajuste que dependa del personaje o de la especialización actual.
     local defaults = Minimizer.Config.DEFAULTS
     for key, value in pairs(defaults) do
         if MinimizerDB[key] == nil then
@@ -46,9 +36,6 @@ function Minimizer.Config.Initialize()
         end
     end
 
-    -- Migración real de la configuración legacy: si algún usuario tenía un único
-    -- flag string de focus, convierte la intención al modelo nuevo de dos booleans,
-    -- y elimina la clave antigua para no mantener datos obsoletos.
     if MinimizerDB.focusIndicator ~= nil then
         local legacyMode = MinimizerDB.focusIndicator
         MinimizerDB.enableFocusFace = (legacyMode == "face")
@@ -63,8 +50,6 @@ function Minimizer.Config.Initialize()
         MinimizerDB.enableFocusArrows = true
     end
 
-    -- Migración de pips: targetDefensive -> pip1, focusCC -> pip2,
-    -- y eliminación de targetOffensive (el halo ahora representa el corte).
     if MinimizerCharDB.targetDefensive ~= nil then
         if MinimizerCharDB.pip1 == nil then
             MinimizerCharDB.pip1 = MinimizerCharDB.targetDefensive
@@ -107,13 +92,7 @@ function Minimizer.Config.Initialize()
     return MinimizerDB, MinimizerCharDB
 end
 
-
--- Comprueba si la simplificación está activada, soportando la clave legacy
--- `simplifyPercent` como fallback. Centraliza la lógica usada por el
--- menú y la toma de decisiones para evitar duplicados en el código.
 function Minimizer.Config.IsSimplifyEnabled()
-    -- Si por alguna razon MinimizerDB no existe (tests, entorno aislado),
-    -- asumimos el comportamiento por defecto previo: habilitado.
     if MinimizerDB == nil then
         return true
     end
@@ -125,5 +104,3 @@ function Minimizer.Config.IsSimplifyEnabled()
         return MinimizerDB.simplifyEnabled == true
     end
 end
-
-
