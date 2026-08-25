@@ -6,11 +6,8 @@ Minimizer.MyDebuff = MyDebuff
 
 local ORANGE = { 1.00, 0.35, 0.00, 0.55 }
 
--- Midnight: do not call GetAuraDataByIndex/GetDebuffDataByIndex from addon
--- code while unit-aura data is restricted. GetUnitAuras returns a safe
--- container; the HARMFUL|PLAYER filter is evaluated by Blizzard's API, so
--- we only test whether the filtered result contains an entry. We never read
--- or compare any aura field (spellId, sourceUnit, duration, etc.).
+-- Midnight-safe: Blizzard applies HARMFUL|PLAYER for us. We only inspect
+-- whether the filtered container has an entry; no aura fields are read.
 local function HasMyDebuff(unit)
     if not unit or not UnitExists(unit) then return false end
     if not C_UnitAuras or type(C_UnitAuras.GetUnitAuras) ~= "function" then
