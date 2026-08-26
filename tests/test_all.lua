@@ -5,6 +5,7 @@ local tests = {
     "tests/equivalence_test.lua",
     "tests/smoke_test.lua",
     "tests/friendly_filter_safety_net_test.lua",
+    "tests/nilfix_test.lua",
     "tests/threat_monitor/stable_state_test.lua",
     "tests/benchmark/benchmark.lua",
 }
