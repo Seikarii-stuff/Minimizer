@@ -41,6 +41,13 @@ function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
         return false, "no simp"
     end
 
+    -- A nil threat situation is never simplifiable. This intentionally does not
+    -- alter the meaning or production of nilSpecial; it only makes the final
+    -- simplification decision conservative for both nil and nilSpecial states.
+    if snapshot and snapshot.threatSituation == nil then
+        return false, "no simp"
+    end
+
     if Minimizer.Decision.ShouldUnsimplify(unit, snapshot) then
         return false, "temporal"
     end
