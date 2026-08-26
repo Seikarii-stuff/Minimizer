@@ -59,49 +59,35 @@ end
 print("\n=== EQUIVALENCE TEST HARNESS ===")
 
 -- --------------------------------------------------------------------------
--- 1. Threat nilSince / nilSpecial Lifecycle Test
+-- 1. Threat nilSpecial instant state and nil threat contract
 -- --------------------------------------------------------------------------
 do
-    print("\n--- Testing nilSince & nilSpecial Lifecycle ---")
+    print("\n--- Testing nilSpecial & nil threat behavior ---")
     Mocks.units = {}
     Mocks.nameplates = {}
     Mocks.time = 100.0
 
-    Mocks.CreateTestUnit("player", { level = 70, isPlayer = true, class = "WARRIOR", role = "DAMAGER" })
+    Mocks.CreateTestUnit("player", { level = 70, faction = "Alliance", isPlayer = true, class = "WARRIOR", role = "DAMAGER" })
     addonTable.Threat.InvalidatePlayerTankCache()
     addonTable.Threat.RefreshPlayerTankCache()
 
     Mocks.CreateTestUnit("nameplate1", {
-        name = "Neutral Mob", level = 70, inCombat = true, canAttackPlayer = false,
+        name = "Neutral Mob", level = 70, faction = "Alliance", inCombat = true, canAttackPlayer = false,
         threatSituation = nil
     })
     local np1 = Mocks.CreateTestNameplate("nameplate1")
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
 
-    -- First read: situation is nil, inCombat=true, canAttackPlayer=false => nilSince initialized to Mocks.time (100.0)
     local details1 = addonTable.Threat.GetThreatDetails("nameplate1")
     assert_true(details1 ~= nil, "Threat: GetThreatDetails returns data")
-    assert_eq(details1.nilSince, 100.0, "Threat: nilSince initialized to current time (100.0)")
-    assert_eq(details1.nilSpecial, false, "Threat: nilSpecial false before 1.0s elapsed")
+    assert_eq(details1.nilSince, nil, "Threat: nilSince is no longer tracked in production")
+    assert_eq(details1.nilSpecial, true, "Threat: nilSpecial is immediate for nil threat and neutral/no-attack state")
 
-    -- Advance time 0.5s (time = 100.5)
-    Mocks.AdvanceTime(0.5)
-    local details2 = addonTable.Threat.GetThreatDetails("nameplate1")
-    assert_eq(details2.nilSince, 100.0, "Threat: nilSince preserved at 100.0 after 0.5s")
-    assert_eq(details2.nilSpecial, false, "Threat: nilSpecial still false at 0.5s")
-
-    -- Advance time 0.6s (total 1.1s, time = 101.1)
-    Mocks.AdvanceTime(0.6)
-    local details3 = addonTable.Threat.GetThreatDetails("nameplate1")
-    assert_eq(details3.nilSince, 100.0, "Threat: nilSince preserved after 1.1s")
-    assert_eq(details3.nilSpecial, true, "Threat: nilSpecial confirmed after >= 1.0s")
-
-    -- If situation changes to 3 (aggro) => nilSince and nilSpecial reset
     Mocks.units["nameplate1"].threatSituation = 3
     addonTable.Threat.Invalidate("nameplate1")
     local details4 = addonTable.Threat.GetThreatDetails("nameplate1")
-    assert_eq(details4.nilSince, nil, "Threat: nilSince reset when situation is not nil")
-    assert_eq(details4.nilSpecial, false, "Threat: nilSpecial reset when situation is not nil")
+    assert_eq(details4.nilSince, nil, "Threat: nilSince remains unset when situation is numeric")
+    assert_eq(details4.nilSpecial, false, "Threat: nilSpecial resets when situation is not nil")
 end
 
 -- --------------------------------------------------------------------------
@@ -603,7 +589,8 @@ do
 
     -- Recycle to Unit B: Normal melee trash mob
     Mocks.CreateTestUnit(token, {
-        name = "New Melee Trash", level = 70, classification = "normal", faction = "Horde", powerType = 1
+        name = "New Melee Trash", level = 70, classification = "normal", faction = "Horde", powerType = 1,
+        threatSituation = 1
     })
     local npNew = Mocks.CreateTestNameplate(token)
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)

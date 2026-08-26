@@ -570,7 +570,7 @@ do
     check(npBoss.MinimizerDesimplifiedPersistent == true,
         "GAP2: boss no simplificable queda marcado como persistente")
 
-    Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde" })
+    Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde", threatSituation = 1 })
     Mocks.CreateTestNameplate(token)
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
     addonTable.Dispatcher.ApplyToUnit(token)

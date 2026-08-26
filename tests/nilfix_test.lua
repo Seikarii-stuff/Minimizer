@@ -48,10 +48,10 @@ end
 Mocks.units = {}
 Mocks.nameplates = {}
 Mocks.CreateTestUnit("player", {
-    level = 70, isPlayer = true, class = "WARRIOR", role = "DAMAGER"
+    level = 70, faction = "Alliance", isPlayer = true, class = "WARRIOR", role = "DAMAGER"
 })
 Mocks.CreateTestUnit("nameplate1", {
-    name = "Threat Test Mob", level = 70, canAttackPlayer = true, inCombat = true
+    name = "Threat Test Mob", level = 70, faction = "Horde", canAttackPlayer = true, inCombat = true
 })
 local np = Mocks.CreateTestNameplate("nameplate1")
 
