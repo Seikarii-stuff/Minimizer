@@ -59,7 +59,7 @@ end
 print("\n=== EQUIVALENCE TEST HARNESS ===")
 
 -- --------------------------------------------------------------------------
--- 1. Threat nilSince / nilSpecial Lifecycle Test
+-- 1. Threat nilSpecial Lifecycle Test (instantaneous — nilSince obsolete)
 -- --------------------------------------------------------------------------
 do
     print("\n--- Testing nilSince & nilSpecial Lifecycle ---")
@@ -78,30 +78,23 @@ do
     local np1 = Mocks.CreateTestNameplate("nameplate1")
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
 
-    -- First read: situation is nil, inCombat=true, canAttackPlayer=false => nilSince initialized to Mocks.time (100.0)
+    -- nilSpecial is now instantaneous: situation==nil, inCombat=true, canAttackPlayer=false => nilSpecial=true immediately
     local details1 = addonTable.Threat.GetThreatDetails("nameplate1")
     assert_true(details1 ~= nil, "Threat: GetThreatDetails returns data")
-    assert_eq(details1.nilSince, 100.0, "Threat: nilSince initialized to current time (100.0)")
-    assert_eq(details1.nilSpecial, false, "Threat: nilSpecial false before 1.0s elapsed")
+    assert_eq(details1.nilSince, nil, "Threat: nilSince is nil (obsolete, no longer used)")
+    assert_eq(details1.nilSpecial, true, "Threat: nilSpecial true immediately when conditions are met")
 
-    -- Advance time 0.5s (time = 100.5)
-    Mocks.AdvanceTime(0.5)
+    -- nilSpecial remains true on subsequent reads (no time dependency)
     local details2 = addonTable.Threat.GetThreatDetails("nameplate1")
-    assert_eq(details2.nilSince, 100.0, "Threat: nilSince preserved at 100.0 after 0.5s")
-    assert_eq(details2.nilSpecial, false, "Threat: nilSpecial still false at 0.5s")
+    assert_eq(details2.nilSince, nil, "Threat: nilSince remains nil on second read")
+    assert_eq(details2.nilSpecial, true, "Threat: nilSpecial still true on second read")
 
-    -- Advance time 0.6s (total 1.1s, time = 101.1)
-    Mocks.AdvanceTime(0.6)
-    local details3 = addonTable.Threat.GetThreatDetails("nameplate1")
-    assert_eq(details3.nilSince, 100.0, "Threat: nilSince preserved after 1.1s")
-    assert_eq(details3.nilSpecial, true, "Threat: nilSpecial confirmed after >= 1.0s")
-
-    -- If situation changes to 3 (aggro) => nilSince and nilSpecial reset
+    -- If situation changes to 3 (aggro) => nilSpecial resets to false
     Mocks.units["nameplate1"].threatSituation = 3
     addonTable.Threat.Invalidate("nameplate1")
-    local details4 = addonTable.Threat.GetThreatDetails("nameplate1")
-    assert_eq(details4.nilSince, nil, "Threat: nilSince reset when situation is not nil")
-    assert_eq(details4.nilSpecial, false, "Threat: nilSpecial reset when situation is not nil")
+    local details3 = addonTable.Threat.GetThreatDetails("nameplate1")
+    assert_eq(details3.nilSince, nil, "Threat: nilSince reset when situation is not nil")
+    assert_eq(details3.nilSpecial, false, "Threat: nilSpecial reset when situation is not nil")
 end
 
 -- --------------------------------------------------------------------------
