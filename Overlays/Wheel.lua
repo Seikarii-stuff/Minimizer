@@ -13,7 +13,7 @@ local PIP_RADIUS = 34
 local WHEEL_OFFSET_X = 0
 local WHEEL_OFFSET_Y = 42
 
-local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", WorldFrame)
+local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", UIParent)
 wheelFrame:SetSize(WHEEL_SIZE, WHEEL_SIZE)
 wheelFrame:SetFrameStrata("HIGH")
 wheelFrame:Hide()
@@ -49,6 +49,12 @@ Minimizer.Widgets.ConfigureCooldownFrame(interruptCooldown, {
 })
 wheelFrame.MinimizerWheelInterrupt = interruptCooldown
 
+local function GetPlayerAnchor()
+    if C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+        return C_NamePlate.GetNamePlateForUnit("player")
+    end
+end
+
 local function UpdateInterrupt()
     local spellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
         and Minimizer.Interrupt.GetSpellID()
@@ -67,37 +73,19 @@ local function UpdatePips()
     end
 end
 
-local function GetPlayerWorldAnchor()
-    -- El frame de la unidad player no es PlayerFrame ni una nameplate. Es el
-    -- ancla de mundo de Blizzard que representa la posición 3D del personaje.
-    if WorldFrame and WorldFrame.GetPlayerWorldPosition then
-        return WorldFrame:GetPlayerWorldPosition()
-    end
-
-    -- WorldFrame no expone una API Lua estable para convertir UnitPosition()
-    -- directamente a coordenadas de pantalla en todas las versiones. Si el
-    -- cliente ofrece WorldToScreen, úsalo; nunca recurrimos a PlayerFrame ni a
-    -- la nameplate del player como sustitutos.
-    if WorldFrame and WorldFrame.WorldToScreen and UnitPosition then
-        local x, y, z = UnitPosition("player")
-        if x and y and z then
-            return WorldFrame:WorldToScreen(x, y, z)
-        end
-    end
-
-    return nil, nil
-end
-
 function Wheel:Update()
-    local x, y = GetPlayerWorldAnchor()
-    if not x or not y then
+    local playerAnchor = GetPlayerAnchor()
+    if not playerAnchor then
         wheelFrame:Hide()
         return
     end
 
+    -- Este frame sigue la posición 3D del personaje porque Blizzard mueve
+    -- la personal nameplate según cámara/posición. El Wheel es independiente
+    -- de su contenido visual: solo la usa como ancla móvil.
     wheelFrame:ClearAllPoints()
-    wheelFrame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x + WHEEL_OFFSET_X, y + WHEEL_OFFSET_Y)
-    wheelFrame:SetFrameLevel((WorldFrame:GetFrameLevel() or 0) + 10)
+    wheelFrame:SetPoint("CENTER", playerAnchor, "CENTER", WHEEL_OFFSET_X, WHEEL_OFFSET_Y)
+    wheelFrame:SetFrameLevel((playerAnchor:GetFrameLevel() or 0) + 10)
 
     UpdateInterrupt()
     UpdatePips()
@@ -117,11 +105,7 @@ function Wheel:Update()
         end
     end
 
-    if interruptCooldown:IsShown() or hasPips then
-        wheelFrame:Show()
-    else
-        wheelFrame:Hide()
-    end
+    wheelFrame:SetShown(interruptCooldown:IsShown() or hasPips)
 end
 
 Wheel.DebouncedUpdate = Minimizer.Utils.Throttle(function()
@@ -133,7 +117,7 @@ function Wheel:OnCooldownTick()
 end
 
 function Wheel:OnUnitChanged(unit, reason)
-    if not unit or unit == "player" or reason == "added" or reason == "removed" then
+    if unit == "player" or reason == "added" or reason == "removed" then
         Wheel.DebouncedUpdate()
     end
 end
