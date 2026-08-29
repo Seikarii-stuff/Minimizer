@@ -8,7 +8,6 @@ local Focus = {}
 Minimizer.Focus = Focus
 
 local HALO_SIZE = 46
-local PORTRAIT_RADIUS = 18
 local frame = CreateFrame("Frame", "MinimizerFocusPortrait", UIParent)
 frame:SetSize(36, 36)
 frame:SetFrameStrata("HIGH")
@@ -20,8 +19,6 @@ portrait:SetAllPoints()
 local cooldown = CreateFrame("Cooldown", "MinimizerFocusCooldown", frame, "CooldownFrameTemplate")
 cooldown:SetAllPoints()
 Minimizer.Widgets.MakeCooldownCircular(cooldown, true)
-
-local focusPips = Minimizer.Pips and Minimizer.Pips.CreatePips(frame, "MinimizerFocusPip", PORTRAIT_RADIUS)
 
 local function UpdateCooldown()
     local interruptSpellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
@@ -41,7 +38,6 @@ function Focus:SetFaceEnabled(enabled)
     MinimizerDB.enableFocusFace = enabled == true
     if MinimizerDB.enableFocusFace ~= true then
         frame:Hide()
-        if focusPips and Minimizer.Pips then Minimizer.Pips.HidePips(focusPips) end
     end
     if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
         Minimizer.Dispatcher.RequestFullUpdate()
@@ -60,60 +56,37 @@ function Focus:SetArrowsEnabled(enabled)
 end
 
 function Focus:SetMode(mode)
-    if mode == "face" then
-        self:SetFaceEnabled(true)
-        return
-    end
-    if mode == "arrows" then
-        self:SetArrowsEnabled(true)
-        return
-    end
-    if mode == "noface" then
-        self:SetFaceEnabled(false)
-        return
-    end
-    if mode == "noarrows" then
-        self:SetArrowsEnabled(false)
-        return
-    end
+    if mode == "face" then self:SetFaceEnabled(true); return end
+    if mode == "arrows" then self:SetArrowsEnabled(true); return end
+    if mode == "noface" then self:SetFaceEnabled(false); return end
+    if mode == "noarrows" then self:SetArrowsEnabled(false); return end
 end
 
 function Focus:UpdateFace()
     if MinimizerDB.enableFocusFace ~= true then
         frame:Hide()
-        if focusPips and Minimizer.Pips then Minimizer.Pips.HidePips(focusPips) end
         return
     end
     if not UnitExists("focus") or UnitIsDead("focus") then
         frame:Hide()
-        if focusPips and Minimizer.Pips then Minimizer.Pips.HidePips(focusPips) end
         return
     end
 
     local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit("focus")
     if not plate then
         frame:Hide()
-        if focusPips and Minimizer.Pips then Minimizer.Pips.HidePips(focusPips) end
         return
     end
 
     SetPortraitTexture(portrait, "player")
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", plate, "BOTTOM", 0, 10 + (HALO_SIZE / 2))
-    -- Asegurar nivel de frame relativo a la placa para que los pips/overlays
-    -- se posicionen correctamente por encima del retrato.
     local plateLevel = (plate:GetFrameLevel() or 0)
     frame:SetFrameLevel(plateLevel + 1)
     frame:Show()
     UpdateCooldown()
-
-    if focusPips and Minimizer.Pips then
-        Minimizer.Pips.UpdatePips(focusPips)
-        Minimizer.Pips.SetFrameLevel(focusPips, (frame:GetFrameLevel() or 0) + 5)
-    end
 end
 
--- Throttle a 30 FPS (0.033s): visuales de focus no necesitan repintarse más rápido.
 Focus.DebouncedUpdate = Minimizer.Utils.Throttle(function()
     Focus:UpdateFace()
 end, 0.033)
@@ -123,9 +96,7 @@ function Focus:OnCooldownTick()
 end
 
 function Focus:OnUnitChanged(unit, reason)
-    if reason == "focus" then
-        Focus:UpdateFace()
-    elseif reason == "added" or reason == "removed" then
+    if reason == "focus" or reason == "added" or reason == "removed" then
         Focus:UpdateFace()
     end
 end
@@ -133,4 +104,3 @@ end
 if Minimizer.Overlays and Minimizer.Overlays.Register then
     Minimizer.Overlays.Register("Focus", Focus)
 end
-
