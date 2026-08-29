@@ -25,10 +25,14 @@ Minimizer.Config.DEFAULTS = {
 
 -- No hay valores por defecto reales que asignar (todas las claves son overrides
 -- manuales de usuario, "sin override" YA es nil por ausencia). Se documenta la
--- lista de claves válidas aquí en vez de fingir defaults que nunca existieron.
+-- lista de claves válidas del Player Wheel aquí en vez de fingir defaults que nunca existieron.
 Minimizer.Config.CHAR_DEFAULT_KEYS = {
     "pip1",
     "pip2",
+    "pip3",
+    "pip4",
+    "pip5",
+    "pip6",
 }
 
 function Minimizer.Config.Initialize()
@@ -37,7 +41,7 @@ function Minimizer.Config.Initialize()
 
     -- Separación de persistencia:
     --   - MinimizerDB: preferencias de cuenta / UI globales; no dependen del personaje.
-    --   - MinimizerCharDB: selección de spell por clase/spec (override manual para pips compartidos de target/focus),
+    --   - MinimizerCharDB: selección de spell por clase/spec para los slots del Player Wheel,
     --     además de cualquier ajuste que dependa del personaje o de la especialización actual.
     local defaults = Minimizer.Config.DEFAULTS
     for key, value in pairs(defaults) do
