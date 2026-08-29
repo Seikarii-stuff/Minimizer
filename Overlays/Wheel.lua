@@ -1,10 +1,6 @@
 -- ============================================================================
 -- Minimizer - Wheel.lua
 -- Wheel periférico del personaje del jugador: interrupt + pips configurables.
---
--- El Wheel NO se ancla al PlayerFrame, a una nameplate ni a una posición 3D.
--- Su posición se define mediante X/Y respecto al centro de la pantalla y se
--- hace coincidir manualmente con la posición visual del personaje.
 -- ============================================================================
 local _, Minimizer = ...
 if not Minimizer then return end
@@ -15,15 +11,16 @@ Minimizer.Wheel = Wheel
 local WHEEL_SIZE = 68
 local PIP_RADIUS = 34
 
--- 0, 0 = centro de UIParent. Estos son los valores que se ajustan para hacer
--- coincidir el Wheel con el personaje del jugador.
+-- 0, 0 = centro de la pantalla. Estos offsets se ajustarán posteriormente
+-- para hacer coincidir el Wheel con el personaje del jugador.
 local WHEEL_X = 0
 local WHEEL_Y = 0
 
 local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", UIParent)
 wheelFrame:SetSize(WHEEL_SIZE, WHEEL_SIZE)
 wheelFrame:SetFrameStrata("HIGH")
-wheelFrame:Hide()
+wheelFrame:SetPoint("CENTER", UIParent, "CENTER", WHEEL_X, WHEEL_Y)
+wheelFrame:Show()
 
 local wheelTexture = wheelFrame:CreateTexture(nil, "ARTWORK")
 wheelTexture:SetAllPoints()
@@ -56,11 +53,6 @@ Minimizer.Widgets.ConfigureCooldownFrame(interruptCooldown, {
 })
 wheelFrame.MinimizerWheelInterrupt = interruptCooldown
 
-local function PositionWheel()
-    wheelFrame:ClearAllPoints()
-    wheelFrame:SetPoint("CENTER", UIParent, "CENTER", WHEEL_X, WHEEL_Y)
-end
-
 local function UpdateInterrupt()
     local spellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
         and Minimizer.Interrupt.GetSpellID()
@@ -80,7 +72,10 @@ local function UpdatePips()
 end
 
 function Wheel:Update()
-    PositionWheel()
+    -- Posición absoluta respecto al centro de la pantalla. No depende de
+    -- PlayerFrame, nameplates ni de ninguna posición 3D.
+    wheelFrame:ClearAllPoints()
+    wheelFrame:SetPoint("CENTER", UIParent, "CENTER", WHEEL_X, WHEEL_Y)
 
     wheelFrame:SetFrameLevel(100)
     UpdateInterrupt()
@@ -91,17 +86,9 @@ function Wheel:Update()
     end
     interruptCooldown:SetFrameLevel(110)
 
-    local hasPips = false
-    if wheelPips then
-        for _, pip in ipairs(wheelPips) do
-            if pip:IsShown() then
-                hasPips = true
-                break
-            end
-        end
-    end
-
-    wheelFrame:SetShown(interruptCooldown:IsShown() or hasPips)
+    -- El Wheel es visible en su posición de diseño incluso si todavía no hay
+    -- ningún cooldown activo; los pips/interrupt controlan su contenido.
+    wheelFrame:Show()
 end
 
 Wheel.DebouncedUpdate = Minimizer.Utils.Throttle(function()
@@ -113,8 +100,6 @@ function Wheel:OnCooldownTick()
 end
 
 function Wheel:OnUnitChanged(unit, reason)
-    -- Los eventos de unidades solo refrescan contenido; la posición del Wheel
-    -- es exclusivamente la coordenada X/Y configurada arriba.
     if unit == "player" or reason == "added" or reason == "removed" then
         Wheel.DebouncedUpdate()
     end
