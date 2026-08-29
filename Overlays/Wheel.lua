@@ -10,10 +10,10 @@ Minimizer.Wheel = Wheel
 
 local WHEEL_SIZE = 68
 local PIP_RADIUS = 34
-local WHEEL_OFFSET_Y = -8
+local WHEEL_OFFSET_X = 0
+local WHEEL_OFFSET_Y = 0
 
-local playerFrame = _G.PlayerFrame or UIParent
-local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", playerFrame)
+local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", UIParent)
 wheelFrame:SetSize(WHEEL_SIZE, WHEEL_SIZE)
 wheelFrame:SetFrameStrata("HIGH")
 wheelFrame:Hide()
@@ -30,8 +30,8 @@ local wheelPips = Minimizer.Pips and Minimizer.Pips.CreatePips(
     PIP_RADIUS
 )
 
--- El interrupt es parte del Wheel: usa exactamente la misma resolución y
--- duración que Target/Focus, pero se muestra como el cooldown circular del anillo.
+-- El interrupt pertenece al Wheel y utiliza exactamente la misma resolución
+-- y duración que Target/Focus.
 local interruptCooldown = CreateFrame(
     "Cooldown",
     "MinimizerPlayerWheelInterrupt",
@@ -50,6 +50,16 @@ Minimizer.Widgets.ConfigureCooldownFrame(interruptCooldown, {
     swipeColor = { 0.00, 0.00, 0.00, 0.75 },
 })
 wheelFrame.MinimizerWheelInterrupt = interruptCooldown
+
+local function GetPlayerWorldAnchor()
+    -- C_NamePlate.GetNamePlateForUnit("player") es el ancla UI que Blizzard
+    -- mantiene asociada a la posición del personaje en el mundo 3D. No usamos
+    -- PlayerFrame: el Wheel sigue al personaje, no a su retrato/barra de vida.
+    if C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+        return C_NamePlate.GetNamePlateForUnit("player")
+    end
+    return nil
+end
 
 local function UpdateInterrupt()
     local spellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
@@ -70,9 +80,17 @@ local function UpdatePips()
 end
 
 function Wheel:Update()
+    local playerAnchor = GetPlayerWorldAnchor()
+    if not playerAnchor then
+        wheelFrame:Hide()
+        return
+    end
+
+    -- El frame de la nameplate del player es solo el punto de anclaje: el
+    -- Wheel no depende visualmente del PlayerFrame de la interfaz.
     wheelFrame:ClearAllPoints()
-    wheelFrame:SetPoint("CENTER", playerFrame, "CENTER", 0, WHEEL_OFFSET_Y)
-    wheelFrame:SetFrameLevel((playerFrame:GetFrameLevel() or 0) + 10)
+    wheelFrame:SetPoint("CENTER", playerAnchor, "CENTER", WHEEL_OFFSET_X, WHEEL_OFFSET_Y)
+    wheelFrame:SetFrameLevel((playerAnchor:GetFrameLevel() or 0) + 10)
 
     UpdateInterrupt()
     UpdatePips()
@@ -107,8 +125,10 @@ function Wheel:OnCooldownTick()
     Wheel.DebouncedUpdate()
 end
 
-function Wheel:OnUnitChanged()
-    Wheel.DebouncedUpdate()
+function Wheel:OnUnitChanged(unit, reason)
+    if not unit or unit == "player" or reason == "added" or reason == "removed" then
+        Wheel.DebouncedUpdate()
+    end
 end
 
 if Minimizer.Overlays and Minimizer.Overlays.Register then
