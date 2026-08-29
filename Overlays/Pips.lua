@@ -1,7 +1,6 @@
 -- ============================================================================
 -- Minimizer - Pips.lua
--- Módulo centralizado para la creación, configuración y actualización de pips
--- en widgets especiales (Target y Focus).
+-- Módulo reutilizable para la creación, configuración y actualización de pips.
 -- ============================================================================
 local _, Minimizer = ...
 if not Minimizer then return end
@@ -9,29 +8,19 @@ if not Minimizer then return end
 local Pips = {}
 Minimizer.Pips = Pips
 
--- Definición centralizada y extensible de slots para Pips.
--- Target y Focus consumen exclusivamente esta lista para determinar
--- número de pips, identificador, nombre, esquina y propiedades visuales.
--- Pip 1: Verde (TOPLEFT)
--- Pip 2: Azul (TOPRIGHT)
+-- Slots radiales: el ángulo se expresa en grados y permite ampliar el Wheel
+-- sin introducir nuevas esquinas manualmente. 90 = arriba, 0 = derecha.
 Pips.SLOTS = {
-    {
-        id = 1,
-        name = "Pip 1",
-        corner = "TOPLEFT",
-        color = { on = {0.10, 1.00, 0.10}, off = {0.03, 0.20, 0.03} }, -- Verde
-    },
-    {
-        id = 2,
-        name = "Pip 2",
-        corner = "TOPRIGHT",
-        color = { on = {0.20, 0.55, 1.00}, off = {0.05, 0.10, 0.25} }, -- Azul
-    },
+    { id = 1, name = "Pip 1", angle = 90,  color = { on = {0.10, 1.00, 0.10}, off = {0.03, 0.20, 0.03} } },
+    { id = 2, name = "Pip 2", angle = 30,  color = { on = {0.20, 0.55, 1.00}, off = {0.05, 0.10, 0.25} } },
+    { id = 3, name = "Pip 3", angle = -30, color = { on = {1.00, 0.85, 0.10}, off = {0.25, 0.18, 0.03} } },
+    { id = 4, name = "Pip 4", angle = -90, color = { on = {1.00, 0.35, 0.10}, off = {0.25, 0.06, 0.03} } },
+    { id = 5, name = "Pip 5", angle = -150,color = { on = {0.75, 0.20, 1.00}, off = {0.18, 0.03, 0.25} } },
+    { id = 6, name = "Pip 6", angle = 150, color = { on = {0.10, 1.00, 0.85}, off = {0.03, 0.20, 0.18} } },
 }
 
 Pips.PIP_SIZE = 10
 
--- Resuelve el spellID para un slot determinado (compartido por Target y Focus)
 function Pips.GetSpellID(slotIndex)
     local override = nil
     if MinimizerCharDB then
@@ -44,41 +33,37 @@ function Pips.GetSpellID(slotIndex)
     return Minimizer.Widgets.GetCDSpellID(spellList, override, slotIndex)
 end
 
--- Crea un conjunto de pips anclados a parentFrame basado en Pips.SLOTS
 function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
     if not parentFrame then return {} end
 
     local pips = {}
-    local parentSize = math.min(parentFrame:GetWidth() or 40, parentFrame:GetHeight() or 40)
-    radius = radius or (parentSize * 0.45)
+    radius = radius or ((math.min(parentFrame:GetWidth() or 40, parentFrame:GetHeight() or 40)) * 0.45)
     xOff = xOff or 0
     yOff = yOff or 0
 
     for index, slot in ipairs(Pips.SLOTS) do
         local slotId = slot.id or index
-        local corner = slot.corner or "TOPRIGHT"
+        local angle = tonumber(slot.angle) or 0
+        local radians = math.rad(angle)
+        local x = math.cos(radians) * radius + xOff
+        local y = math.sin(radians) * radius + yOff
         local colors = slot.color
             or (Minimizer.Constants and Minimizer.Constants.PipColors and Minimizer.Constants.PipColors[slotId])
             or (Minimizer.Constants and Minimizer.Constants.PipColors and Minimizer.Constants.PipColors.default)
             or { on = {0.10, 1.00, 0.10}, off = {0.03, 0.20, 0.03} }
-
-        local signX = (corner:find("RIGHT") and 1) or -1
-        local signY = (corner:find("TOP") and 1) or -1
 
         local pipFrameName = prefixName .. slotId
         local pip = CreateFrame("Frame", pipFrameName, parentFrame)
         pip:SetSize(Pips.PIP_SIZE, Pips.PIP_SIZE)
         pip:SetFrameStrata("HIGH")
         pip:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 5)
-
         pip:ClearAllPoints()
-        pip:SetPoint("CENTER", parentFrame, "CENTER", signX * radius + xOff, signY * radius + yOff)
+        pip:SetPoint("CENTER", parentFrame, "CENTER", x, y)
         pip.MinimizerPipRadius = radius
-        pip.MinimizerPipAnchorCorner = corner
+        pip.MinimizerPipAngle = angle
         pip.MinimizerPipSlotId = slotId
         pip:Hide()
 
-        -- Circular background
         local bg = pip:CreateTexture(nil, "ARTWORK")
         bg:SetAllPoints()
         bg:SetColorTexture(colors.on[1], colors.on[2], colors.on[3], 1)
@@ -88,7 +73,6 @@ function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
         mask:SetTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         bg:AddMaskTexture(mask)
 
-        -- Cooldown frame
         local cooldown = CreateFrame("Cooldown", pipFrameName .. "Cooldown", pip, "CooldownFrameTemplate")
         cooldown:SetAllPoints()
         if Minimizer.Widgets and Minimizer.Widgets.ConfigureCooldownFrame then
@@ -107,22 +91,18 @@ function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
         pip.MinimizerPipBG = bg
         pip.MinimizerPipMask = mask
         pip.MinimizerPipCooldown = cooldown
-
         table.insert(pips, pip)
     end
 
     return pips
 end
 
--- Actualiza todos los pips de un overlay (Target o Focus comparten la misma selección)
 function Pips.UpdatePips(pips)
     if not pips or type(pips) ~= "table" then return end
-
     for index, pip in ipairs(pips) do
         local slot = Pips.SLOTS[index]
         local slotId = (slot and slot.id) or index
         local spellID = Pips.GetSpellID(slotId)
-
         if not spellID or not pip.MinimizerPipCooldown then
             pip:Hide()
         else
@@ -134,18 +114,12 @@ function Pips.UpdatePips(pips)
     end
 end
 
--- Oculta todos los pips de la lista
 function Pips.HidePips(pips)
     if not pips or type(pips) ~= "table" then return end
-    for _, pip in ipairs(pips) do
-        pip:Hide()
-    end
+    for _, pip in ipairs(pips) do pip:Hide() end
 end
 
--- Ajusta el frame level de todos los pips
 function Pips.SetFrameLevel(pips, level)
     if not pips or type(pips) ~= "table" then return end
-    for _, pip in ipairs(pips) do
-        pip:SetFrameLevel(level)
-    end
+    for _, pip in ipairs(pips) do pip:SetFrameLevel(level) end
 end
