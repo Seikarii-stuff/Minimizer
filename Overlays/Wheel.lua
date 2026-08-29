@@ -1,6 +1,10 @@
 -- ============================================================================
 -- Minimizer - Wheel.lua
 -- Wheel periférico del personaje del jugador: interrupt + pips configurables.
+--
+-- El Wheel NO se ancla al PlayerFrame, a una nameplate ni a una posición 3D.
+-- Su posición se define mediante X/Y respecto al centro de la pantalla y se
+-- hace coincidir manualmente con la posición visual del personaje.
 -- ============================================================================
 local _, Minimizer = ...
 if not Minimizer then return end
@@ -10,8 +14,11 @@ Minimizer.Wheel = Wheel
 
 local WHEEL_SIZE = 68
 local PIP_RADIUS = 34
-local WHEEL_OFFSET_X = 0
-local WHEEL_OFFSET_Y = 42
+
+-- 0, 0 = centro de UIParent. Estos son los valores que se ajustan para hacer
+-- coincidir el Wheel con el personaje del jugador.
+local WHEEL_X = 0
+local WHEEL_Y = 0
 
 local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", UIParent)
 wheelFrame:SetSize(WHEEL_SIZE, WHEEL_SIZE)
@@ -49,10 +56,9 @@ Minimizer.Widgets.ConfigureCooldownFrame(interruptCooldown, {
 })
 wheelFrame.MinimizerWheelInterrupt = interruptCooldown
 
-local function GetPlayerAnchor()
-    if C_NamePlate and C_NamePlate.GetNamePlateForUnit then
-        return C_NamePlate.GetNamePlateForUnit("player")
-    end
+local function PositionWheel()
+    wheelFrame:ClearAllPoints()
+    wheelFrame:SetPoint("CENTER", UIParent, "CENTER", WHEEL_X, WHEEL_Y)
 end
 
 local function UpdateInterrupt()
@@ -74,26 +80,16 @@ local function UpdatePips()
 end
 
 function Wheel:Update()
-    local playerAnchor = GetPlayerAnchor()
-    if not playerAnchor then
-        wheelFrame:Hide()
-        return
-    end
+    PositionWheel()
 
-    -- Este frame sigue la posición 3D del personaje porque Blizzard mueve
-    -- la personal nameplate según cámara/posición. El Wheel es independiente
-    -- de su contenido visual: solo la usa como ancla móvil.
-    wheelFrame:ClearAllPoints()
-    wheelFrame:SetPoint("CENTER", playerAnchor, "CENTER", WHEEL_OFFSET_X, WHEEL_OFFSET_Y)
-    wheelFrame:SetFrameLevel((playerAnchor:GetFrameLevel() or 0) + 10)
-
+    wheelFrame:SetFrameLevel(100)
     UpdateInterrupt()
     UpdatePips()
 
     if wheelPips and Minimizer.Pips then
-        Minimizer.Pips.SetFrameLevel(wheelPips, (wheelFrame:GetFrameLevel() or 0) + 5)
+        Minimizer.Pips.SetFrameLevel(wheelPips, 105)
     end
-    interruptCooldown:SetFrameLevel((wheelFrame:GetFrameLevel() or 0) + 10)
+    interruptCooldown:SetFrameLevel(110)
 
     local hasPips = false
     if wheelPips then
@@ -117,6 +113,8 @@ function Wheel:OnCooldownTick()
 end
 
 function Wheel:OnUnitChanged(unit, reason)
+    -- Los eventos de unidades solo refrescan contenido; la posición del Wheel
+    -- es exclusivamente la coordenada X/Y configurada arriba.
     if unit == "player" or reason == "added" or reason == "removed" then
         Wheel.DebouncedUpdate()
     end
