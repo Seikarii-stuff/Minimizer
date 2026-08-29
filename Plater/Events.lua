@@ -247,7 +247,7 @@ handlers["NAME_PLATE_UNIT_REMOVED"] = function(self, event, unit)
             end
         end
         if Minimizer.Focus and Minimizer.Focus.UpdateFace then
-            Focus:UpdateFace()
+            Minimizer.Focus:UpdateFace()
         end
     end
 end
