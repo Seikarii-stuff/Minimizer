@@ -14,7 +14,7 @@ local PIP_RADIUS = 75
 -- 0, 0 = centro de la pantalla. Estos offsets se ajustarán posteriormente
 -- para hacer coincidir el Wheel con el personaje del jugador.
 local WHEEL_X = 0
-local WHEEL_Y = -40
+local WHEEL_Y = -45
 
 local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", UIParent)
 wheelFrame:SetSize(WHEEL_SIZE, WHEEL_SIZE)
