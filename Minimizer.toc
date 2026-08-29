@@ -30,6 +30,7 @@ Plater/HealthBarColor.lua
 Plater/CastingBar.lua
 Overlays/Pips.lua
 Overlays/Overlays.lua
+Overlays/Wheel.lua
 Overlays/Focus.lua
 Overlays/Target.lua
 Menu.lua
