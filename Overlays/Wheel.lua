@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Minimizer - Wheel.lua
--- Wheel periférico del player: interrupt + pips configurables.
+-- Wheel periférico del personaje del jugador: interrupt + pips configurables.
 -- ============================================================================
 local _, Minimizer = ...
 if not Minimizer then return end
@@ -11,9 +11,9 @@ Minimizer.Wheel = Wheel
 local WHEEL_SIZE = 68
 local PIP_RADIUS = 34
 local WHEEL_OFFSET_X = 0
-local WHEEL_OFFSET_Y = 0
+local WHEEL_OFFSET_Y = 42
 
-local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", UIParent)
+local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", WorldFrame)
 wheelFrame:SetSize(WHEEL_SIZE, WHEEL_SIZE)
 wheelFrame:SetFrameStrata("HIGH")
 wheelFrame:Hide()
@@ -30,8 +30,6 @@ local wheelPips = Minimizer.Pips and Minimizer.Pips.CreatePips(
     PIP_RADIUS
 )
 
--- El interrupt pertenece al Wheel y utiliza exactamente la misma resolución
--- y duración que Target/Focus.
 local interruptCooldown = CreateFrame(
     "Cooldown",
     "MinimizerPlayerWheelInterrupt",
@@ -51,16 +49,6 @@ Minimizer.Widgets.ConfigureCooldownFrame(interruptCooldown, {
 })
 wheelFrame.MinimizerWheelInterrupt = interruptCooldown
 
-local function GetPlayerWorldAnchor()
-    -- C_NamePlate.GetNamePlateForUnit("player") es el ancla UI que Blizzard
-    -- mantiene asociada a la posición del personaje en el mundo 3D. No usamos
-    -- PlayerFrame: el Wheel sigue al personaje, no a su retrato/barra de vida.
-    if C_NamePlate and C_NamePlate.GetNamePlateForUnit then
-        return C_NamePlate.GetNamePlateForUnit("player")
-    end
-    return nil
-end
-
 local function UpdateInterrupt()
     local spellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
         and Minimizer.Interrupt.GetSpellID()
@@ -79,18 +67,37 @@ local function UpdatePips()
     end
 end
 
+local function GetPlayerWorldAnchor()
+    -- El frame de la unidad player no es PlayerFrame ni una nameplate. Es el
+    -- ancla de mundo de Blizzard que representa la posición 3D del personaje.
+    if WorldFrame and WorldFrame.GetPlayerWorldPosition then
+        return WorldFrame:GetPlayerWorldPosition()
+    end
+
+    -- WorldFrame no expone una API Lua estable para convertir UnitPosition()
+    -- directamente a coordenadas de pantalla en todas las versiones. Si el
+    -- cliente ofrece WorldToScreen, úsalo; nunca recurrimos a PlayerFrame ni a
+    -- la nameplate del player como sustitutos.
+    if WorldFrame and WorldFrame.WorldToScreen and UnitPosition then
+        local x, y, z = UnitPosition("player")
+        if x and y and z then
+            return WorldFrame:WorldToScreen(x, y, z)
+        end
+    end
+
+    return nil, nil
+end
+
 function Wheel:Update()
-    local playerAnchor = GetPlayerWorldAnchor()
-    if not playerAnchor then
+    local x, y = GetPlayerWorldAnchor()
+    if not x or not y then
         wheelFrame:Hide()
         return
     end
 
-    -- El frame de la nameplate del player es solo el punto de anclaje: el
-    -- Wheel no depende visualmente del PlayerFrame de la interfaz.
     wheelFrame:ClearAllPoints()
-    wheelFrame:SetPoint("CENTER", playerAnchor, "CENTER", WHEEL_OFFSET_X, WHEEL_OFFSET_Y)
-    wheelFrame:SetFrameLevel((playerAnchor:GetFrameLevel() or 0) + 10)
+    wheelFrame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x + WHEEL_OFFSET_X, y + WHEEL_OFFSET_Y)
+    wheelFrame:SetFrameLevel((WorldFrame:GetFrameLevel() or 0) + 10)
 
     UpdateInterrupt()
     UpdatePips()
