@@ -12,7 +12,18 @@ local WHEEL_SIZE = 68
 local PIP_RADIUS = 34
 local WHEEL_OFFSET_Y = -8
 
-local wheelFrame = Minimizer.Widgets.CreateHalo("MinimizerPlayerWheel", UIParent, WHEEL_SIZE)
+local playerFrame = _G.PlayerFrame or UIParent
+local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", playerFrame)
+wheelFrame:SetSize(WHEEL_SIZE, WHEEL_SIZE)
+wheelFrame:SetFrameStrata("HIGH")
+wheelFrame:Hide()
+
+local wheelTexture = wheelFrame:CreateTexture(nil, "ARTWORK")
+wheelTexture:SetAllPoints()
+wheelTexture:SetTexture("Interface\\AddOns\\Minimizer\\assets\\halo_ring")
+wheelTexture:SetBlendMode("BLEND")
+wheelFrame.MinimizerWheelTexture = wheelTexture
+
 local wheelPips = Minimizer.Pips and Minimizer.Pips.CreatePips(
     wheelFrame,
     "MinimizerPlayerWheelPip",
@@ -20,7 +31,7 @@ local wheelPips = Minimizer.Pips and Minimizer.Pips.CreatePips(
 )
 
 -- El interrupt es parte del Wheel: usa exactamente la misma resolución y
--- duración que Target/Focus, pero se muestra como el cooldown circular central.
+-- duración que Target/Focus, pero se muestra como el cooldown circular del anillo.
 local interruptCooldown = CreateFrame(
     "Cooldown",
     "MinimizerPlayerWheelInterrupt",
@@ -35,9 +46,10 @@ Minimizer.Widgets.ConfigureCooldownFrame(interruptCooldown, {
     drawBling = false,
     reverse = false,
     hideCountdownNumbers = true,
-    swipeTexture = "Interface\\Masks\\CircleMaskScalable",
+    swipeTexture = "Interface\\AddOns\\Minimizer\\assets\\halo_ring",
     swipeColor = { 0.00, 0.00, 0.00, 0.75 },
 })
+wheelFrame.MinimizerWheelInterrupt = interruptCooldown
 
 local function UpdateInterrupt()
     local spellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
@@ -58,10 +70,9 @@ local function UpdatePips()
 end
 
 function Wheel:Update()
-    -- El Wheel está ligado al player y no depende de nameplates.
     wheelFrame:ClearAllPoints()
-    wheelFrame:SetPoint("CENTER", UIParent, "CENTER", 0, WHEEL_OFFSET_Y)
-    wheelFrame:SetFrameLevel((UIParent:GetFrameLevel() or 0) + 10)
+    wheelFrame:SetPoint("CENTER", playerFrame, "CENTER", 0, WHEEL_OFFSET_Y)
+    wheelFrame:SetFrameLevel((playerFrame:GetFrameLevel() or 0) + 10)
 
     UpdateInterrupt()
     UpdatePips()
@@ -71,7 +82,17 @@ function Wheel:Update()
     end
     interruptCooldown:SetFrameLevel((wheelFrame:GetFrameLevel() or 0) + 10)
 
-    if interruptCooldown:IsShown() or (wheelPips and #wheelPips > 0) then
+    local hasPips = false
+    if wheelPips then
+        for _, pip in ipairs(wheelPips) do
+            if pip:IsShown() then
+                hasPips = true
+                break
+            end
+        end
+    end
+
+    if interruptCooldown:IsShown() or hasPips then
         wheelFrame:Show()
     else
         wheelFrame:Hide()
