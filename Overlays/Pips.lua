@@ -19,7 +19,7 @@ Pips.SLOTS = {
     { id = 6, name = "Pip 6", angle = 150, color = { on = {0.10, 1.00, 0.85}, off = {0.03, 0.20, 0.18} } },
 }
 
-Pips.PIP_SIZE = 10
+Pips.PIP_SIZE = 15
 
 function Pips.GetSpellID(slotIndex)
     local override = nil
