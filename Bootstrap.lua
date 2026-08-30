@@ -4,18 +4,10 @@
 -- y el ciclo de vida de ADDON_LOADED antes de que ningún módulo se ejecute.
 -- ============================================================================
 
--- El engine de WoW inyecta (ADDON_NAME, addonTable) como los dos varargs del
--- archivo raíz. Todos los demás archivos del .toc comparten la MISMA tabla.
 local ADDON_NAME, Minimizer = ...
 
--- ── Tabla compartida ─────────────────────────────────────────────────────────
--- Los módulos declaran sus sub-tablas usando Minimizer.X = Minimizer.X or {}
--- para que el orden de carga no importe. Bootstrap garantiza que la raíz
--- existe y expone el namespace global por si algún script externo lo necesita.
--- Expose global only if not already present to avoid clobbering other addons
 _G.Minimizer = _G.Minimizer or Minimizer
 
--- ── Frame de arranque ────────────────────────────────────────────────────────
 local bootstrapFrame = CreateFrame("Frame", "MinimizerBootstrapFrame")
 
 bootstrapFrame:RegisterEvent("ADDON_LOADED")
@@ -25,6 +17,11 @@ bootstrapFrame:SetScript("OnEvent", function(_, event, name)
 
     if Minimizer.Config and Minimizer.Config.Initialize then
         Minimizer.Config.Initialize()
+    end
+    -- Config.lua is loaded before Wheel/Wheel.lua, so Wheel configuration is
+    -- applied here, after the complete .toc has been loaded.
+    if Minimizer.Wheel and Minimizer.Wheel.ApplyConfig then
+        Minimizer.Wheel:ApplyConfig()
     end
     if Minimizer.Options and Minimizer.Options.Initialize then
         Minimizer.Options.Initialize()

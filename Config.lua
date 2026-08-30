@@ -92,11 +92,6 @@ function Minimizer.Config.Initialize()
     MinimizerCharDB.focusPip2 = nil
     MinimizerCharDB.targetOffensive = nil
 
-    -- Aplicar inmediatamente los nuevos defaults/config al componente Wheel.
-    if Minimizer.Wheel and Minimizer.Wheel.ApplyConfig then
-        Minimizer.Wheel:ApplyConfig()
-    end
-
     return MinimizerDB, MinimizerCharDB
 end
 

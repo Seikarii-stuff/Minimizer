@@ -47,7 +47,7 @@ function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
     if not parentFrame then return {} end
 
     local pips = {}
-    radius = radius or ((math.min(parentFrame:GetWidth() or 40, parentFrame:GetHeight() or 40)) * 0.45)
+    radius = tonumber(radius) or ((math.min(parentFrame:GetWidth() or 40, parentFrame:GetHeight() or 40)) * 0.45)
     xOff = xOff or 0
     yOff = yOff or 0
 
@@ -102,16 +102,20 @@ function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
         table.insert(pips, pip)
     end
 
+    pips._radius = radius
     return pips
 end
 
 function Pips.SetRadius(pips, radius)
-    if not pips or type(pips) ~= "table" then return end
+    if not pips or type(pips) ~= "table" then return false end
     radius = tonumber(radius)
-    if not radius then return end
+    if not radius or pips._radius == radius then return false end
+
+    pips._radius = radius
     for _, pip in ipairs(pips) do
         PositionPip(pip, radius)
     end
+    return true
 end
 
 function Pips.UpdatePips(pips)

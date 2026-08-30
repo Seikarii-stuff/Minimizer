@@ -10,8 +10,9 @@ Minimizer.Wheel = Wheel
 
 local DEFAULT_SIZE = 180
 local DEFAULT_PIP_RADIUS = 75
+local MIN_SIZE, MAX_SIZE = 120, 300
+local MIN_PIP_RADIUS, MAX_PIP_RADIUS = 45, 105
 
--- 0, 0 = centro de la pantalla.
 local WHEEL_X = 0
 local WHEEL_Y = -45
 
@@ -19,6 +20,7 @@ local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", UIParent)
 wheelFrame:SetSize(DEFAULT_SIZE, DEFAULT_SIZE)
 wheelFrame:SetFrameStrata("HIGH")
 wheelFrame:SetPoint("CENTER", UIParent, "CENTER", WHEEL_X, WHEEL_Y)
+wheelFrame:SetFrameLevel(100)
 
 local wheelTexture = wheelFrame:CreateTexture(nil, "ARTWORK")
 wheelTexture:SetAllPoints()
@@ -49,15 +51,37 @@ Minimizer.Widgets.ConfigureCooldownFrame(interruptCooldown, {
     swipeTexture = "Interface\\AddOns\\Minimizer\\assets\\halo_ring",
     swipeColor = { 0.00, 0.00, 0.00, 0.75 },
 })
+interruptCooldown:SetFrameLevel(110)
 wheelFrame.MinimizerWheelInterrupt = interruptCooldown
 
-local function GetWheelConfig()
-    local db = MinimizerDB or {}
-    return {
-        enabled = db.wheelEnabled ~= false,
-        size = tonumber(db.wheelSize) or DEFAULT_SIZE,
-        pipRadius = tonumber(db.wheelPipRadius) or DEFAULT_PIP_RADIUS,
-    }
+Wheel._enabled = nil
+Wheel._size = DEFAULT_SIZE
+Wheel._pipRadius = DEFAULT_PIP_RADIUS
+
+local function NormalizeSize(value)
+    value = tonumber(value) or DEFAULT_SIZE
+    value = math.floor(value + 0.5)
+    if value < MIN_SIZE then return MIN_SIZE end
+    if value > MAX_SIZE then return MAX_SIZE end
+    return value
+end
+
+local function NormalizePipRadius(value)
+    value = tonumber(value) or DEFAULT_PIP_RADIUS
+    value = math.floor(value + 0.5)
+    if value < MIN_PIP_RADIUS then return MIN_PIP_RADIUS end
+    if value > MAX_PIP_RADIUS then return MAX_PIP_RADIUS end
+    return value
+end
+
+local function ReadConfig()
+    local db = MinimizerDB
+    if not db then
+        return true, DEFAULT_SIZE, DEFAULT_PIP_RADIUS
+    end
+    return db.wheelEnabled ~= false,
+        NormalizeSize(db.wheelSize),
+        NormalizePipRadius(db.wheelPipRadius)
 end
 
 local function UpdateInterrupt()
@@ -79,64 +103,63 @@ local function UpdatePips()
 end
 
 function Wheel:SetSize(size)
-    size = tonumber(size) or DEFAULT_SIZE
+    size = NormalizeSize(size)
+    if self._size == size then return false end
+
+    self._size = size
     wheelFrame:SetSize(size, size)
-    wheelFrame.MinimizerWheelSize = size
+    return true
 end
 
 function Wheel:SetPipRadius(radius)
-    radius = tonumber(radius) or DEFAULT_PIP_RADIUS
+    radius = NormalizePipRadius(radius)
+    if self._pipRadius == radius then return false end
+
+    self._pipRadius = radius
     if wheelPips and Minimizer.Pips and Minimizer.Pips.SetRadius then
         Minimizer.Pips.SetRadius(wheelPips, radius)
     end
+    return true
 end
 
 function Wheel:SetEnabled(enabled)
-    if enabled == true then
-        wheelFrame:Show()
-        self:Update()
-    else
+    enabled = enabled == true
+    if self._enabled == enabled then return false end
+
+    self._enabled = enabled
+    if not enabled then
         wheelFrame:Hide()
         interruptCooldown:Hide()
         if wheelPips and Minimizer.Pips and Minimizer.Pips.HidePips then
             Minimizer.Pips.HidePips(wheelPips)
         end
+        return true
     end
+
+    wheelFrame:Show()
+    return true
 end
 
 function Wheel:ApplyConfig()
-    local config = GetWheelConfig()
-    self:SetSize(config.size)
-    self:SetPipRadius(config.pipRadius)
-    self:SetEnabled(config.enabled)
+    local enabled, size, radius = ReadConfig()
+    local enabledChanged = self._enabled ~= enabled
+    local sizeChanged = self._size ~= size
+    local radiusChanged = self._pipRadius ~= radius
+
+    if sizeChanged then self:SetSize(size) end
+    if radiusChanged then self:SetPipRadius(radius) end
+    if enabledChanged then self:SetEnabled(enabled) end
+
+    if enabled and (enabledChanged or sizeChanged or radiusChanged) then
+        self:Update()
+    end
 end
 
 function Wheel:Update()
-    local config = GetWheelConfig()
-    if not config.enabled then
-        wheelFrame:Hide()
-        interruptCooldown:Hide()
-        if wheelPips and Minimizer.Pips and Minimizer.Pips.HidePips then
-            Minimizer.Pips.HidePips(wheelPips)
-        end
-        return
-    end
-
-    self:SetSize(config.size)
-    self:SetPipRadius(config.pipRadius)
-
-    wheelFrame:ClearAllPoints()
-    wheelFrame:SetPoint("CENTER", UIParent, "CENTER", WHEEL_X, WHEEL_Y)
-    wheelFrame:SetFrameLevel(100)
+    if not self._enabled then return end
 
     UpdateInterrupt()
     UpdatePips()
-
-    if wheelPips and Minimizer.Pips then
-        Minimizer.Pips.SetFrameLevel(wheelPips, 105)
-    end
-    interruptCooldown:SetFrameLevel(110)
-    wheelFrame:Show()
 end
 
 Wheel.DebouncedUpdate = Minimizer.Utils.Throttle(function()
@@ -144,15 +167,15 @@ Wheel.DebouncedUpdate = Minimizer.Utils.Throttle(function()
 end, 0.033)
 
 function Wheel:OnCooldownTick()
-    if GetWheelConfig().enabled then
-        Wheel.DebouncedUpdate()
+    if self._enabled then
+        self.DebouncedUpdate()
     end
 end
 
 function Wheel:OnUnitChanged(unit, reason)
-    if not GetWheelConfig().enabled then return end
+    if not self._enabled then return end
     if unit == "player" or reason == "added" or reason == "removed" then
-        Wheel.DebouncedUpdate()
+        self.DebouncedUpdate()
     end
 end
 

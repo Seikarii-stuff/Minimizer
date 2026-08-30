@@ -58,21 +58,6 @@ local function ResolveSpellName(spellID)
     return "Spell " .. tostring(spellID)
 end
 
-local function BuildSpellOptions(tableKey)
-    local classToken = GetClassToken()
-    local source = Minimizer.Data and Minimizer.Data[tableKey] and Minimizer.Data[tableKey][classToken]
-    local options = { { text = "Automático", value = nil } }
-    if type(source) ~= "table" then return options end
-    for _, entry in ipairs(source) do
-        if type(entry) == "number" then
-            table.insert(options, { text = ResolveSpellName(entry), value = entry })
-        elseif type(entry) == "table" and type(entry.id) == "number" then
-            table.insert(options, { text = entry.name or ResolveSpellName(entry.id), value = entry.id })
-        end
-    end
-    return options
-end
-
 local function RequestFullUpdate()
     if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
         Minimizer.Dispatcher.RequestFullUpdate()
@@ -82,8 +67,6 @@ end
 local function ApplyWheelConfig()
     if Minimizer.Wheel and Minimizer.Wheel.ApplyConfig then
         Minimizer.Wheel:ApplyConfig()
-    elseif Minimizer.Overlays and Minimizer.Overlays.OnCooldownTick then
-        Minimizer.Overlays.OnCooldownTick()
     end
 end
 
@@ -109,20 +92,32 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
         end
         UIDropDownMenu_AddButton(info)
 
-        for _, entry in ipairs(BuildSpellOptions(tableKey)) do
-            if entry.value ~= nil then
-                local info2 = UIDropDownMenu_CreateInfo()
-                info2.text = entry.text
-                info2.value = entry.value
-                info2.checked = selectedValue == entry.value
-                info2.func = function()
-                    if MinimizerCharDB then MinimizerCharDB[dbKey] = entry.value end
+        local classToken = GetClassToken()
+        local source = Minimizer.Data and Minimizer.Data[tableKey] and Minimizer.Data[tableKey][classToken]
+        if type(source) ~= "table" then return end
+        for _, entry in ipairs(source) do
+            local id
+            local text
+            if type(entry) == "number" then
+                id = entry
+                text = ResolveSpellName(id)
+            elseif type(entry) == "table" and type(entry.id) == "number" then
+                id = entry.id
+                text = entry.name or ResolveSpellName(id)
+            end
+            if id then
+                local option = UIDropDownMenu_CreateInfo()
+                option.text = text
+                option.value = id
+                option.checked = selectedValue == id
+                option.func = function()
+                    if MinimizerCharDB then MinimizerCharDB[dbKey] = id end
                     if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then Minimizer.Widgets.InvalidateCDSpellCache() end
                     RequestFullUpdate()
                     ApplyWheelConfig()
                     Menu.Refresh()
                 end
-                UIDropDownMenu_AddButton(info2)
+                UIDropDownMenu_AddButton(option)
             end
         end
     end)
@@ -135,7 +130,7 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
         end
         local classToken = GetClassToken()
         local source = Minimizer.Data and Minimizer.Data[tableKey] and Minimizer.Data[tableKey][classToken]
-        local foundName = nil
+        local foundName
         if type(source) == "table" then
             for _, entry in ipairs(source) do
                 local id = (type(entry) == "number") and entry or (type(entry) == "table" and entry.id)
@@ -170,18 +165,36 @@ local function CreateSlider(parent, name, label, minValue, maxValue, step, value
     slider:SetMinMaxValues(minValue, maxValue)
     slider:SetValueStep(step)
     slider:SetObeyStepOnDrag(true)
-    slider:SetValue(value)
+
     local text = GetWidgetText(slider)
-    if text then text:SetText(label .. ": " .. tostring(value)) end
     local low = _G[name .. "Low"]
     local high = _G[name .. "High"]
     if low then low:SetText(tostring(minValue)) end
     if high then high:SetText(tostring(maxValue)) end
+
+    local function SetLabel(value)
+        if text then
+            text:SetText(label .. ": " .. tostring(math.floor((tonumber(value) or 0) + 0.5)))
+        end
+    end
+
+    slider._refreshing = false
     slider:SetScript("OnValueChanged", function(self, newValue)
         newValue = tonumber(newValue) or value
-        if text then text:SetText(label .. ": " .. tostring(math.floor(newValue + 0.5))) end
+        SetLabel(newValue)
+        if self._refreshing then return end
         onChanged(newValue)
     end)
+
+    slider.Refresh = function(newValue)
+        newValue = tonumber(newValue) or value
+        SetLabel(newValue)
+        slider._refreshing = true
+        slider:SetValue(newValue)
+        slider._refreshing = false
+    end
+
+    slider.Refresh(value)
     return slider
 end
 
@@ -191,17 +204,16 @@ local LEGEND_ROW_SPACING = 8
 local function CreateLegendRow(parent, colorRGB, labelText, anchorFrame)
     local row = CreateFrame("Frame", nil, parent)
     row:SetHeight(LEGEND_SWATCH_SIZE)
-    if anchorFrame then
-        row:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", 0, -LEGEND_ROW_SPACING)
-        row:SetPoint("TOPRIGHT", anchorFrame, "BOTTOMRIGHT", 0, -LEGEND_ROW_SPACING)
-    else
-        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
-        row:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
-    end
+    row:SetPoint("TOPLEFT", anchorFrame or parent, anchorFrame and "BOTTOMLEFT" or "TOPLEFT", 0,
+        anchorFrame and -LEGEND_ROW_SPACING or 0)
+    row:SetPoint("TOPRIGHT", anchorFrame or parent, anchorFrame and "BOTTOMRIGHT" or "TOPRIGHT", 0,
+        anchorFrame and -LEGEND_ROW_SPACING or 0)
+
     local swatch = row:CreateTexture(nil, "ARTWORK")
     swatch:SetSize(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE)
     swatch:SetPoint("LEFT", row, "LEFT", 0, 0)
     swatch:SetColorTexture(colorRGB[1], colorRGB[2], colorRGB[3], 1)
+
     local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     label:SetPoint("LEFT", swatch, "RIGHT", 6, 0)
     label:SetPoint("RIGHT", row, "RIGHT", 0, 0)
@@ -211,14 +223,19 @@ local function CreateLegendRow(parent, colorRGB, labelText, anchorFrame)
 end
 
 local HEALTH_LEGEND_ENTRIES = {
-    { key = "focus", label = "Focus" }, { key = "aggro", label = "Aggro (tuyo)" },
-    { key = "absorb", label = "Shield / Absorb" }, { key = "boss", label = "Boss / Miniboss" },
-    { key = "caster", label = "Caster (maná)" }, { key = "melee", label = "Melee" },
-    { key = "trivial", label = "Trivial" }, { key = "castInterruptible", label = "Cast interrumpible" },
+    { key = "focus", label = "Focus" },
+    { key = "aggro", label = "Aggro (tuyo)" },
+    { key = "absorb", label = "Shield / Absorb" },
+    { key = "boss", label = "Boss / Miniboss" },
+    { key = "caster", label = "Caster (maná)" },
+    { key = "melee", label = "Melee" },
+    { key = "trivial", label = "Trivial" },
+    { key = "castInterruptible", label = "Cast interrumpible" },
     { key = "superiorUninterruptible", label = "Cast ininterrumpible" },
 }
 local CAST_LEGEND_ENTRIES = {
-    { key = "ready", label = "Interrupt listo" }, { key = "channel", label = "Channeling interrupt cooldown" },
+    { key = "ready", label = "Interrupt listo" },
+    { key = "channel", label = "Channeling interrupt cooldown" },
 }
 
 local function BuildLegend(legend)
@@ -228,17 +245,20 @@ local function BuildLegend(legend)
     sectionTitle:SetJustifyH("LEFT")
     sectionTitle:SetText("Leyenda: nameplate")
     local lastRow = sectionTitle
+
     local healthColors = Minimizer.Constants and Minimizer.Constants.HealthColors or {}
     for _, entry in ipairs(HEALTH_LEGEND_ENTRIES) do
         local color = healthColors[entry.key]
         if color then lastRow = CreateLegendRow(legend, color, entry.label, lastRow) end
     end
+
     local castTitle = legend:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     castTitle:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 0, -16)
     castTitle:SetPoint("TOPRIGHT", lastRow, "BOTTOMRIGHT", 0, -16)
     castTitle:SetJustifyH("LEFT")
     castTitle:SetText("Leyenda: cast bar")
     lastRow = castTitle
+
     local castColors = Minimizer.Constants and Minimizer.Constants.CastColors or {}
     for _, entry in ipairs(CAST_LEGEND_ENTRIES) do
         local color = castColors[entry.key]
@@ -247,41 +267,48 @@ local function BuildLegend(legend)
 end
 
 local function BuildPlaterTab(parent)
-    local simplifyToggle = CreateCheckbox(parent, "MinimizerMenuSimplifyToggle", "Enable simplify", nil, 0,
+    local left = CreateFrame("Frame", nil, parent)
+    left:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+    left:SetWidth(210)
+    left:SetPoint("BOTTOM", parent, "BOTTOM", 0, 0)
+
+    local legend = CreateFrame("Frame", nil, parent)
+    legend:SetPoint("TOPLEFT", parent, "TOPLEFT", 250, 0)
+    legend:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0)
+
+    local divider = parent:GetParent():CreateTexture(nil, "ARTWORK")
+    divider:SetPoint("TOP", legend, "TOPLEFT", -16, 0)
+    divider:SetPoint("BOTTOM", legend, "BOTTOMLEFT", -16, 0)
+    divider:SetWidth(1)
+    divider:SetColorTexture(1, 1, 1, 0.15)
+
+    local simplifyToggle = CreateCheckbox(left, "MinimizerMenuSimplifyToggle", "Enable simplify", nil, 0,
         Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled(), function(self)
             if MinimizerDB then MinimizerDB.simplifyEnabled = self:GetChecked() end
             RequestFullUpdate()
         end)
-
-    local targetMarkers = CreateCheckbox(parent, nil, "Enable target markers", simplifyToggle, -10,
+    local targetMarkers = CreateCheckbox(left, nil, "Enable target markers", simplifyToggle, -10,
         MinimizerDB and MinimizerDB.enableTargetMarkers ~= false, function(self)
             if MinimizerDB then MinimizerDB.enableTargetMarkers = self:GetChecked() end
             RequestFullUpdate()
         end)
-
-    local focusMarkers = CreateCheckbox(parent, nil, "Enable focus markers", targetMarkers, -10,
+    local focusMarkers = CreateCheckbox(left, nil, "Enable focus markers", targetMarkers, -10,
         MinimizerDB and MinimizerDB.enableFocusMarkers ~= false, function(self)
             if MinimizerDB then MinimizerDB.enableFocusMarkers = self:GetChecked() end
             RequestFullUpdate()
         end)
-
-    local faceToggle = CreateCheckbox(parent, nil, "Focus face enabled", focusMarkers, -10,
+    local faceToggle = CreateCheckbox(left, nil, "Focus face enabled", focusMarkers, -10,
         MinimizerDB and MinimizerDB.enableFocusFace == true, function(self)
             if Minimizer.Focus then Minimizer.Focus:SetFaceEnabled(self:GetChecked())
             elseif MinimizerDB then MinimizerDB.enableFocusFace = self:GetChecked() end
         end)
-
-    local arrowsToggle = CreateCheckbox(parent, nil, "Focus arrows enabled", faceToggle, -10,
+    local arrowsToggle = CreateCheckbox(left, nil, "Focus arrows enabled", faceToggle, -10,
         MinimizerDB and MinimizerDB.enableFocusArrows == true, function(self)
             if Minimizer.Focus then Minimizer.Focus:SetArrowsEnabled(self:GetChecked())
             elseif MinimizerDB then MinimizerDB.enableFocusArrows = self:GetChecked() end
         end)
 
-    local legend = CreateFrame("Frame", nil, parent)
-    legend:SetPoint("TOPLEFT", arrowsToggle, "BOTTOMLEFT", 0, -18)
-    legend:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -18)
     BuildLegend(legend)
-
     parent.controls = {
         simplifyToggle = simplifyToggle,
         targetMarkers = targetMarkers,
@@ -289,6 +316,7 @@ local function BuildPlaterTab(parent)
         faceToggle = faceToggle,
         arrowsToggle = arrowsToggle,
         legend = legend,
+        divider = divider,
     }
 end
 
@@ -394,11 +422,11 @@ local function EnsureFrame()
     frame.tabs = {}
     frame.tabs.Plater = BuildTab(frame, "Plater", -70, BuildPlaterTab)
     frame.tabs.Wheel = BuildTab(frame, "Wheel", 70, BuildWheelTab)
-
     frame.MinimizerMenuControls = {
         plater = frame.tabs.Plater.panel.controls,
         wheel = frame.tabs.Wheel.panel.controls,
     }
+
     Menu.frame = frame
     ApplyMenuPosition(frame)
     SetTab(frame, "Plater")
@@ -408,19 +436,18 @@ end
 
 function Menu.Refresh()
     local frame = EnsureFrame()
-    if not frame then return end
-    local controls = frame.MinimizerMenuControls
+    local controls = frame and frame.MinimizerMenuControls
     if not controls then return end
 
     controls.plater.simplifyToggle:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
     controls.plater.targetMarkers:SetChecked(MinimizerDB and MinimizerDB.enableTargetMarkers ~= false)
-    controls.plater.focusMarkers:SetChecked(MinimizerDB and MinimizerDB.enableFocusMarkers == true)
+    controls.plater.focusMarkers:SetChecked(MinimizerDB and MinimizerDB.enableFocusMarkers ~= false)
     controls.plater.faceToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusFace == true)
     controls.plater.arrowsToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusArrows == true)
 
     controls.wheel.wheelToggle:SetChecked(MinimizerDB and MinimizerDB.wheelEnabled ~= false)
-    if controls.wheel.sizeSlider then controls.wheel.sizeSlider:SetValue(tonumber(MinimizerDB and MinimizerDB.wheelSize) or 180) end
-    if controls.wheel.radiusSlider then controls.wheel.radiusSlider:SetValue(tonumber(MinimizerDB and MinimizerDB.wheelPipRadius) or 75) end
+    controls.wheel.sizeSlider:Refresh(tonumber(MinimizerDB and MinimizerDB.wheelSize) or 180)
+    controls.wheel.radiusSlider:Refresh(tonumber(MinimizerDB and MinimizerDB.wheelPipRadius) or 75)
     for _, dropdown in ipairs(controls.wheel.dropdowns or {}) do
         if dropdown.Refresh then dropdown.Refresh() end
     end
@@ -429,7 +456,12 @@ end
 function Menu.Toggle()
     local frame = EnsureFrame()
     if not frame then return end
-    if frame:IsShown() then frame:Hide() else Menu.Refresh(); frame:Show() end
+    if frame:IsShown() then
+        frame:Hide()
+    else
+        Menu.Refresh()
+        frame:Show()
+    end
 end
 
 function Menu.Open()
