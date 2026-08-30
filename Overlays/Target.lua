@@ -6,7 +6,7 @@ Minimizer.Target = Target
 
 local HALO_SIZE = 46
 local STRIPED_PATTERN_TEXTURE = "Interface\\AddOns\\Minimizer\\assets\\striped_pattern"
-local STRIPED_PATTERN_ALPHA = 0.45
+local STRIPED_PATTERN_ALPHA = 0.6
 
 local haloFrame = Minimizer.Widgets.CreateHalo("MinimizerTargetHalo", nil, HALO_SIZE)
 
