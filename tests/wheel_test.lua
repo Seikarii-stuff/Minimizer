@@ -1,8 +1,6 @@
 local T = dofile("tests/test_harness.lua")
 local Mocks, addonTable, check = T.Mocks, T.addonTable, T.check
 
--- SavedVariables must exist before ADDON_LOADED so Bootstrap applies Wheel config
--- immediately after Wheel.lua has been loaded.
 MinimizerDB = {
     wheelEnabled = false,
     wheelSize = 220,
@@ -36,7 +34,6 @@ end
 
 addonTable.Wheel:ApplyConfig()
 check(setSizeCalls == 0 and setRadiusCalls == 0, "Wheel: ApplyConfig con mismos valores hace early-out")
-
 MinimizerDB.wheelSize = 240
 MinimizerDB.wheelPipRadius = 92
 addonTable.Wheel:ApplyConfig()
@@ -66,6 +63,7 @@ check(updateCalls == 0, "Wheel: OnCooldownTick hace early-out cuando disabled")
 MinimizerDB.wheelEnabled = true
 addonTable.Wheel:ApplyConfig()
 updateCalls = 0
+Mocks.AdvanceTime(0.034)
 Mocks.FireEvent("SPELL_UPDATE_COOLDOWN")
 check(updateCalls == 1, "Wheel hot path: SPELL_UPDATE_COOLDOWN llega a Wheel:Update")
 Mocks.FireEvent("SPELL_UPDATE_COOLDOWN")
@@ -81,7 +79,6 @@ addonTable.Wheel:Update()
 addonTable.Wheel:OnCooldownTick()
 addonTable.Wheel:ApplyConfig()
 check(#Mocks.frames == framesBeforeFinalUpdates, "Wheel: hot path y ApplyConfig no crean frames adicionales")
-
 check(addonTable.Overlays.Get("Wheel") == addonTable.Wheel, "Wheel: registrada en Overlays")
 
 T.finish("WHEEL TESTS")
