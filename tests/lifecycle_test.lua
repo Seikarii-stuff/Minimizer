@@ -3,6 +3,16 @@ local Mocks, addonTable, check = T.Mocks, T.addonTable, T.check
 
 T.fireAddonLoaded()
 
+-- Core registration invariants.
+local moduleCount = 0
+for _ in pairs(addonTable.Modules) do moduleCount = moduleCount + 1 end
+check(moduleCount == #addonTable.ModuleList, "Core: ModuleList y Modules tienen el mismo numero de entradas")
+local seen = {}
+for _, module in ipairs(addonTable.ModuleList) do seen[module.MinimizerModuleName] = true end
+local allFound = true
+for name in pairs(addonTable.Modules) do if not seen[name] then allFound = false end end
+check(allFound, "Core: todo modulo registrado aparece en ModuleList")
+
 -- Config migrations
 MinimizerDB = { version = 1, focusIndicator = "face", simplifyPercent = 25 }
 addonTable.Config.Initialize()
@@ -35,7 +45,6 @@ Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate5")
 addonTable.Dispatcher.ApplyToUnit("nameplate5")
 local cachedBefore = addonTable.Cache.GetUnitKeyWithGeneration("nameplate5", "threat:player")
 check(cachedBefore == 3, "Lifecycle: threat queda cacheado para la unidad inicial")
-
 Mocks.CreateTestUnit("nameplate5", { level = 70, faction = "Horde", threatSituation = 0 })
 Mocks.CreateTestNameplate("nameplate5")
 Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate5")
@@ -56,8 +65,7 @@ addonTable.Cache.SetUnitKeyWithGeneration(unitA, "threat:player", 2)
 addonTable.Cache.SetUnitKeyWithGeneration(unitB, "threat:player", 3)
 addonTable.Cache.SetUnitKeyWithGeneration(unitA, "eliteType", "boss")
 addonTable.Cache.InvalidateAll("threat")
-check(addonTable.Cache.GetUnitKeyWithGeneration(unitA, "threat:player") == nil and addonTable.Cache.GetUnitKeyWithGeneration(unitB, "threat:player") == nil,
-    "Cache: InvalidateAll(threat) borra threat:* en todas las unidades")
+check(addonTable.Cache.GetUnitKeyWithGeneration(unitA, "threat:player") == nil and addonTable.Cache.GetUnitKeyWithGeneration(unitB, "threat:player") == nil, "Cache: InvalidateAll(threat) borra threat:* en todas las unidades")
 check(addonTable.Cache.GetUnitKeyWithGeneration(unitA, "eliteType") == "boss", "Cache: InvalidateAll no toca otras claves")
 
 -- Hit-test follows the active health bar and retries after Blizzard unlocks mutation.
@@ -68,7 +76,6 @@ Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "
 Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
 addonTable.Dispatcher.ApplyToUnit(token)
 check(np1.MinimizerHitTestRegion == hb1, "Lifecycle: hit-test apunta al healthBar actual")
-
 Mocks.CreateTestUnit(token, { level = 70, classification = "normal", faction = "Horde" })
 local npRecycled = Mocks.CreateTestNameplate(token)
 local hbRecycled = addonTable.Utils.GetHealthBar(npRecycled)
@@ -87,9 +94,35 @@ np3.CanChangeHitTestPoints = function() return true end
 Mocks.AdvanceTime(0.05)
 check(np3.MinimizerHitTestRegion == hb3, "Lifecycle: retry aplica el hit-test cuando se habilita")
 
-check(type(addonTable.Lifecycle.GetGeneration) == "function", "Lifecycle: GetGeneration es la API canonica")
-check(type(addonTable.Lifecycle.IsGenerationStale) == "function", "Lifecycle: IsGenerationStale es la API canonica")
-check(addonTable.Lifecycle.GetPlateGeneration == nil, "Lifecycle: no queda alias GetPlateGeneration")
-check(addonTable.Lifecycle.IncrementPlateGeneration == nil, "Lifecycle: no queda alias IncrementPlateGeneration")
+-- Event registration and propagation.
+local eventFrame = _G.MinimizerEventFrame
+check(eventFrame ~= nil and eventFrame.registeredEvents ~= nil, "Events: MinimizerEventFrame existe")
+check(eventFrame.registeredEvents["UNIT_ABSORB_AMOUNT_CHANGED"] == true, "Events: UNIT_ABSORB_AMOUNT_CHANGED esta registrado")
+check(eventFrame.registeredEvents["NAME_PLATE_UNIT_ADDED"] == true and eventFrame.registeredEvents["NAME_PLATE_UNIT_REMOVED"] == true, "Events: nameplate lifecycle esta registrado")
+check(eventFrame.registeredEvents["UNIT_SPELLCAST_START"] == true and eventFrame.registeredEvents["UNIT_THREAT_SITUATION_UPDATE"] == true, "Events: cast y threat estan registrados")
+
+local eventUnit = "nameplate99"
+Mocks.CreateTestUnit(eventUnit, { level = 70, classification = "normal", faction = "Horde" })
+Mocks.CreateTestNameplate(eventUnit)
+Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", eventUnit)
+local calledUnit = nil
+local originalApply = addonTable.Dispatcher.ApplyToUnit
+addonTable.Dispatcher.ApplyToUnit = function(unit, force)
+    calledUnit = unit
+    return originalApply(unit, force)
+end
+Mocks.FireEvent("UNIT_ABSORB_AMOUNT_CHANGED", eventUnit)
+addonTable.Dispatcher.ApplyToUnit = originalApply
+check(calledUnit == eventUnit, "Events: UNIT_ABSORB_AMOUNT_CHANGED invoca Dispatcher.ApplyToUnit")
+
+-- Final architecture ownership assertions.
+check(type(addonTable.Dispatcher.StartMonitor) == "function" and type(addonTable.Dispatcher.TrackUnit) == "function" and type(addonTable.Dispatcher.ForgetUnit) == "function", "Architecture: Dispatcher owns monitor lifecycle")
+check(type(addonTable.Threat.GetThreatDetails) == "function" and type(addonTable.Threat.PlayerHasAggro) == "function", "Architecture: Threat expone proveedor de datos")
+check(type(addonTable.Decision.ShouldSimplifyUnit) == "function" and type(addonTable.Decision.ShouldUnsimplify) == "function" and type(addonTable.Decision.ShouldLetBlizzardPaint) == "function", "Architecture: Decision owns business rules")
+check(type(addonTable.Absorb.MarkSeen) == "function" and type(addonTable.Absorb.GetTotalAbsorbs) == "function", "Architecture: Absorb owns MarkSeen y GetTotalAbsorbs")
+check(addonTable.Absorb.MarkAbsorbSeen == nil, "Architecture: no legacy alias Absorb.MarkAbsorbSeen")
+check(type(addonTable.Lifecycle.GetGeneration) == "function" and type(addonTable.Lifecycle.IsGenerationStale) == "function", "Architecture: Lifecycle owns generations")
+check(addonTable.Lifecycle.GetPlateGeneration == nil and addonTable.Lifecycle.IncrementPlateGeneration == nil, "Architecture: no legacy Lifecycle aliases")
+check(type(addonTable.Snapshot.Build) == "function" and type(addonTable.Snapshot.ComputeDisplayKind) == "function", "Architecture: Snapshot mantiene pipeline canonico y fallback explicito")
 
 T.finish("LIFECYCLE TESTS")
