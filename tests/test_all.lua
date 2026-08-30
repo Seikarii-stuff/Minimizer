@@ -26,6 +26,8 @@ local tests = {
 }
 
 local failures = {}
+local totalRun = 0
+local totalPassed = 0
 
 print("Running tests...")
 for _, t in ipairs(tests) do
@@ -44,6 +46,21 @@ for _, t in ipairs(tests) do
         end
     end
 
+    -- Focused tests use `=== ...: passed/run ===`; the existing equivalence and
+    -- friendly tests use their own summary wording. Aggregate what is available
+    -- without changing the individual test processes or introducing a framework.
+    local passed, run = out:match("=== [^\n]*: (%d+)/(%d+) passed ===")
+    if not passed then
+        run, failed = out:match("Friendly filter / safety net tests: (%d+) run, (%d+) failed")
+        if run then
+            passed = run - failed
+        end
+    end
+    if run and passed then
+        totalRun = totalRun + tonumber(run)
+        totalPassed = totalPassed + tonumber(passed)
+    end
+
     if found then
         print("FAIL")
         table.insert(failures, { test = t, output = out })
@@ -53,6 +70,9 @@ for _, t in ipairs(tests) do
 end
 
 if #failures == 0 then
+    if totalRun > 0 then
+        print(string.format("\n=== GLOBAL TEST RESULTS: %d/%d passed ===", totalPassed, totalRun))
+    end
     print("\nAll tests passed.")
     os.exit(0)
 end
@@ -67,4 +87,7 @@ for _, f in ipairs(failures) do
     end
 end
 
+if totalRun > 0 then
+    print(string.format("\n=== GLOBAL TEST RESULTS: %d/%d passed ===", totalPassed, totalRun))
+end
 os.exit(1)
