@@ -79,9 +79,17 @@ local function RequestFullUpdate()
     end
 end
 
+local function ApplyWheelConfig()
+    if Minimizer.Wheel and Minimizer.Wheel.ApplyConfig then
+        Minimizer.Wheel:ApplyConfig()
+    elseif Minimizer.Overlays and Minimizer.Overlays.OnCooldownTick then
+        Minimizer.Overlays.OnCooldownTick()
+    end
+end
+
 local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
     local dropdown = CreateFrame("Frame", name, frame, "UIDropDownMenuTemplate")
-    dropdown:SetSize(160, 28)
+    dropdown:SetSize(210, 28)
     dropdown.label = dropdown:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     dropdown.label:SetPoint("TOPLEFT", dropdown, "TOPLEFT", 16, 12)
     dropdown.label:SetText(labelText)
@@ -96,6 +104,7 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
             if MinimizerCharDB then MinimizerCharDB[dbKey] = nil end
             if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then Minimizer.Widgets.InvalidateCDSpellCache() end
             RequestFullUpdate()
+            ApplyWheelConfig()
             Menu.Refresh()
         end
         UIDropDownMenu_AddButton(info)
@@ -110,6 +119,7 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
                     if MinimizerCharDB then MinimizerCharDB[dbKey] = entry.value end
                     if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then Minimizer.Widgets.InvalidateCDSpellCache() end
                     RequestFullUpdate()
+                    ApplyWheelConfig()
                     Menu.Refresh()
                 end
                 UIDropDownMenu_AddButton(info2)
@@ -142,74 +152,149 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
     return dropdown
 end
 
-local LEGEND_SWATCH_SIZE = 14
-local LEGEND_ROW_SPACING = 8
-
-local function CreateLegendRow(parent, colorRGB, labelText, anchorFrame)
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetHeight(LEGEND_SWATCH_SIZE)
-    if anchorFrame then
-        row:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", 0, -LEGEND_ROW_SPACING)
-        row:SetPoint("TOPRIGHT", anchorFrame, "BOTTOMRIGHT", 0, -LEGEND_ROW_SPACING)
-    else
-        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
-        row:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
-    end
-    local swatch = row:CreateTexture(nil, "ARTWORK")
-    swatch:SetSize(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE)
-    swatch:SetPoint("LEFT", row, "LEFT", 0, 0)
-    swatch:SetColorTexture(colorRGB[1], colorRGB[2], colorRGB[3], 1)
-    local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetPoint("LEFT", swatch, "RIGHT", 6, 0)
-    label:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    label:SetJustifyH("LEFT")
-    label:SetText(labelText)
-    return row
+local function CreateCheckbox(parent, name, label, anchor, yOffset, checked, onClick)
+    local check = CreateFrame("CheckButton", name, parent, "ChatConfigCheckButtonTemplate")
+    check:SetPoint("TOPLEFT", anchor or parent, anchor and "BOTTOMLEFT" or "TOPLEFT", 0, yOffset or 0)
+    check:SetChecked(checked == true)
+    check.text = GetWidgetText(check)
+    if check.text then check.text:SetText(label) end
+    check:SetScript("OnClick", onClick)
+    return check
 end
 
-local HEALTH_LEGEND_ENTRIES = {
-    { key = "focus", label = "Focus" }, { key = "aggro", label = "Aggro (tuyo)" },
-    { key = "absorb", label = "Shield / Absorb" }, { key = "boss", label = "Boss / Miniboss" },
-    { key = "caster", label = "Caster (maná)" }, { key = "melee", label = "Melee" },
-    { key = "trivial", label = "Trivial" }, { key = "castInterruptible", label = "Cast interrumpible" },
-    { key = "superiorUninterruptible", label = "Cast ininterrumpible" },
-}
-local CAST_LEGEND_ENTRIES = {
-    { key = "ready", label = "Interrupt listo" }, { key = "channel", label = "Channeling interrupt cooldown" },
-}
+local function CreateSlider(parent, name, label, minValue, maxValue, step, value, anchor, onChanged)
+    local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
+    slider:SetWidth(210)
+    slider:SetHeight(40)
+    slider:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -14)
+    slider:SetMinMaxValues(minValue, maxValue)
+    slider:SetValueStep(step)
+    slider:SetObeyStepOnDrag(true)
+    slider:SetValue(value)
+    local text = GetWidgetText(slider)
+    if text then text:SetText(label .. ": " .. tostring(value)) end
+    local low = _G[name .. "Low"]
+    local high = _G[name .. "High"]
+    if low then low:SetText(tostring(minValue)) end
+    if high then high:SetText(tostring(maxValue)) end
+    slider:SetScript("OnValueChanged", function(self, newValue)
+        newValue = tonumber(newValue) or value
+        if text then text:SetText(label .. ": " .. tostring(math.floor(newValue + 0.5))) end
+        onChanged(newValue)
+    end)
+    return slider
+end
 
-local function BuildLegend(legend)
-    local sectionTitle = legend:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    sectionTitle:SetPoint("TOPLEFT", legend, "TOPLEFT", 0, 0)
-    sectionTitle:SetPoint("TOPRIGHT", legend, "TOPRIGHT", 0, 0)
-    sectionTitle:SetJustifyH("LEFT")
-    sectionTitle:SetText("Leyenda: nameplate")
-    local lastRow = sectionTitle
-    local healthColors = Minimizer.Constants and Minimizer.Constants.HealthColors or {}
-    for _, entry in ipairs(HEALTH_LEGEND_ENTRIES) do
-        local color = healthColors[entry.key]
-        if color then lastRow = CreateLegendRow(legend, color, entry.label, lastRow) end
+local function BuildPlaterTab(parent)
+    local simplifyToggle = CreateCheckbox(parent, "MinimizerMenuSimplifyToggle", "Enable simplify", nil, 0,
+        Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled(), function(self)
+            if MinimizerDB then MinimizerDB.simplifyEnabled = self:GetChecked() end
+            RequestFullUpdate()
+        end)
+
+    local targetMarkers = CreateCheckbox(parent, nil, "Enable target markers", simplifyToggle, -10,
+        MinimizerDB and MinimizerDB.enableTargetMarkers ~= false, function(self)
+            if MinimizerDB then MinimizerDB.enableTargetMarkers = self:GetChecked() end
+            RequestFullUpdate()
+        end)
+
+    local focusMarkers = CreateCheckbox(parent, nil, "Enable focus markers", targetMarkers, -10,
+        MinimizerDB and MinimizerDB.enableFocusMarkers ~= false, function(self)
+            if MinimizerDB then MinimizerDB.enableFocusMarkers = self:GetChecked() end
+            RequestFullUpdate()
+        end)
+
+    local faceToggle = CreateCheckbox(parent, nil, "Focus face enabled", focusMarkers, -10,
+        MinimizerDB and MinimizerDB.enableFocusFace == true, function(self)
+            if Minimizer.Focus then Minimizer.Focus:SetFaceEnabled(self:GetChecked())
+            elseif MinimizerDB then MinimizerDB.enableFocusFace = self:GetChecked() end
+        end)
+
+    local arrowsToggle = CreateCheckbox(parent, nil, "Focus arrows enabled", faceToggle, -10,
+        MinimizerDB and MinimizerDB.enableFocusArrows == true, function(self)
+            if Minimizer.Focus then Minimizer.Focus:SetArrowsEnabled(self:GetChecked())
+            elseif MinimizerDB then MinimizerDB.enableFocusArrows = self:GetChecked() end
+        end)
+
+    parent.controls = {
+        simplifyToggle = simplifyToggle,
+        targetMarkers = targetMarkers,
+        focusMarkers = focusMarkers,
+        faceToggle = faceToggle,
+        arrowsToggle = arrowsToggle,
+    }
+end
+
+local function BuildWheelTab(parent)
+    local wheelToggle = CreateCheckbox(parent, "MinimizerMenuWheelToggle", "Enable Wheel", nil, 0,
+        MinimizerDB and MinimizerDB.wheelEnabled ~= false, function(self)
+            if MinimizerDB then MinimizerDB.wheelEnabled = self:GetChecked() end
+            ApplyWheelConfig()
+        end)
+
+    local sizeSlider = CreateSlider(parent, "MinimizerMenuWheelSize", "Wheel size", 120, 300, 5,
+        tonumber(MinimizerDB and MinimizerDB.wheelSize) or 180, wheelToggle, function(value)
+            if MinimizerDB then MinimizerDB.wheelSize = value end
+            ApplyWheelConfig()
+        end)
+
+    local radiusSlider = CreateSlider(parent, "MinimizerMenuWheelPipRadius", "Pip radius", 45, 105, 1,
+        tonumber(MinimizerDB and MinimizerDB.wheelPipRadius) or 75, sizeSlider, function(value)
+            if MinimizerDB then MinimizerDB.wheelPipRadius = value end
+            ApplyWheelConfig()
+        end)
+
+    local slots = (Minimizer.Pips and Minimizer.Pips.SLOTS) or {}
+    local dropdowns = {}
+    for index, slot in ipairs(slots) do
+        local slotId = slot.id or index
+        local drop = CreateDropdown(parent, "MinimizerMenuPip" .. slotId .. "Drop", slot.name or ("Pip " .. slotId), "PIPS_SPELLS", "pip" .. slotId)
+        if #dropdowns == 0 then
+            drop:SetPoint("TOPLEFT", radiusSlider, "BOTTOMLEFT", 0, -12)
+        else
+            drop:SetPoint("TOPLEFT", dropdowns[#dropdowns], "BOTTOMLEFT", 0, -18)
+        end
+        table.insert(dropdowns, drop)
     end
-    local castTitle = legend:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    castTitle:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 0, -16)
-    castTitle:SetPoint("TOPRIGHT", lastRow, "BOTTOMRIGHT", 0, -16)
-    castTitle:SetJustifyH("LEFT")
-    castTitle:SetText("Leyenda: cast bar")
-    lastRow = castTitle
-    local castColors = Minimizer.Constants and Minimizer.Constants.CastColors or {}
-    for _, entry in ipairs(CAST_LEGEND_ENTRIES) do
-        local color = castColors[entry.key]
-        if color then lastRow = CreateLegendRow(legend, color, entry.label, lastRow) end
-    end
+
+    parent.controls = {
+        wheelToggle = wheelToggle,
+        sizeSlider = sizeSlider,
+        radiusSlider = radiusSlider,
+        dropdowns = dropdowns,
+    }
+end
+
+local function SetTab(frame, tabName)
+    frame.activeTab = tabName
+    local plater = frame.tabs and frame.tabs.Plater
+    local wheel = frame.tabs and frame.tabs.Wheel
+    if not plater or not wheel then return end
+    plater.panel:SetShown(tabName == "Plater")
+    wheel.panel:SetShown(tabName == "Wheel")
+    plater.button:SetEnabled(tabName ~= "Plater")
+    wheel.button:SetEnabled(tabName ~= "Wheel")
+end
+
+local function BuildTab(frame, name, xOffset, builder)
+    local button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    button:SetSize(130, 24)
+    button:SetPoint("TOP", frame, "TOP", xOffset, -42)
+    button:SetText(name)
+
+    local panel = CreateFrame("Frame", nil, frame)
+    panel:SetPoint("TOPLEFT", frame, "TOPLEFT", 24, -76)
+    panel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -24, 18)
+    builder(panel)
+    button:SetScript("OnClick", function() SetTab(frame, name) end)
+    return { button = button, panel = panel }
 end
 
 local function EnsureFrame()
     if Menu.frame then return Menu.frame end
-    local FRAME_WIDTH = 460
-    local FRAME_HEIGHT = 520
-    local CONTENT_WIDTH = 230
+
     local frame = CreateFrame("Frame", "MinimizerMenuFrame", UIParent, "BackdropTemplate")
-    frame:SetSize(FRAME_WIDTH, FRAME_HEIGHT)
+    frame:SetSize(520, 620)
     frame:SetFrameStrata("DIALOG")
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -226,88 +311,30 @@ local function EnsureFrame()
     end
     frame:SetScript("OnDragStart", function(self) if self:IsMovable() then self:StartMoving() end end)
     frame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing(); self:SetUserPlaced(true); SaveMenuPosition(self)
+        self:StopMovingOrSizing()
+        self:SetUserPlaced(true)
+        SaveMenuPosition(self)
     end)
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetText("Minimizer")
     title:SetPoint("TOP", frame, "TOP", 0, -16)
 
-    local content = CreateFrame("Frame", nil, frame)
-    content:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -36)
-    content:SetSize(CONTENT_WIDTH, FRAME_HEIGHT - 50)
     local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
     closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
-    local simplifyToggle = CreateFrame("CheckButton", "MinimizerMenuSimplifyToggle", content, "ChatConfigCheckButtonTemplate")
-    simplifyToggle:SetPoint("TOPLEFT", frame, "TOPLEFT", 24, -40)
-    simplifyToggle.text = GetWidgetText(simplifyToggle)
-    if simplifyToggle.text then simplifyToggle.text:SetText("Enable simplify") end
-    simplifyToggle:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
-    simplifyToggle:SetScript("OnClick", function(self)
-        if MinimizerDB then MinimizerDB.simplifyEnabled = self:GetChecked() end
-        RequestFullUpdate()
-    end)
-
-    local targetMarkers = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
-    targetMarkers:SetPoint("TOPLEFT", simplifyToggle, "BOTTOMLEFT", 0, -20)
-    targetMarkers:SetChecked(MinimizerDB and MinimizerDB.enableTargetMarkers ~= false)
-    targetMarkers.text = GetWidgetText(targetMarkers)
-    if targetMarkers.text then targetMarkers.text:SetText("Enable target markers") end
-    targetMarkers:SetScript("OnClick", function(self) if MinimizerDB then MinimizerDB.enableTargetMarkers = self:GetChecked() end RequestFullUpdate() end)
-
-    local focusMarkers = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
-    focusMarkers:SetPoint("TOPLEFT", targetMarkers, "BOTTOMLEFT", 0, -10)
-    focusMarkers:SetChecked(MinimizerDB and MinimizerDB.enableFocusMarkers ~= false)
-    focusMarkers.text = GetWidgetText(focusMarkers)
-    if focusMarkers.text then focusMarkers.text:SetText("Enable focus markers") end
-    focusMarkers:SetScript("OnClick", function(self) if MinimizerDB then MinimizerDB.enableFocusMarkers = self:GetChecked() end RequestFullUpdate() end)
-
-    local faceToggle = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
-    faceToggle:SetPoint("TOPLEFT", focusMarkers, "BOTTOMLEFT", 0, -10)
-    faceToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusFace == true)
-    faceToggle.text = GetWidgetText(faceToggle)
-    if faceToggle.text then faceToggle.text:SetText("Focus face enabled") end
-    faceToggle:SetScript("OnClick", function(self) if Minimizer.Focus then Minimizer.Focus:SetFaceEnabled(self:GetChecked()) else MinimizerDB.enableFocusFace = self:GetChecked() end end)
-
-    local arrowsToggle = CreateFrame("CheckButton", nil, content, "ChatConfigCheckButtonTemplate")
-    arrowsToggle:SetPoint("TOPLEFT", faceToggle, "BOTTOMLEFT", 0, -10)
-    arrowsToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusArrows == true)
-    arrowsToggle.text = GetWidgetText(arrowsToggle)
-    if arrowsToggle.text then arrowsToggle.text:SetText("Focus arrows enabled") end
-    arrowsToggle:SetScript("OnClick", function(self) if Minimizer.Focus then Minimizer.Focus:SetArrowsEnabled(self:GetChecked()) else MinimizerDB.enableFocusArrows = self:GetChecked() end end)
-
-    local slots = (Minimizer.Pips and Minimizer.Pips.SLOTS) or {}
-    local dropdowns = {}
-    for index, slot in ipairs(slots) do
-        local slotId = slot.id or index
-        local drop = CreateDropdown(content, "MinimizerMenuPip" .. slotId .. "Drop", slot.name or ("Pip " .. slotId), "PIPS_SPELLS", "pip" .. slotId)
-        if #dropdowns == 0 then
-            drop:SetPoint("TOPLEFT", arrowsToggle, "BOTTOMLEFT", 0, -20)
-        else
-            drop:SetPoint("TOPLEFT", dropdowns[#dropdowns], "BOTTOMLEFT", 0, -18)
-        end
-        table.insert(dropdowns, drop)
-    end
-
-    local divider = frame:CreateTexture(nil, "ARTWORK")
-    divider:SetPoint("TOP", content, "TOPRIGHT", 9, 2)
-    divider:SetPoint("BOTTOM", content, "BOTTOMRIGHT", 9, 0)
-    divider:SetWidth(1)
-    divider:SetColorTexture(1, 1, 1, 0.15)
-
-    local legend = CreateFrame("Frame", nil, frame)
-    legend:SetPoint("TOPLEFT", content, "TOPRIGHT", 18, 0)
-    legend:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
-    BuildLegend(legend)
+    frame.tabs = {}
+    frame.tabs.Plater = BuildTab(frame, "Plater", -70, BuildPlaterTab)
+    frame.tabs.Wheel = BuildTab(frame, "Wheel", 70, BuildWheelTab)
 
     frame.MinimizerMenuControls = {
-        simplifyToggle = simplifyToggle, targetMarkers = targetMarkers, focusMarkers = focusMarkers,
-        faceToggle = faceToggle, arrowsToggle = arrowsToggle, dropdowns = dropdowns,
+        plater = frame.tabs.Plater.panel.controls,
+        wheel = frame.tabs.Wheel.panel.controls,
     }
     Menu.frame = frame
     ApplyMenuPosition(frame)
+    SetTab(frame, "Plater")
     frame:Hide()
     return frame
 end
@@ -315,17 +342,20 @@ end
 function Menu.Refresh()
     local frame = EnsureFrame()
     if not frame then return end
-    if frame.MinimizerMenuControls and frame.MinimizerMenuControls.simplifyToggle then
-        frame.MinimizerMenuControls.simplifyToggle:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
-    end
-    if frame.MinimizerMenuControls then
-        frame.MinimizerMenuControls.targetMarkers:SetChecked(MinimizerDB and MinimizerDB.enableTargetMarkers ~= false)
-        frame.MinimizerMenuControls.focusMarkers:SetChecked(MinimizerDB and MinimizerDB.enableFocusMarkers ~= false)
-        frame.MinimizerMenuControls.faceToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusFace == true)
-        frame.MinimizerMenuControls.arrowsToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusArrows == true)
-    end
-    for _, dropdown in ipairs(frame.MinimizerMenuControls and frame.MinimizerMenuControls.dropdowns or {}) do
-        if dropdown and dropdown.Refresh then dropdown.Refresh() end
+    local controls = frame.MinimizerMenuControls
+    if not controls then return end
+
+    controls.plater.simplifyToggle:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
+    controls.plater.targetMarkers:SetChecked(MinimizerDB and MinimizerDB.enableTargetMarkers ~= false)
+    controls.plater.focusMarkers:SetChecked(MinimizerDB and MinimizerDB.enableFocusMarkers == true)
+    controls.plater.faceToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusFace == true)
+    controls.plater.arrowsToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusArrows == true)
+
+    controls.wheel.wheelToggle:SetChecked(MinimizerDB and MinimizerDB.wheelEnabled ~= false)
+    if controls.wheel.sizeSlider then controls.wheel.sizeSlider:SetValue(tonumber(MinimizerDB and MinimizerDB.wheelSize) or 180) end
+    if controls.wheel.radiusSlider then controls.wheel.radiusSlider:SetValue(tonumber(MinimizerDB and MinimizerDB.wheelPipRadius) or 75) end
+    for _, dropdown in ipairs(controls.wheel.dropdowns or {}) do
+        if dropdown.Refresh then dropdown.Refresh() end
     end
 end
 
@@ -338,7 +368,8 @@ end
 function Menu.Open()
     local frame = EnsureFrame()
     if not frame then return end
-    Menu.Refresh(); frame:Show()
+    Menu.Refresh()
+    frame:Show()
 end
 
 function Menu.Close()

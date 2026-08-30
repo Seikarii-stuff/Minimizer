@@ -28,9 +28,9 @@ Plater/Core.lua
 Plater/Markers.lua
 Plater/HealthBarColor.lua
 Plater/CastingBar.lua
-Overlays/Pips.lua
 Overlays/Overlays.lua
-Overlays/Wheel.lua
+Wheel/Pips.lua
+Wheel/Wheel.lua
 Overlays/Focus.lua
 Overlays/Target.lua
 Menu.lua

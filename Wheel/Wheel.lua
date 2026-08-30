@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Minimizer - Wheel.lua
--- Wheel periférico del personaje del jugador: interrupt + pips configurables.
+-- UI propia del jugador: interrupt + pips configurables.
 -- ============================================================================
 local _, Minimizer = ...
 if not Minimizer then return end
@@ -8,19 +8,17 @@ if not Minimizer then return end
 local Wheel = {}
 Minimizer.Wheel = Wheel
 
-local WHEEL_SIZE = 180
-local PIP_RADIUS = 75
+local DEFAULT_SIZE = 180
+local DEFAULT_PIP_RADIUS = 75
 
--- 0, 0 = centro de la pantalla. Estos offsets se ajustarán posteriormente
--- para hacer coincidir el Wheel con el personaje del jugador.
+-- 0, 0 = centro de la pantalla.
 local WHEEL_X = 0
 local WHEEL_Y = -45
 
 local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", UIParent)
-wheelFrame:SetSize(WHEEL_SIZE, WHEEL_SIZE)
+wheelFrame:SetSize(DEFAULT_SIZE, DEFAULT_SIZE)
 wheelFrame:SetFrameStrata("HIGH")
 wheelFrame:SetPoint("CENTER", UIParent, "CENTER", WHEEL_X, WHEEL_Y)
-wheelFrame:Show()
 
 local wheelTexture = wheelFrame:CreateTexture(nil, "ARTWORK")
 wheelTexture:SetAllPoints()
@@ -31,7 +29,7 @@ wheelFrame.MinimizerWheelTexture = wheelTexture
 local wheelPips = Minimizer.Pips and Minimizer.Pips.CreatePips(
     wheelFrame,
     "MinimizerPlayerWheelPip",
-    PIP_RADIUS
+    DEFAULT_PIP_RADIUS
 )
 
 local interruptCooldown = CreateFrame(
@@ -53,6 +51,15 @@ Minimizer.Widgets.ConfigureCooldownFrame(interruptCooldown, {
 })
 wheelFrame.MinimizerWheelInterrupt = interruptCooldown
 
+local function GetWheelConfig()
+    local db = MinimizerDB or {}
+    return {
+        enabled = db.wheelEnabled ~= false,
+        size = tonumber(db.wheelSize) or DEFAULT_SIZE,
+        pipRadius = tonumber(db.wheelPipRadius) or DEFAULT_PIP_RADIUS,
+    }
+end
+
 local function UpdateInterrupt()
     local spellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
         and Minimizer.Interrupt.GetSpellID()
@@ -71,13 +78,57 @@ local function UpdatePips()
     end
 end
 
+function Wheel:SetSize(size)
+    size = tonumber(size) or DEFAULT_SIZE
+    wheelFrame:SetSize(size, size)
+    wheelFrame.MinimizerWheelSize = size
+end
+
+function Wheel:SetPipRadius(radius)
+    radius = tonumber(radius) or DEFAULT_PIP_RADIUS
+    if wheelPips and Minimizer.Pips and Minimizer.Pips.SetRadius then
+        Minimizer.Pips.SetRadius(wheelPips, radius)
+    end
+end
+
+function Wheel:SetEnabled(enabled)
+    if enabled == true then
+        wheelFrame:Show()
+        self:Update()
+    else
+        wheelFrame:Hide()
+        interruptCooldown:Hide()
+        if wheelPips and Minimizer.Pips and Minimizer.Pips.HidePips then
+            Minimizer.Pips.HidePips(wheelPips)
+        end
+    end
+end
+
+function Wheel:ApplyConfig()
+    local config = GetWheelConfig()
+    self:SetSize(config.size)
+    self:SetPipRadius(config.pipRadius)
+    self:SetEnabled(config.enabled)
+end
+
 function Wheel:Update()
-    -- Posición absoluta respecto al centro de la pantalla. No depende de
-    -- PlayerFrame, nameplates ni de ninguna posición 3D.
+    local config = GetWheelConfig()
+    if not config.enabled then
+        wheelFrame:Hide()
+        interruptCooldown:Hide()
+        if wheelPips and Minimizer.Pips and Minimizer.Pips.HidePips then
+            Minimizer.Pips.HidePips(wheelPips)
+        end
+        return
+    end
+
+    self:SetSize(config.size)
+    self:SetPipRadius(config.pipRadius)
+
     wheelFrame:ClearAllPoints()
     wheelFrame:SetPoint("CENTER", UIParent, "CENTER", WHEEL_X, WHEEL_Y)
-
     wheelFrame:SetFrameLevel(100)
+
     UpdateInterrupt()
     UpdatePips()
 
@@ -85,9 +136,6 @@ function Wheel:Update()
         Minimizer.Pips.SetFrameLevel(wheelPips, 105)
     end
     interruptCooldown:SetFrameLevel(110)
-
-    -- El Wheel es visible en su posición de diseño incluso si todavía no hay
-    -- ningún cooldown activo; los pips/interrupt controlan su contenido.
     wheelFrame:Show()
 end
 
@@ -96,10 +144,13 @@ Wheel.DebouncedUpdate = Minimizer.Utils.Throttle(function()
 end, 0.033)
 
 function Wheel:OnCooldownTick()
-    Wheel.DebouncedUpdate()
+    if GetWheelConfig().enabled then
+        Wheel.DebouncedUpdate()
+    end
 end
 
 function Wheel:OnUnitChanged(unit, reason)
+    if not GetWheelConfig().enabled then return end
     if unit == "player" or reason == "added" or reason == "removed" then
         Wheel.DebouncedUpdate()
     end

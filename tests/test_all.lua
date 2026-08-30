@@ -4,6 +4,7 @@
 local tests = {
     "tests/equivalence_test.lua",
     "tests/smoke_test.lua",
+    "tests/wheel_test.lua",
     "tests/friendly_filter_safety_net_test.lua",
     "tests/threat_monitor/stable_state_test.lua",
     "tests/benchmark/benchmark.lua",
@@ -20,7 +21,6 @@ for _, t in ipairs(tests) do
     local out = handle:read("*a") or ""
     handle:close()
 
-    -- Detect líneas de fallo impresas por los harnesses (contienen 'FAIL').
     local found = false
     for line in out:gmatch("([^\\n\\r]+)") do
         if line:find("FAIL") then
@@ -37,7 +37,6 @@ for _, t in ipairs(tests) do
     end
 end
 
--- Al final mostrar solo los fallos (si los hay)
 if #failures == 0 then
     print("\nAll tests passed.")
     os.exit(0)

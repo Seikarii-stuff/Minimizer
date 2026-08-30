@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Minimizer - Pips.lua
--- Módulo reutilizable para la creación, configuración y actualización de pips.
+-- Componentes radiales propiedad de Player Wheel.
 -- ============================================================================
 local _, Minimizer = ...
 if not Minimizer then return end
@@ -8,8 +8,6 @@ if not Minimizer then return end
 local Pips = {}
 Minimizer.Pips = Pips
 
--- Slots radiales: el ángulo se expresa en grados y permite ampliar el Wheel
--- sin introducir nuevas esquinas manualmente. 90 = arriba, 0 = derecha.
 Pips.SLOTS = {
     { id = 1, name = "Pip 1", angle = 90,  color = { on = {0.10, 1.00, 0.10}, off = {0.03, 0.20, 0.03} } },
     { id = 2, name = "Pip 2", angle = 30,  color = { on = {0.20, 0.55, 1.00}, off = {0.05, 0.10, 0.25} } },
@@ -33,6 +31,18 @@ function Pips.GetSpellID(slotIndex)
     return Minimizer.Widgets.GetCDSpellID(spellList, override, slotIndex)
 end
 
+local function PositionPip(pip, radius)
+    local angle = tonumber(pip.MinimizerPipAngle) or 0
+    local radians = math.rad(angle)
+    local xOff = tonumber(pip.MinimizerPipXOffset) or 0
+    local yOff = tonumber(pip.MinimizerPipYOffset) or 0
+    local x = math.cos(radians) * radius + xOff
+    local y = math.sin(radians) * radius + yOff
+    pip:ClearAllPoints()
+    pip:SetPoint("CENTER", pip:GetParent(), "CENTER", x, y)
+    pip.MinimizerPipRadius = radius
+end
+
 function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
     if not parentFrame then return {} end
 
@@ -44,9 +54,6 @@ function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
     for index, slot in ipairs(Pips.SLOTS) do
         local slotId = slot.id or index
         local angle = tonumber(slot.angle) or 0
-        local radians = math.rad(angle)
-        local x = math.cos(radians) * radius + xOff
-        local y = math.sin(radians) * radius + yOff
         local colors = slot.color
             or (Minimizer.Constants and Minimizer.Constants.PipColors and Minimizer.Constants.PipColors[slotId])
             or (Minimizer.Constants and Minimizer.Constants.PipColors and Minimizer.Constants.PipColors.default)
@@ -57,11 +64,12 @@ function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
         pip:SetSize(Pips.PIP_SIZE, Pips.PIP_SIZE)
         pip:SetFrameStrata("HIGH")
         pip:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 5)
-        pip:ClearAllPoints()
-        pip:SetPoint("CENTER", parentFrame, "CENTER", x, y)
         pip.MinimizerPipRadius = radius
         pip.MinimizerPipAngle = angle
         pip.MinimizerPipSlotId = slotId
+        pip.MinimizerPipXOffset = xOff
+        pip.MinimizerPipYOffset = yOff
+        PositionPip(pip, radius)
         pip:Hide()
 
         local bg = pip:CreateTexture(nil, "ARTWORK")
@@ -95,6 +103,15 @@ function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
     end
 
     return pips
+end
+
+function Pips.SetRadius(pips, radius)
+    if not pips or type(pips) ~= "table" then return end
+    radius = tonumber(radius)
+    if not radius then return end
+    for _, pip in ipairs(pips) do
+        PositionPip(pip, radius)
+    end
 end
 
 function Pips.UpdatePips(pips)
