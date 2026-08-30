@@ -5,6 +5,9 @@ local Target = {}
 Minimizer.Target = Target
 
 local HALO_SIZE = 46
+local STRIPED_PATTERN_TEXTURE = "Interface\\AddOns\\Minimizer\\assets\\striped_pattern"
+local STRIPED_PATTERN_ALPHA = 0.6
+
 local haloFrame = Minimizer.Widgets.CreateHalo("MinimizerTargetHalo", nil, HALO_SIZE)
 
 local interruptCountdown = CreateFrame("Cooldown", "MinimizerTargetInterruptCountdown", haloFrame, "CooldownFrameTemplate")
@@ -18,6 +21,54 @@ Minimizer.Widgets.ConfigureCooldownFrame(interruptCountdown, {
     hideCountdownNumbers = false,
 })
 interruptCountdown:SetFrameLevel((haloFrame:GetFrameLevel() or 0) + 10)
+
+local stripedHealthBar
+local stripedOverlay
+
+local function EnsureStripedOverlay(healthBar)
+    local overlay = healthBar.MinimizerTargetStripedOverlay
+    if overlay then return overlay end
+
+    overlay = CreateFrame("Frame", nil, healthBar)
+    overlay:SetAllPoints(healthBar)
+    local frameLevel = (healthBar:GetFrameLevel() or 0) + 2
+    overlay:SetFrameLevel(frameLevel)
+
+    local texture = overlay:CreateTexture(nil, "OVERLAY")
+    texture:SetAllPoints(overlay)
+    texture:SetTexture(STRIPED_PATTERN_TEXTURE)
+    texture:SetAlpha(STRIPED_PATTERN_ALPHA)
+    texture:SetBlendMode("BLEND")
+    -- Keep the source and draw-order invariants inspectable in the lightweight
+    -- test environment without depending on WoW's texture introspection APIs.
+    texture.MinimizerTexturePath = STRIPED_PATTERN_TEXTURE
+    texture.MinimizerDrawLayer = "OVERLAY"
+
+    overlay.MinimizerTexture = texture
+    overlay.MinimizerFrameLevel = frameLevel
+    overlay:Hide()
+    healthBar.MinimizerTargetStripedOverlay = overlay
+    return overlay
+end
+
+local function HideStripedOverlay()
+    if stripedOverlay then
+        stripedOverlay:Hide()
+    end
+    stripedHealthBar = nil
+    stripedOverlay = nil
+end
+
+local function ShowStripedOverlay(healthBar)
+    if stripedHealthBar and stripedHealthBar ~= healthBar and stripedOverlay then
+        stripedOverlay:Hide()
+    end
+
+    local overlay = EnsureStripedOverlay(healthBar)
+    overlay:Show()
+    stripedHealthBar = healthBar
+    stripedOverlay = overlay
+end
 
 local function UpdateInterruptCountdown()
     local interruptSpellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
@@ -34,6 +85,7 @@ function Target:UpdateTargetCDs()
     if not UnitExists("target") or UnitIsDead("target") then
         haloFrame:Hide()
         interruptCountdown:Hide()
+        HideStripedOverlay()
         return
     end
 
@@ -41,7 +93,15 @@ function Target:UpdateTargetCDs()
     if not plate then
         haloFrame:Hide()
         interruptCountdown:Hide()
+        HideStripedOverlay()
         return
+    end
+
+    local healthBar = Minimizer.Utils and Minimizer.Utils.GetHealthBar and Minimizer.Utils.GetHealthBar(plate)
+    if healthBar then
+        ShowStripedOverlay(healthBar)
+    else
+        HideStripedOverlay()
     end
 
     local interruptSpellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
