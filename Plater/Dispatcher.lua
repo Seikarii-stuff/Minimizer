@@ -181,6 +181,11 @@ end
 
 function Minimizer.Dispatcher.ForgetUnit(unit)
     if unit then
+        if Minimizer.Lifecycle and Minimizer.Lifecycle.UnregisterNameplate then
+            Minimizer.Lifecycle.UnregisterNameplate(unit)
+        else
+            Minimizer.ActiveNameplates[unit] = nil
+        end
         monitorState[unit] = nil
         monitorDirty = true
     end

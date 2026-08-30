@@ -52,6 +52,9 @@ local function HandleFullRefreshEvent(self, event)
         end
     end
     UpdateNameplates()
+    if Minimizer.Overlays and Minimizer.Overlays.OnCooldownTick then
+        Minimizer.Overlays.OnCooldownTick()
+    end
 end
 handlers["PLAYER_ENTERING_WORLD"] = HandleFullRefreshEvent
 handlers["ZONE_CHANGED_NEW_AREA"] = HandleFullRefreshEvent
@@ -222,7 +225,7 @@ handlers["NAME_PLATE_UNIT_ADDED"] = function(self, event, unit)
                 end
             end
             if Minimizer.Focus and Minimizer.Focus.UpdateFace then
-                Minimizer.Focus.UpdateFace()
+                Minimizer.Focus:UpdateFace()
             end
         end
     end
@@ -244,7 +247,7 @@ handlers["NAME_PLATE_UNIT_REMOVED"] = function(self, event, unit)
             end
         end
         if Minimizer.Focus and Minimizer.Focus.UpdateFace then
-            Minimizer.Focus.UpdateFace()
+            Minimizer.Focus:UpdateFace()
         end
     end
 end

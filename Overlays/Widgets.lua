@@ -38,11 +38,9 @@ function Minimizer.Widgets.FindCastBar(nameplate)
     return FindCastBarInChildren(healthBar, unitFrame:GetChildren())
 end
 
--- Cache anidado: cdSpellCache[dbTable][override or false] = spellID or false.
--- dbTable ya es una referencia de tabla estable (Minimizer.Data.OFFENSIVE_CDS,
--- etc.) asi que sirve como key directa sin tostring/concat. Antes esta funcion
--- generaba un string nuevo en CADA llamada (Target/Focus la llaman ~25
--- veces/seg via su throttle de 30fps, incluso sin cambios de estado).
+-- Cache anidado: cdSpellCache[dbTable][override or false][slotIndex] = spellID or false.
+-- Todas las claves son valores estables; el hot path no necesita tostring/concat ni
+-- construir tablas temporales por llamada una vez que el bucket está creado.
 local cdSpellCache = {}
 
 function Minimizer.Widgets.GetCDSpellID(dbTable, override, slotIndex)
@@ -54,8 +52,15 @@ function Minimizer.Widgets.GetCDSpellID(dbTable, override, slotIndex)
         cdSpellCache[dbTable] = bucket
     end
 
-    local key = tostring(override or false) .. ":" .. tostring(slotIndex or 1)
-    local cached = bucket[key]
+    local overrideKey = override or false
+    local overrideBucket = bucket[overrideKey]
+    if not overrideBucket then
+        overrideBucket = {}
+        bucket[overrideKey] = overrideBucket
+    end
+
+    local index = slotIndex or 1
+    local cached = overrideBucket[index]
     if cached ~= nil then
         if cached == false then return nil end
         return cached
@@ -76,19 +81,16 @@ function Minimizer.Widgets.GetCDSpellID(dbTable, override, slotIndex)
             end
         end
         if overrideAllowed and Minimizer.Utils and Minimizer.Utils.IsSpellKnownByPlayer and Minimizer.Utils.IsSpellKnownByPlayer(override) then
-            bucket[key] = override
+            overrideBucket[index] = override
             return override
         end
     end
 
-    local result = Minimizer.Utils.FindKnownSpell(spellList, slotIndex)
-    bucket[key] = result or false
+    local result = Minimizer.Utils.FindKnownSpell(spellList, index)
+    overrideBucket[index] = result or false
     return result
 end
 
--- Llamar en PLAYER_TALENT_UPDATE / PLAYER_SPECIALIZATION_CHANGED para que si
--- el jugador cambia de spec y eso afecta que spell tiene disponible, se
--- recalculen los CDs mostrados.
 function Minimizer.Widgets.InvalidateCDSpellCache()
     cdSpellCache = {}
 end
@@ -172,11 +174,6 @@ function Minimizer.Widgets.ApplyCooldownDuration(cooldown, spellID)
     return false
 end
 
--- CreateHalo: un anillo (halo) con textura que tiene el centro transparente.
--- name: nombre del frame.
--- parentFrame: frame donde se centrará posteriormente (puede ser nil; se
---   reposiciona desde el código que lo use, p.ej. Target:SetPoint(...)).
--- size: tamaño del halo (p. ej. 46).
 function Minimizer.Widgets.CreateHalo(name, parentFrame, size)
     local frame = CreateFrame("Frame", name, parentFrame or UIParent)
     frame:SetSize(size, size)
@@ -223,4 +220,3 @@ function Minimizer.Widgets.UpdateHalo(frame, spellID)
     frame:Show()
     return true
 end
-
