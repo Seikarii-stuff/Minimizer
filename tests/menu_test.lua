@@ -9,9 +9,9 @@ MinimizerDB = {
 MinimizerCharDB = { pip1 = 118000 }
 T.fireAddonLoaded()
 
-local framesBeforeOpen = #Mocks.frames
 addonTable.Menu.Open()
 local menuFrame = addonTable.Menu.frame
+local framesAfterFirstOpen = #Mocks.frames
 check(menuFrame ~= nil, "Menu: EnsureFrame es singleton")
 check(menuFrame.tabs and menuFrame.tabs.Plater and menuFrame.tabs.Wheel, "Menu: existen tabs Plater y Wheel")
 check(menuFrame.activeTab == "Plater", "Menu: abre en Plater")
@@ -27,7 +27,7 @@ for _ = 1, 10 do
     addonTable.Menu.Close()
 end
 addonTable.Menu.Refresh()
-check(#Mocks.frames == framesBeforeOpen + #menuFrame._children, "Menu: abrir/cerrar/Refresh reutiliza la UI")
+check(#Mocks.frames == framesAfterFirstOpen, "Menu: abrir/cerrar/Refresh no crea UI adicional")
 check(MinimizerDB.wheelSize == 240 and MinimizerDB.wheelPipRadius == 92 and MinimizerDB.wheelEnabled == true,
     "Menu: Refresh no modifica SavedVariables")
 
