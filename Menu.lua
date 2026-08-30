@@ -185,6 +185,67 @@ local function CreateSlider(parent, name, label, minValue, maxValue, step, value
     return slider
 end
 
+local LEGEND_SWATCH_SIZE = 14
+local LEGEND_ROW_SPACING = 8
+
+local function CreateLegendRow(parent, colorRGB, labelText, anchorFrame)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetHeight(LEGEND_SWATCH_SIZE)
+    if anchorFrame then
+        row:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", 0, -LEGEND_ROW_SPACING)
+        row:SetPoint("TOPRIGHT", anchorFrame, "BOTTOMRIGHT", 0, -LEGEND_ROW_SPACING)
+    else
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+        row:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
+    end
+    local swatch = row:CreateTexture(nil, "ARTWORK")
+    swatch:SetSize(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE)
+    swatch:SetPoint("LEFT", row, "LEFT", 0, 0)
+    swatch:SetColorTexture(colorRGB[1], colorRGB[2], colorRGB[3], 1)
+    local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    label:SetPoint("LEFT", swatch, "RIGHT", 6, 0)
+    label:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+    label:SetJustifyH("LEFT")
+    label:SetText(labelText)
+    return row
+end
+
+local HEALTH_LEGEND_ENTRIES = {
+    { key = "focus", label = "Focus" }, { key = "aggro", label = "Aggro (tuyo)" },
+    { key = "absorb", label = "Shield / Absorb" }, { key = "boss", label = "Boss / Miniboss" },
+    { key = "caster", label = "Caster (maná)" }, { key = "melee", label = "Melee" },
+    { key = "trivial", label = "Trivial" }, { key = "castInterruptible", label = "Cast interrumpible" },
+    { key = "superiorUninterruptible", label = "Cast ininterrumpible" },
+}
+local CAST_LEGEND_ENTRIES = {
+    { key = "ready", label = "Interrupt listo" }, { key = "channel", label = "Channeling interrupt cooldown" },
+}
+
+local function BuildLegend(legend)
+    local sectionTitle = legend:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    sectionTitle:SetPoint("TOPLEFT", legend, "TOPLEFT", 0, 0)
+    sectionTitle:SetPoint("TOPRIGHT", legend, "TOPRIGHT", 0, 0)
+    sectionTitle:SetJustifyH("LEFT")
+    sectionTitle:SetText("Leyenda: nameplate")
+    local lastRow = sectionTitle
+    local healthColors = Minimizer.Constants and Minimizer.Constants.HealthColors or {}
+    for _, entry in ipairs(HEALTH_LEGEND_ENTRIES) do
+        local color = healthColors[entry.key]
+        if color then lastRow = CreateLegendRow(legend, color, entry.label, lastRow) end
+    end
+    local castTitle = legend:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    castTitle:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 0, -16)
+    castTitle:SetPoint("TOPRIGHT", lastRow, "BOTTOMRIGHT", 0, -16)
+    castTitle:SetJustifyH("LEFT")
+    castTitle:SetText("Leyenda: cast bar")
+    lastRow = castTitle
+    local castColors = Minimizer.Constants and Minimizer.Constants.CastColors or {}
+    for _, entry in ipairs(CAST_LEGEND_ENTRIES) do
+        local color = castColors[entry.key]
+        if color then lastRow = CreateLegendRow(legend, color, entry.label, lastRow) end
+    end
+end
+
 local function BuildPlaterTab(parent)
     local simplifyToggle = CreateCheckbox(parent, "MinimizerMenuSimplifyToggle", "Enable simplify", nil, 0,
         Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled(), function(self)
@@ -216,12 +277,18 @@ local function BuildPlaterTab(parent)
             elseif MinimizerDB then MinimizerDB.enableFocusArrows = self:GetChecked() end
         end)
 
+    local legend = CreateFrame("Frame", nil, parent)
+    legend:SetPoint("TOPLEFT", arrowsToggle, "BOTTOMLEFT", 0, -18)
+    legend:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -18)
+    BuildLegend(legend)
+
     parent.controls = {
         simplifyToggle = simplifyToggle,
         targetMarkers = targetMarkers,
         focusMarkers = focusMarkers,
         faceToggle = faceToggle,
         arrowsToggle = arrowsToggle,
+        legend = legend,
     }
 end
 
