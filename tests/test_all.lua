@@ -46,14 +46,12 @@ for _, t in ipairs(tests) do
         end
     end
 
-    -- Focused tests use `=== ...: passed/run ===`; the existing equivalence and
-    -- friendly tests use their own summary wording. Aggregate what is available
-    -- without changing the individual test processes or introducing a framework.
     local passed, run = out:match("=== [^\n]*: (%d+)/(%d+) passed ===")
     if not passed then
-        run, failed = out:match("Friendly filter / safety net tests: (%d+) run, (%d+) failed")
-        if run then
-            passed = run - failed
+        local friendlyRun, friendlyFailed = out:match("Friendly filter / safety net tests: (%d+) run, (%d+) failed")
+        if friendlyRun then
+            run = friendlyRun
+            passed = friendlyRun - friendlyFailed
         end
     end
     if run and passed then
