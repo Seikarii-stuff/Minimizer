@@ -51,6 +51,17 @@ Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate5")
 addonTable.Dispatcher.ApplyToUnit("nameplate5")
 check(addonTable.Threat.GetSituation("nameplate5", "player") == 0, "Lifecycle: token reciclado no hereda threat stale")
 
+-- Removal clears the canonical active-nameplate state and is idempotent.
+local removedUnit = "nameplate6"
+local removedPlate = Mocks.CreateTestNameplate(removedUnit)
+Mocks.CreateTestUnit(removedUnit, { level = 70, faction = "Horde", threatSituation = 0 })
+Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", removedUnit)
+check(addonTable.Lifecycle.GetActiveNameplates()[removedUnit] == removedPlate, "Lifecycle: nameplate añadida aparece como activa")
+Mocks.FireEvent("NAME_PLATE_UNIT_REMOVED", removedUnit)
+check(addonTable.Lifecycle.GetActiveNameplates()[removedUnit] == nil, "Lifecycle: nameplate eliminada deja de estar activa")
+check(addonTable.Dispatcher.ForgetUnit(removedUnit) == nil and addonTable.Lifecycle.GetActiveNameplates()[removedUnit] == nil,
+    "Lifecycle: ForgetUnit es seguro e idempotente")
+
 local unit = "nameplate70"
 addonTable.Cache.SetUnitKeyWithGeneration(unit, "threat:player", 3)
 addonTable.Cache.SetUnitKeyWithGeneration(unit, "threat:party1", 1)
