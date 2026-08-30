@@ -19,6 +19,7 @@ Load("Data/SpellData.lua")
 Load("Overlays/Pips.lua")
 Load("Overlays/Overlays.lua")
 Load("Overlays/Wheel.lua")
+Load("Menu.lua")
 
 MinimizerDB = {}
 MinimizerCharDB = {}
@@ -71,6 +72,12 @@ end
 check(radiusOK, "Pips: SetRadius reposiciona al nuevo radio")
 check(anglesOK, "Pips: SetRadius conserva los ángulos/slots")
 check(#Mocks.frames == framesBefore + 12, "Pips: SetRadius no crea frames adicionales")
+
+addonTable.Menu.Open()
+check(addonTable.Menu.frame.tabs.Plater ~= nil and addonTable.Menu.frame.tabs.Wheel ~= nil, "Menu: expone las pestañas Plater y Wheel")
+check(addonTable.Menu.frame.activeTab == "Plater", "Menu: abre inicialmente en Plater")
+addonTable.Menu.frame.tabs.Wheel.button:GetScript("OnClick")(addonTable.Menu.frame.tabs.Wheel.button)
+check(addonTable.Menu.frame.activeTab == "Wheel", "Menu: permite cambiar a la pestaña Wheel")
 
 MinimizerCharDB.pip1 = 1719
 addonTable.Config.Initialize()
