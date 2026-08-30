@@ -4,8 +4,9 @@ local Mocks, addonTable, check = T.Mocks, T.addonTable, T.check
 T.fireAddonLoaded()
 MinimizerDB.simplifyEnabled = true
 
--- Friendly units must not be painted or hooked.
 Mocks.CreateTestUnit("player", { name = "Player", level = 70, faction = "Alliance", isPlayer = true, class = "WARRIOR", guid = "player_guid" })
+
+-- Friendly units must not be painted or hooked.
 local friendly = "friendly_unit1"
 Mocks.CreateTestUnit(friendly, {
     name = "Friendly NPC", level = 10, faction = "Alliance", classification = "normal",
@@ -48,6 +49,11 @@ addonTable.Dispatcher.ApplyToUnit("nameplate13")
 local hbCaster = addonTable.Utils.GetHealthBar(npCaster)
 r, g, b = hbCaster:GetStatusBarColor()
 check(math.abs(r - 0.20) < 0.01 and math.abs(g - 0.55) < 0.01 and math.abs(b - 1) < 0.01, "HealthBarColor: caster azul no cambia por cast interruptible")
+Mocks.units.nameplate13.cast = nil
+addonTable.Cast.InvalidateState("nameplate13")
+addonTable.Dispatcher.ApplyToUnit("nameplate13")
+r, g, b = hbCaster:GetStatusBarColor()
+check(math.abs(r - 0.20) < 0.01 and math.abs(g - 0.55) < 0.01 and math.abs(b - 1) < 0.01, "HealthBarColor: caster azul conserva color tras cast")
 
 Mocks.CreateTestUnit("nameplate14", {
     level = 70, classification = "normal", faction = "Horde", powerType = 1,
@@ -59,6 +65,17 @@ addonTable.Dispatcher.ApplyToUnit("nameplate14")
 local hbUnint = addonTable.Utils.GetHealthBar(npUnint)
 r, g, b = hbUnint:GetStatusBarColor()
 check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01, "HealthBarColor: melee uninterruptible = gris")
+
+Mocks.CreateTestUnit("nameplate140", {
+    level = 70, classification = "normal", faction = "Horde", powerType = 1,
+    channel = { name = "Unint Channel", startTime = 0, endTime = 2000, uninterruptible = true },
+})
+local npChannel = Mocks.CreateTestNameplate("nameplate140")
+addonTable.Cast.InvalidateState("nameplate140")
+addonTable.Dispatcher.ApplyToUnit("nameplate140")
+r, g, b = addonTable.Utils.GetHealthBar(npChannel):GetStatusBarColor()
+check(math.abs(r - 0.50) < 0.01 and math.abs(g - 0.50) < 0.01 and math.abs(b - 0.50) < 0.01, "HealthBarColor: channel uninterruptible = gris")
+
 Mocks.units.nameplate14.cast = nil
 addonTable.Cast.InvalidateState("nameplate14")
 addonTable.Dispatcher.ApplyToUnit("nameplate14")
@@ -117,7 +134,7 @@ local absorb = addonTable.Constants.HealthColors.absorb
 check(math.abs(r - absorb[1]) < 0.01 and math.abs(g - absorb[2]) < 0.01 and math.abs(b - absorb[3]) < 0.01, "Priority: absorb gana a boss")
 check(not (math.abs(r - boss[1]) < 0.01 and math.abs(g - boss[2]) < 0.01 and math.abs(b - boss[3]) < 0.01), "Priority: absorb no queda morado")
 
--- Secrets: the value is resolved by the mock exactly as the production secret-value path expects.
+-- Secrets: preserve the old persistence assertions for both secret channel and cast paths.
 local secretToken = "nameplate23"
 Mocks.CreateTestUnit(secretToken, {
     level = 70, classification = "normal", faction = "Horde", powerType = 1,
@@ -129,7 +146,8 @@ addonTable.Dispatcher.ApplyToUnit(secretToken)
 r, g, b = addonTable.Utils.GetHealthBar(secretNP):GetStatusBarColor()
 local grey = addonTable.Constants.HealthColors.superiorUninterruptible
 check(math.abs(r - grey[1]) < 0.01 and math.abs(g - grey[2]) < 0.01 and math.abs(b - grey[3]) < 0.01, "Secrets: channel secreto ininterruptible pinta gris")
-check(secretNP.MinimizerPersistentCastColor ~= nil, "Secrets: color del channel queda persistente")
+local persistent = secretNP.MinimizerPersistentCastColor
+check(persistent ~= nil and math.abs(persistent[1] - grey[1]) < 0.01 and math.abs(persistent[2] - grey[2]) < 0.01 and math.abs(persistent[3] - grey[3]) < 0.01, "Secrets: channel secreto fija persistencia de color")
 Mocks.units[secretToken].channel = nil
 addonTable.Cast.InvalidateState(secretToken)
 addonTable.Dispatcher.ApplyToUnit(secretToken)
@@ -144,11 +162,14 @@ Mocks.CreateTestUnit(secretCast, {
 local secretCastNP = Mocks.CreateTestNameplate(secretCast)
 addonTable.Dispatcher.ApplyToUnit(secretCast)
 r, g, b = addonTable.Utils.GetHealthBar(secretCastNP):GetStatusBarColor()
-check(math.abs(r - aggro[1] + aggro[1] - addonTable.Constants.HealthColors.castInterruptible[1]) < 0.01 and
-      math.abs(g - addonTable.Constants.HealthColors.castInterruptible[2]) < 0.01 and
-      math.abs(b - addonTable.Constants.HealthColors.castInterruptible[3]) < 0.01,
-      "Secrets: cast secreto interruptible pinta verde")
-check(secretCastNP.MinimizerPersistentCastColor ~= nil, "Secrets: cast secreto interruptible fija persistencia")
+local green = addonTable.Constants.HealthColors.castInterruptible
+check(math.abs(r - green[1]) < 0.01 and math.abs(g - green[2]) < 0.01 and math.abs(b - green[3]) < 0.01, "Secrets: cast secreto interruptible pinta verde")
+persistent = secretCastNP.MinimizerPersistentCastColor
+check(persistent ~= nil and math.abs(persistent[1] - green[1]) < 0.01 and math.abs(persistent[2] - green[2]) < 0.01 and math.abs(persistent[3] - green[3]) < 0.01, "Secrets: cast secreto fija persistencia de color")
+Mocks.units[secretCast].cast = nil
+addonTable.Cast.InvalidateState(secretCast)
+addonTable.Dispatcher.ApplyToUnit(secretCast)
+check(secretCastNP.MinimizerPersistentCastColor ~= nil, "Secrets: verde persiste tras terminar cast")
 
 -- Dispatcher ownership and ActiveNameplates integration.
 local a, bUnit = "nameplate80", "nameplate81"
