@@ -1,6 +1,6 @@
-# Benchmark suite: fast and deep profiles
+# Benchmark suite: Fast and Deep
 
-The benchmark suite is designed for two jobs: fast regression detection during development and deeper performance investigation when an optimization question needs more resolution.
+The benchmark has two jobs: fast daily regression detection and deeper performance investigation. It remains single-process/single-VM so CPU contention or fake worker parallelism cannot contaminate Lua timing.
 
 ## Running
 
@@ -11,92 +11,58 @@ lua tests/benchmark/benchmark.lua deep
 lua tests/benchmark/benchmark.lua --self-test
 ```
 
-The default is **Fast**. It keeps representative coverage of Core/Dispatcher, Classification, Decision, Threat, Events, Cast, Absorb, Target, Focus, Halo, Wheel, Pips, steady-state, recycling and integrated workloads. Deep runs the complete scaling/microbenchmark matrix.
+The default is **Fast**. Fast keeps representative coverage of Core/Dispatcher, Classification, Decision, Threat, Events, Cast, Absorb, Target, Focus, Halo, Wheel, Pips, steady-state, recycling and integrated workloads. Deep runs the complete scaling/microbenchmark matrix plus the more expensive memory experiments.
 
-## Why the runner is faster
+`--self-test` is a harness check, not a functional test. `tests/test_all.lua` deliberately does not invoke it because doing so would duplicate benchmark startup work.
 
-The previous runner performed a full two-pass collection around every measurement. That made the harness itself a substantial part of the runtime, especially for cheap microbenchmarks. The new harness:
+## Timing methodology
 
-1. times batches rather than individual ultra-short calls;
-2. uses profile-driven warmup/sample counts and operation batches;
-3. stops GC during measured CPU samples for consistent timing;
-4. performs full collection only for allocation/retention scenarios that need isolation;
-5. makes allocation pressure opt-in per scenario in Fast, while Deep enables it broadly;
-6. measures setup, cleanup, measured operation time and total runner time separately;
-7. shares scenario definitions between Fast and Deep; only the profile changes depth.
+Lua `os.clock()` is CPU time and can be too coarse for microsecond operations. After warmup, tiny and normal profile-selected scenarios perform a one-time calibration batch. If that batch is below the profile's useful timing window, the batch is increased up to a cost-specific cap. The measured samples then time the calibrated batch and divide by its logical operation count.
 
-This is not an iteration-count-only optimization: most of the removed runtime was measurement infrastructure and repeated collection, not workload coverage.
+Explicit batches are never changed. Heavy/cold scenarios keep their explicit batches because multiplying expensive work only to satisfy a timer would distort the workload. This is adaptive batching for timer resolution, not an assertion that a raw `0.000000` sample means zero cost.
 
-## Statistical methodology
+Fast uses 2 warmups and 7 measured samples; Deep uses 3 warmups and 15. Results report mean, p50, p90, p99 and max. With seven Fast samples, p99 is necessarily close to the highest observed sample; Deep is preferred for tail investigation.
 
-Fast uses 2 warmup rounds and 7 measured samples; Deep uses 3 warmup rounds and 15 measured samples. Each sample executes a batch selected by scenario cost (`tiny`, `normal`, `heavy`, or `cold`). This keeps timer resolution useful without forcing the same operation count on every benchmark.
+## Threat
 
-Each result reports mean, p50, p90, p99 and max over sample timings. With seven Fast samples, p99 is effectively the upper observed sample; it is retained for schema compatibility and regression visibility, while Deep is preferred when tail-resolution matters.
+Threat deliberately separates query cost from population work:
 
-The timing denominator is always the number of operations in the batch, so increasing batch size improves timer resolution without changing the meaning of `msPerOperation`.
+1. `threat.query.N` isolates a single `GetUnitThreatState` query. `N` is metadata here, not work performed per operation.
+2. `threat.multi_unit.N` makes one logical operation query every tracked unit, so workload grows with `N`.
+3. `threat.invalidation.N` invalidates and queries every tracked unit in each logical operation, representing a changed/event path across the tracked population.
 
-## Allocation and retention
+No production Threat code is changed to make these measurements possible.
 
-**Allocation pressure** is heap growth during a GC-stopped measured window. It is not an exact Lua object-allocation counter.
+## Cast
 
-**Retained memory** is measured only for scenarios that opt into retention, after cleanup and forced collection. Negative values are treated as allocator/runtime noise, not evidence of a leak.
+`cast.query.N` isolates one caster's state query. `cast.pipeline.N` processes all `N` active casters per logical operation and performs cast state detection plus `Dispatcher.ApplyToUnit`. This makes the incremental cost of simultaneous casters visible instead of merely rotating a single query through a larger table.
 
-Fast includes allocation smoke coverage in Threat invalidation, Halo cold creation, recycling and the integrated heavy workload. Fast also performs a retention smoke check through recycling. Deep enables the full allocation/retention protocol for all applicable scenarios.
+## Memory methodology
 
-## Runtime budget and profiling
+**Allocation pressure** is net heap growth during a GC-stopped measured window. It is not an exact Lua allocation counter: allocation and reuse can cancel in net heap size, so zero growth does not prove zero allocations.
 
-The runner prints total time and decomposes it into:
+**Retained memory** is the heap delta after cleanup and forced collection. A single positive delta does not prove a leak, and a negative delta is allocator/runtime noise rather than proof of reclamation.
 
-```text
-Total benchmark time
-Measured operation time
-Harness overhead
-  setup
-  cleanup
-Group runtime
-```
+Lifecycle recycling compares 1, 10 and 100 repeated cycles in Deep, with a reduced 1/10 smoke sweep in Fast. The intended leak signal is progressive retained growth as cycle count increases.
 
-This prevents a slow benchmark runner from being mistaken for slow addon code. The CSV stores the same timing metadata plus `profile` and the detected Git commit SHA.
+## Commit identity
 
-The intended Fast budget is roughly **5–10 seconds** on the development machine class. The exact value is environment-dependent; this repository change does not fabricate a timing claim when it cannot execute the benchmark environment. A stable local baseline should be recorded before introducing hard regression thresholds.
+The benchmark first accepts a valid 40-character SHA from `GITHUB_SHA`, `CI_COMMIT_SHA`, or `MINIMIZER_BENCHMARK_SHA`. Otherwise it asks Git for the worktree root and runs `git -C <root> rev-parse HEAD`. This removes dependence on the caller's current directory while still requiring the process to start inside the checkout.
 
-## Parallelism
+If `io.popen`, Git, or the repository is unavailable, the result explicitly records `commit=unknown` and a `commit_source` reason. No SHA is fabricated. When a real SHA is available, archived CSVs use its first 12 characters in the filename.
 
-The addon benchmark is intentionally single-process/single-VM. Parallel workers would contend for host CPU and make CPU-time samples from independent workers less reproducible; they also provide no useful speedup for the in-process Lua mock environment without changing the measurement target. The suite therefore optimizes the serial harness instead of parallelizing measurements.
+## Runner integration
 
-If parallel execution is investigated later, it should be an orchestration layer that runs independent VMs and compares serial vs 2/4/8-worker variance before becoming a default.
+`tests/test_all.lua` treats functional tests and benchmarks as separate categories. Functional tests are judged by process exit status plus their own summaries. The benchmark is then run as `fast`; its exit status is authoritative and the runner additionally requires the explicit `Status: PASS` line. Benchmark stdout is never passed through the functional `FAIL` parser.
 
-## Fast vs Deep
+The functional test list intentionally excludes helper/debug files and the benchmark itself; the benchmark is invoked exactly once in its own section. The harness self-test remains independent. This avoids the old failure mode where benchmark output looked like an ordinary test result such as `... OK` while hiding the actual benchmark summary.
 
-| Capability | Fast | Deep |
-| --- | :---: | :---: |
-| Core / Dispatcher | ✓ | ✓ |
-| Threat representative workload | ✓ | ✓ |
-| Threat full scaling/cache/invalidation | — | ✓ |
-| Cast multi-caster workload | ✓ | ✓ |
-| Cast full scaling | — | ✓ |
-| Target / Focus / Halo / Wheel / Pips | ✓ | ✓ |
-| Steady-state | ✓ | ✓ |
-| Recycling | ✓ | ✓ |
-| Integrated Normal + Heavy | ✓ | ✓ |
-| Full scaling matrix | — | ✓ |
-| Allocation smoke | ✓ | ✓ |
-| Full retention/allocation depth | — | ✓ |
-| Higher sample count | — | ✓ |
+## Output
 
-Fast answers: **did something important regress?** Deep answers: **where, how, and how does it scale?**
+The CSV stores `profile`, `commit`, `commit_source`, total/measurement/harness timing, setup/cleanup timing, timing percentiles, `heap_growth_kb`, `heap_growth_kb_per_op`, and `retained_kb`. The benchmark prints a compact summary including total runtime, measured operation time, harness overhead, commit and explicit status.
 
-## Parallelism decision
+The intended Fast budget is roughly **5–10 seconds or less** on the development machine class. The suite does not trade away coverage merely to hit a lower number; if an 8-second run is more stable than a 4-second run, the 8-second run is preferred.
 
-No worker-count speedup experiment is checked into the suite because the repository's benchmark is a Lua process rather than an external worker farm, and the available development/test tooling cannot execute multiple isolated benchmark VMs from inside the benchmark itself. Adding a fake in-process worker abstraction would measure contention/harness behavior rather than addon CPU cost.
+## Reproducibility
 
-## Results
-
-The historical result files under `tests/results/` are preserved. New runs write:
-
-```text
-tests/results/benchmark_suite_latest.csv
-tests/results/benchmark_suite_<commit>_<profile>.csv
-```
-
-If Git is unavailable, the SHA is reported as `unknown`; when the benchmark is run from a Git checkout, `git rev-parse HEAD` is used so the result is tied to an exact commit.
+For a baseline, run Fast five times in the same environment and record total runtime, representative p50/p90/p99 values and memory columns. Run Deep separately for full scaling, allocation and retention analysis. A large change should be repeated before being treated as a regression.
