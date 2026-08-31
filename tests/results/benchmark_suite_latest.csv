@@ -1,0 +1,60 @@
+# Minimizer benchmark suite v2
+commit=unknown
+started_at=2026-08-31T00:43:41Z
+timing=CPU time via os.clock; each sample times a batch of operations
+allocation=heap growth with GC stopped during measured batches; this is allocation pressure, not an exact allocation counter
+retained=heap delta after cleanup and two full collections; negative values are possible measurement noise and are not treated as leaks
+thresholds=disabled until a stable baseline is recorded for this suite/environment
+
+group,name,unit,mean_ms,p50_ms,p90_ms,p99_ms,max_ms,allocation_kb,allocation_kb_per_op,retained_kb,warmup,samples,batch,metadata
+core,core.apply_to_all.1,ApplyToUnit per active plate,0.052222222,0.050000000,0.060000000,0.060000000,0.060000000,506.9580,0.563287,0.5625,3,9,100,subsystem=Core/Dispatcher;units=1
+core,core.apply_to_all.10,ApplyToUnit per active plate,0.522222222,0.520000000,0.530000000,0.530000000,0.530000000,5063.4990,5.626110,0.5625,3,9,100,subsystem=Core/Dispatcher;units=10
+core,core.apply_to_all.25,ApplyToUnit per active plate,1.308888889,1.310000000,1.330000000,1.330000000,1.330000000,12657.7471,14.064163,0.5625,3,9,100,subsystem=Core/Dispatcher;units=25
+core,core.apply_to_all.50,ApplyToUnit per active plate,2.705555556,2.710000000,2.730000000,2.740000000,2.740000000,25314.8271,28.127586,0.5625,3,9,100,subsystem=Core/Dispatcher;units=50
+core,core.apply_to_all.100,ApplyToUnit per active plate,5.827777778,5.830000000,5.830000000,5.870000000,5.870000000,50628.9883,56.254431,0.5625,3,9,100,subsystem=Core/Dispatcher;units=100
+decision,classification.single,GetEliteType,0.000000000,0.000000000,0.000000000,0.000000000,0.000000000,0.2813,0.000313,0.5625,3,9,100,subsystem=Classification;units=1
+decision,decision.single,ShouldSimplifyUnit,0.012222222,0.010000000,0.020000000,0.020000000,0.020000000,0.2813,0.000313,0.5625,3,9,100,subsystem=Decision;units=1
+decision,decision.apply_all.10,ApplyToUnit per active plate,0.556666667,0.560000000,0.560000000,0.570000000,0.570000000,5065.5146,5.628350,2.5781,3,9,100,subsystem=Decision + Snapshot + modules;units=10
+decision,decision.apply_all.50,ApplyToUnit per active plate,2.764444444,2.770000000,2.770000000,2.770000000,2.770000000,25316.9834,28.129982,0.7031,3,9,100,subsystem=Decision + Snapshot + modules;units=50
+decision,decision.apply_all.100,ApplyToUnit per active plate,5.851111111,5.860000000,5.870000000,5.870000000,5.870000000,50628.9883,56.254431,0.5625,3,9,100,subsystem=Decision + Snapshot + modules;units=100
+threat,threat.stable.1,GetUnitThreatState,0.004444444,0.000000000,0.010000000,0.010000000,0.010000000,0.2813,0.000313,0.5625,3,9,100,state=stable/cached;subsystem=Threat;units=1
+threat,threat.invalidated.1,Invalidate + GetUnitThreatState,0.006666667,0.010000000,0.010000000,0.010000000,0.010000000,478.4063,0.531563,0.5625,3,9,100,state=changed/event path;subsystem=Threat;units=1
+threat,threat.stable.5,GetUnitThreatState,0.003333333,0.000000000,0.010000000,0.010000000,0.010000000,0.2813,0.000313,0.5625,3,9,100,state=stable/cached;subsystem=Threat;units=5
+threat,threat.invalidated.5,Invalidate + GetUnitThreatState,0.006666667,0.010000000,0.010000000,0.010000000,0.010000000,478.4063,0.531563,0.5625,3,9,100,state=changed/event path;subsystem=Threat;units=5
+threat,threat.stable.10,GetUnitThreatState,0.003333333,0.000000000,0.010000000,0.010000000,0.010000000,0.2813,0.000313,0.5625,3,9,100,state=stable/cached;subsystem=Threat;units=10
+threat,threat.invalidated.10,Invalidate + GetUnitThreatState,0.006666667,0.010000000,0.010000000,0.010000000,0.010000000,478.4063,0.531563,0.5625,3,9,100,state=changed/event path;subsystem=Threat;units=10
+threat,threat.stable.20,GetUnitThreatState,0.004444444,0.000000000,0.010000000,0.010000000,0.010000000,0.2813,0.000313,0.5625,3,9,100,state=stable/cached;subsystem=Threat;units=20
+threat,threat.invalidated.20,Invalidate + GetUnitThreatState,0.006666667,0.010000000,0.010000000,0.010000000,0.010000000,478.4063,0.531563,0.5625,3,9,100,state=changed/event path;subsystem=Threat;units=20
+threat,threat.stable.50,GetUnitThreatState,0.003333333,0.000000000,0.010000000,0.010000000,0.010000000,0.2813,0.000313,0.5625,3,9,100,state=stable/cached;subsystem=Threat;units=50
+threat,threat.invalidated.50,Invalidate + GetUnitThreatState,0.006666667,0.010000000,0.010000000,0.010000000,0.010000000,478.4063,0.531563,0.5625,3,9,100,state=changed/event path;subsystem=Threat;units=50
+events,event_storm.10,mixed unit events,0.055555556,0.060000000,0.060000000,0.060000000,0.060000000,615.0928,0.683436,0.7031,3,9,100,subsystem=Events + Dispatcher;units=10;workload=mixed plausible unit events
+events,event_storm.50,mixed unit events,0.055555556,0.060000000,0.060000000,0.060000000,0.060000000,612.5146,0.680572,0.5625,3,9,100,subsystem=Events + Dispatcher;units=50;workload=mixed plausible unit events
+events,event_storm.100,mixed unit events,0.055555556,0.060000000,0.060000000,0.060000000,0.060000000,612.5146,0.680572,0.5625,3,9,100,subsystem=Events + Dispatcher;units=100;workload=mixed plausible unit events
+cast,cast.1,Cast.GetState,0.001111111,0.000000000,0.000000000,0.010000000,0.010000000,0.3047,0.000339,0.5625,3,9,100,casters=1;subsystem=Cast
+cast,cast.pipeline.1,ApplyToUnit for active casters,0.050000000,0.050000000,0.050000000,0.050000000,0.050000000,506.9814,0.563313,0.5625,3,9,100,casters=1;subsystem=Cast + integrated pipeline
+cast,cast.5,Cast.GetState,0.001111111,0.000000000,0.000000000,0.010000000,0.010000000,0.3047,0.000339,0.5625,3,9,100,casters=5;subsystem=Cast
+cast,cast.pipeline.5,ApplyToUnit for active casters,0.052222222,0.050000000,0.060000000,0.060000000,0.060000000,507.1104,0.563456,0.5625,3,9,100,casters=5;subsystem=Cast + integrated pipeline
+cast,cast.10,Cast.GetState,0.001111111,0.000000000,0.000000000,0.010000000,0.010000000,0.3047,0.000339,0.5625,3,9,100,casters=10;subsystem=Cast
+cast,cast.pipeline.10,ApplyToUnit for active casters,0.052222222,0.050000000,0.060000000,0.060000000,0.060000000,507.2725,0.563636,0.5625,3,9,100,casters=10;subsystem=Cast + integrated pipeline
+cast,cast.20,Cast.GetState,0.001111111,0.000000000,0.000000000,0.010000000,0.010000000,0.3047,0.000339,0.5625,3,9,100,casters=20;subsystem=Cast
+cast,cast.pipeline.20,ApplyToUnit for active casters,0.051111111,0.050000000,0.050000000,0.060000000,0.060000000,507.6045,0.564005,0.5625,3,9,100,casters=20;subsystem=Cast + integrated pipeline
+absorb,absorb.1,HasAbsorb + GetTotalAbsorbs,0.003333333,0.000000000,0.010000000,0.010000000,0.010000000,0.2813,0.000313,0.5625,3,9,100,subsystem=Absorb;units=1
+absorb,absorb.10,HasAbsorb + GetTotalAbsorbs,0.003333333,0.000000000,0.010000000,0.010000000,0.010000000,0.2813,0.000313,0.5625,3,9,100,subsystem=Absorb;units=10
+absorb,absorb.50,HasAbsorb + GetTotalAbsorbs,0.003333333,0.000000000,0.010000000,0.010000000,0.010000000,0.2813,0.000313,0.5625,3,9,100,subsystem=Absorb;units=50
+absorb,absorb.100,HasAbsorb + GetTotalAbsorbs,0.004444444,0.000000000,0.010000000,0.010000000,0.010000000,0.2813,0.000313,0.5625,3,9,100,subsystem=Absorb;units=100
+overlays,target.update,Target:UpdateTargetCDs,0.006666667,0.010000000,0.010000000,0.010000000,0.010000000,35.4785,0.039421,0.5625,3,9,100,halo=true;subsystem=Target
+overlays,focus.update,Focus:UpdateFace,0.005555556,0.010000000,0.010000000,0.010000000,0.010000000,17.9004,0.019889,0.5625,3,9,100,halo=false;portrait=true;subsystem=Focus
+halo_wheel,halo.cold,Halo.Create,0.014285714,0.000000000,0.050000000,0.050000000,0.050000000,239.4258,1.710184,170.7813,3,7,20,path=cold/create;subsystem=Halo
+halo_wheel,halo.hot,ShowFor/Hide,0.001111111,0.000000000,0.000000000,0.010000000,0.010000000,0.2813,0.000313,0.5625,3,9,100,path=hot/reused;subsystem=Halo
+halo_wheel,wheel.disabled,Wheel.Update,0.000000000,0.000000000,0.000000000,0.000000000,0.000000000,0.2813,0.000313,0.5625,3,9,100,state=disabled;subsystem=Wheel
+halo_wheel,wheel.active,Wheel.Update,0.013333333,0.010000000,0.020000000,0.020000000,0.020000000,0.3867,0.000430,0.5625,3,9,100,state=active;subsystem=Wheel
+pips,pips.hot,UpdatePips,0.012222222,0.010000000,0.020000000,0.020000000,0.020000000,0.3867,0.000430,0.5625,3,9,100,path=hot/reused;subsystem=Pips
+pips,pips.radius,SetRadius,0.011111111,0.010000000,0.010000000,0.020000000,0.020000000,0.3223,0.000358,0.5625,3,9,100,path=layout/config;subsystem=Pips
+steady,steady_state.10,ApplyToAll with unchanged state,0.564444444,0.560000000,0.570000000,0.600000000,0.600000000,5063.4990,5.626110,0.5625,3,9,100,subsystem=Integrated;units=10;workload=steady-state/no intentional changes
+steady,steady_state.50,ApplyToAll with unchanged state,2.733333333,2.740000000,2.750000000,2.760000000,2.760000000,25314.8271,28.127586,0.5625,3,9,100,subsystem=Integrated;units=50;workload=steady-state/no intentional changes
+steady,steady_state.100,ApplyToAll with unchanged state,5.688888889,5.700000000,5.730000000,5.750000000,5.750000000,50628.9883,56.254431,0.5625,3,9,100,subsystem=Integrated;units=100;workload=steady-state/no intentional changes
+recycling,recycle.1,add/update/remove/reuse,0.155555556,0.160000000,0.160000000,0.160000000,0.160000000,2353.5176,2.615020,0.5625,3,9,100,cycles=1;subsystem=Lifecycle;units=1
+recycling,recycle.10,add/update/remove/reuse,0.160000000,0.160000000,0.160000000,0.170000000,0.170000000,2353.5801,2.615089,0.5625,3,9,100,cycles=10;subsystem=Lifecycle;units=10
+recycling,recycle.50,add/update/remove/reuse,0.170000000,0.170000000,0.170000000,0.180000000,0.180000000,2353.8926,2.615436,0.5625,3,9,100,cycles=50;subsystem=Lifecycle;units=50
+integrated,workload.normal,representative event/update workload,0.058888889,0.060000000,0.060000000,0.070000000,0.070000000,612.9180,0.681020,0.5625,3,9,100,casters=1;recycling=false;subsystem=Integrated;threat=1;units=10
+integrated,workload.heavy,representative event/update workload,0.063333333,0.060000000,0.070000000,0.070000000,0.070000000,656.1406,0.729045,0.5625,3,9,100,casters=10;recycling=true;subsystem=Integrated;threat=2;units=50
