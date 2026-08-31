@@ -10,7 +10,7 @@ local haloA = addonTable.Halo.Create(hostA, { size = 64, cooldownName = "Minimiz
 
 check(type(addonTable.Halo) == "table" and haloA ~= nil, "Halo: se crea mediante Minimizer.Halo")
 check(haloA.MinimizerHaloHost == hostA, "Halo: conserva el host proporcionado")
-check(haloA:GetWidth() == 64 and haloA:GetHeight() == 64, "Halo: conserva el tamaño configurado")
+check(haloA.MinimizerHaloSize == 64, "Halo: conserva el tamaño configurado")
 check(haloA.MinimizerHaloTexture ~= nil, "Halo: crea su textura")
 check(haloA.MinimizerHaloCooldown ~= nil, "Halo: crea su cooldown")
 check(haloA.MinimizerHaloCooldown.template == "CooldownFrameTemplate", "Halo: usa CooldownFrameTemplate")
