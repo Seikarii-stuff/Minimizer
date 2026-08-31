@@ -9,16 +9,39 @@ MinimizerDB = {
 MinimizerCharDB = {}
 T.fireAddonLoaded()
 
+local wheel = _G.MinimizerPlayerWheel
+local halo = wheel.MinimizerWheelHalo
+local interrupt = wheel.MinimizerWheelInterrupt
+check(halo ~= nil and halo.MinimizerHaloCooldown == interrupt, "Wheel: consume Minimizer.Halo y reutiliza su cooldown")
+check(halo ~= nil and halo.MinimizerHaloTexture ~= nil, "Wheel: Halo conserva la textura visual")
+check(wheel:IsShown() == false, "Wheel: disabled oculta la Wheel")
+check(interrupt:IsShown() == false, "Wheel: disabled oculta interrupt")
+
+local source = assert(io.open("Wheel/Wheel.lua", "r")):read("*a")
+check(source:match("wheelFrame:SetFrameStrata%(%s*[\"']MEDIUM[\"']%s*%)"), "Wheel: usa la strata normal del player UI")
+check(not source:match("SetFrameStrata%s*%(%s*[\"']HIGH[\"']"), "Wheel: no usa HIGH")
+check(not source:match("wheelFrame:SetFrameLevel%(%s*100%s*%)"), "Wheel: no usa FrameLevel global arbitrario")
+check(source:match("Minimizer%.Halo%.Create"), "Wheel: la implementacion visual pertenece a Minimizer.Halo")
+check(source:match("wheelHalo:ShowFor"), "Wheel: actualiza el interrupt mediante Halo")
+check(source:match("cooldownFrameLevelOffset%s*=%s*10"), "Wheel: conserva la prioridad relativa del cooldown")
+
+local pipsSource = assert(io.open("Wheel/Pips.lua", "r")):read("*a")
+check(not pipsSource:match("SetFrameStrata%s*%("), "Pips: no fijan strata propia")
+check(pipsSource:match("pip:SetFrameLevel%(%s*%(%s*parentFrame:GetFrameLevel"), "Pips: conservan el nivel relativo al Wheel")
+
+local normalWindow = CreateFrame("Frame", "MinimizerMockBlizzardWindow", UIParent)
+normalWindow:SetFrameStrata("DIALOG")
+check(normalWindow ~= nil, "Wheel: mock permite representar una ventana Blizzard superior")
+check(source:match("SetFrameStrata%(%s*[\"']MEDIUM[\"']%s*%)"), "Wheel: su contexto permite que una ventana Blizzard normal quede por encima")
+
 check(MinimizerDB.wheelEnabled == false, "Lifecycle: SavedVariables se conservan")
 check(addonTable.Wheel._enabled == false, "Lifecycle: ADDON_LOADED aplica Wheel con enabled=false")
 check(addonTable.Wheel._size == 220, "Lifecycle: ADDON_LOADED aplica size")
 check(addonTable.Wheel._pipRadius == 88, "Lifecycle: ADDON_LOADED aplica radius")
-check(_G.MinimizerPlayerWheel:IsShown() == false, "Wheel: disabled oculta la Wheel")
-check(_G.MinimizerPlayerWheel.MinimizerWheelInterrupt:IsShown() == false, "Wheel: disabled oculta interrupt")
 
 MinimizerDB.wheelEnabled = true
 addonTable.Wheel:ApplyConfig()
-check(addonTable.Wheel._enabled == true and _G.MinimizerPlayerWheel:IsShown() == true, "Wheel: ApplyConfig activa la Wheel")
+check(addonTable.Wheel._enabled == true and wheel:IsShown() == true, "Wheel: ApplyConfig activa la Wheel")
 
 local setSizeCalls, setRadiusCalls = 0, 0
 local originalSetSize = addonTable.Wheel.SetSize
@@ -47,7 +70,6 @@ addonTable.Wheel:Update()
 addonTable.Wheel:Update()
 check(#Mocks.frames == framesBeforeUpdates, "Wheel: Update no crea frames")
 
--- Disabled Wheel must be a true hot-path early-out.
 MinimizerDB.wheelEnabled = false
 addonTable.Wheel:ApplyConfig()
 local updateCalls = 0
@@ -59,7 +81,6 @@ end
 addonTable.Wheel:OnCooldownTick()
 check(updateCalls == 0, "Wheel: OnCooldownTick hace early-out cuando disabled")
 
--- Hot path: SPELL_UPDATE_COOLDOWN reaches Overlays -> Wheel -> throttle -> Update.
 MinimizerDB.wheelEnabled = true
 addonTable.Wheel:ApplyConfig()
 updateCalls = 0
@@ -71,9 +92,8 @@ check(updateCalls == 1, "Wheel hot path: llamadas consecutivas quedan throttlead
 Mocks.AdvanceTime(0.034)
 check(updateCalls == 2, "Wheel hot path: throttle permite la siguiente actualizacion tras el intervalo")
 
--- Persistent Pips are created once and reused by Update/config changes.
-local wheelPips = _G.MinimizerPlayerWheel._children
-check(type(wheelPips) == "table" and #wheelPips >= 6, "Wheel: conserva la coleccion persistente de Pips")
+local wheelChildren = wheel._children
+check(type(wheelChildren) == "table" and #wheelChildren >= 7, "Wheel: conserva Halo y la coleccion persistente de Pips")
 local framesBeforeFinalUpdates = #Mocks.frames
 addonTable.Wheel:Update()
 addonTable.Wheel:OnCooldownTick()

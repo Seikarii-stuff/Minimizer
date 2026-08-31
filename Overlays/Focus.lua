@@ -10,7 +10,6 @@ Minimizer.Focus = Focus
 local HALO_SIZE = 46
 local frame = CreateFrame("Frame", "MinimizerFocusPortrait", UIParent)
 frame:SetSize(36, 36)
-frame:SetFrameStrata("HIGH")
 frame:Hide()
 
 local portrait = frame:CreateTexture(nil, "ARTWORK")
@@ -19,6 +18,12 @@ portrait:SetAllPoints()
 local cooldown = CreateFrame("Cooldown", "MinimizerFocusCooldown", frame, "CooldownFrameTemplate")
 cooldown:SetAllPoints()
 Minimizer.Widgets.MakeCooldownCircular(cooldown, true)
+
+local function HideFace()
+    frame:Hide()
+    frame:ClearAllPoints()
+    frame:SetParent(UIParent)
+end
 
 local function UpdateCooldown()
     local interruptSpellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
@@ -37,7 +42,7 @@ end
 function Focus:SetFaceEnabled(enabled)
     MinimizerDB.enableFocusFace = enabled == true
     if MinimizerDB.enableFocusFace ~= true then
-        frame:Hide()
+        HideFace()
     end
     if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
         Minimizer.Dispatcher.RequestFullUpdate()
@@ -64,22 +69,23 @@ end
 
 function Focus:UpdateFace()
     if MinimizerDB.enableFocusFace ~= true then
-        frame:Hide()
+        HideFace()
         return
     end
     if not UnitExists("focus") or UnitIsDead("focus") then
-        frame:Hide()
+        HideFace()
         return
     end
 
     local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit("focus")
     if not plate then
-        frame:Hide()
+        HideFace()
         return
     end
 
     SetPortraitTexture(portrait, "player")
     frame:ClearAllPoints()
+    frame:SetParent(plate)
     frame:SetPoint("CENTER", plate, "BOTTOM", 0, 10 + (HALO_SIZE / 2))
     local plateLevel = (plate:GetFrameLevel() or 0)
     frame:SetFrameLevel(plateLevel + 1)

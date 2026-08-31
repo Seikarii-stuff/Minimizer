@@ -62,7 +62,8 @@ function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
         local pipFrameName = prefixName .. slotId
         local pip = CreateFrame("Frame", pipFrameName, parentFrame)
         pip:SetSize(Pips.PIP_SIZE, Pips.PIP_SIZE)
-        pip:SetFrameStrata("HIGH")
+        -- Pips inherit the Wheel's rendering context. Their level stays relative
+        -- to the Wheel so they remain above its artwork without becoming global overlays.
         pip:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 5)
         pip.MinimizerPipRadius = radius
         pip.MinimizerPipAngle = angle

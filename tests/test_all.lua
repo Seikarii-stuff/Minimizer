@@ -15,9 +15,11 @@ local tests = {
     "tests/overlays_test.lua",
     "tests/target_test.lua",
     "tests/focus_test.lua",
+    "tests/halo_test.lua",
     "tests/widgets_test.lua",
     "tests/pips_test.lua",
     "tests/wheel_test.lua",
+    "tests/ui_layering_test.lua",
     "tests/menu_test.lua",
     "tests/equivalence_test.lua",
     "tests/friendly_filter_safety_net_test.lua",
@@ -79,9 +81,7 @@ print("\n=== FAILURES SUMMARY ===")
 for _, f in ipairs(failures) do
     print("\n-- " .. f.test)
     for line in f.output:gmatch("([^\n\r]+)") do
-        if line:find("FAIL") then
-            print(line)
-        end
+        if line:find("FAIL") then print(line) end
     end
 end
 

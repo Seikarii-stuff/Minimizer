@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Minimizer - Widgets.lua
--- Búsqueda de widgets en nameplates (ej. castbars anónimas)
+-- Utilidades de UI reutilizables (cooldowns y descubrimiento de widgets).
 -- ============================================================================
 local _, Minimizer = ...
 if not Minimizer then return end
@@ -172,51 +172,4 @@ function Minimizer.Widgets.ApplyCooldownDuration(cooldown, spellID)
     end
 
     return false
-end
-
-function Minimizer.Widgets.CreateHalo(name, parentFrame, size)
-    local frame = CreateFrame("Frame", name, parentFrame or UIParent)
-    frame:SetSize(size, size)
-    frame:SetFrameStrata("HIGH")
-    frame:Hide()
-
-    local tex = frame:CreateTexture(nil, "ARTWORK")
-    tex:SetAllPoints()
-    tex:SetTexture("Interface\\AddOns\\Minimizer\\assets\\halo_ring")
-    tex:SetBlendMode("BLEND")
-    frame.MinimizerHaloTexture = tex
-
-    local cooldown = CreateFrame("Cooldown", name .. "Cooldown", frame, "CooldownFrameTemplate")
-    cooldown:SetAllPoints()
-    Minimizer.Widgets.ConfigureCooldownFrame(cooldown, {
-        drawEdge = false,
-        useCircularEdge = true,
-        drawSwipe = true,
-        drawBling = false,
-        reverse = false,
-        hideCountdownNumbers = true,
-        swipeTexture = "Interface\\AddOns\\Minimizer\\assets\\halo_ring",
-        swipeColor = { 0.00, 0.00, 0.00, 0.75 },
-    })
-    frame.MinimizerHaloCooldown = cooldown
-
-    return frame
-end
-
-function Minimizer.Widgets.UpdateHalo(frame, spellID)
-    if not frame then return false end
-    if not spellID then
-        frame:Hide()
-        return false
-    end
-
-    local cooldown = frame.MinimizerHaloCooldown
-    if not cooldown then
-        frame:Hide()
-        return false
-    end
-
-    Minimizer.Widgets.ApplyCooldownDuration(cooldown, spellID)
-    frame:Show()
-    return true
 end
