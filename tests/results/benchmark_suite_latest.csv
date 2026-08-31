@@ -1,11 +1,10 @@
-# Minimizer benchmark suite v4
+# Minimizer benchmark suite v5
 profile=fast
-commit=unknown
-commit_source=not inside a git worktree
-started_at=2026-08-31T01:00:01Z
-total_runtime_seconds=4.453000
-measurement_seconds=3.309000
-harness_seconds=1.144000
+timestamp=2026-08-31T01:10:53Z
+benchmark_schema=v5
+total_runtime_seconds=4.443000
+measurement_seconds=3.306000
+harness_seconds=1.137000
 setup_seconds=0.000000
 cleanup_seconds=0.000000
 timing=CPU time via os.clock; each sample times a batch of operations with adaptive batching for tiny/normal work; GC is stopped during timed work
@@ -15,34 +14,34 @@ fast=representative regression workload; deep=full scaling/microbenchmark/retent
 thresholds=disabled until a stable baseline is recorded for this exact profile/environment
 
 group,name,unit,mean_ms,p50_ms,p90_ms,p99_ms,max_ms,heap_growth_kb,heap_growth_kb_per_op,retained_kb,warmup,samples,batch,allocation_measured,retention_measured,measurement_seconds,metadata
-core,core.apply_to_all.1,ApplyToUnit per active plate,0.045714286,0.040000000,0.080000000,0.080000000,0.080000000,,,,2,7,25,false,false,0.008000,subsystem=Core/Dispatcher;units=1
-core,core.apply_to_all.50,ApplyToUnit per active plate,2.777142857,2.800000000,2.800000000,2.800000000,2.800000000,,,,2,7,25,false,false,0.486000,subsystem=Core/Dispatcher;units=50
-core,core.apply_to_all.100,ApplyToUnit per active plate,5.794285714,5.840000000,5.840000000,5.840000000,5.840000000,,,,2,7,25,false,false,1.014000,subsystem=Core/Dispatcher;units=100
+core,core.apply_to_all.1,ApplyToUnit per active plate,0.057142857,0.040000000,0.080000000,0.080000000,0.080000000,,,,2,7,25,false,false,0.010000,subsystem=Core/Dispatcher;units=1
+core,core.apply_to_all.50,ApplyToUnit per active plate,2.760000000,2.760000000,2.800000000,2.800000000,2.800000000,,,,2,7,25,false,false,0.483000,subsystem=Core/Dispatcher;units=50
+core,core.apply_to_all.100,ApplyToUnit per active plate,5.817142857,5.800000000,5.840000000,5.880000000,5.880000000,,,,2,7,25,false,false,1.018000,subsystem=Core/Dispatcher;units=100
 decision,classification.single,GetEliteType,0.000642857,0.000500000,0.001000000,0.001000000,0.001000000,,,,2,7,2000,false,false,0.009000,subsystem=Classification;units=1
-decision,decision.single,ShouldSimplifyUnit,0.012000000,0.012000000,0.013000000,0.013000000,0.013000000,,,,2,7,1000,false,false,0.084000,subsystem=Decision;units=1
-decision,decision.apply_all.50,ApplyToUnit per active plate,2.760000000,2.760000000,2.800000000,2.840000000,2.840000000,,,,2,7,25,false,false,0.483000,subsystem=Decision + Snapshot + modules;units=50
-threat,threat.query.10,GetUnitThreatState,0.003500000,0.003500000,0.003500000,0.004000000,0.004000000,,,,2,7,2000,false,false,0.049000,subsystem=Threat;units=10;workload=single-unit query
+decision,decision.single,ShouldSimplifyUnit,0.012142857,0.012000000,0.012000000,0.013000000,0.013000000,,,,2,7,1000,false,false,0.085000,subsystem=Decision;units=1
+decision,decision.apply_all.50,ApplyToUnit per active plate,2.800000000,2.800000000,2.800000000,2.800000000,2.800000000,,,,2,7,25,false,false,0.490000,subsystem=Decision + Snapshot + modules;units=50
+threat,threat.query.10,GetUnitThreatState,0.003500000,0.003500000,0.003500000,0.003500000,0.003500000,,,,2,7,2000,false,false,0.049000,subsystem=Threat;units=10;workload=single-unit query
 threat,threat.multi_unit.10,Threat query across all tracked units,0.034285714,0.040000000,0.040000000,0.040000000,0.040000000,,,,2,7,25,false,false,0.006000,subsystem=Threat;units=10;workload=all tracked units
 threat,threat.invalidation.10,Invalidate + GetUnitThreatState across all units,0.068571429,0.080000000,0.080000000,0.080000000,0.080000000,929.8438,5.313393,,2,7,25,true,false,0.012000,subsystem=Threat;units=10;workload=changed/event path for all units
-threat,threat.query.50,GetUnitThreatState,0.003428571,0.003500000,0.003500000,0.003500000,0.003500000,,,,2,7,2000,false,false,0.048000,subsystem=Threat;units=50;workload=single-unit query
+threat,threat.query.50,GetUnitThreatState,0.003214286,0.002500000,0.005000000,0.005000000,0.005000000,,,,2,7,400,false,false,0.009000,subsystem=Threat;units=50;workload=single-unit query
 threat,threat.multi_unit.50,Threat query across all tracked units,0.171428571,0.160000000,0.200000000,0.200000000,0.200000000,,,,2,7,25,false,false,0.030000,subsystem=Threat;units=50;workload=all tracked units
 threat,threat.invalidation.50,Invalidate + GetUnitThreatState across all units,0.354285714,0.360000000,0.360000000,0.400000000,0.400000000,4648.5938,26.563393,,2,7,25,true,false,0.063000,subsystem=Threat;units=50;workload=changed/event path for all units
 events,event_storm.50,mixed unit events,0.057142857,0.040000000,0.080000000,0.080000000,0.080000000,,,,2,7,25,false,false,0.010000,subsystem=Events + Dispatcher;units=50;workload=mixed plausible unit events
 cast,cast.query.10,Cast.GetState,0.001500000,0.001500000,0.001500000,0.001500000,0.001500000,,,,2,7,2000,false,false,0.021000,casters=10;subsystem=Cast;workload=single-caster state query
-cast,cast.pipeline.10,Update all active casters,0.520000000,0.520000000,0.520000000,0.520000000,0.520000000,,,,2,7,25,false,false,0.091000,casters=10;subsystem=Cast + integrated pipeline;workload=state detection + castbar-related pipeline
+cast,cast.pipeline.10,Update all active casters,0.525714286,0.520000000,0.520000000,0.560000000,0.560000000,,,,2,7,25,false,false,0.092000,casters=10;subsystem=Cast + integrated pipeline;workload=state detection + castbar-related pipeline
 cast,cast.query.20,Cast.GetState,0.001500000,0.001500000,0.001500000,0.001500000,0.001500000,,,,2,7,2000,false,false,0.021000,casters=20;subsystem=Cast;workload=single-caster state query
-cast,cast.pipeline.20,Update all active casters,1.074285714,1.080000000,1.080000000,1.080000000,1.080000000,,,,2,7,25,false,false,0.188000,casters=20;subsystem=Cast + integrated pipeline;workload=state detection + castbar-related pipeline
-absorb,absorb.50,HasAbsorb + GetTotalAbsorbs,0.003333333,0.003333333,0.003333333,0.003333333,0.003333333,,,,2,7,600,false,false,0.014000,subsystem=Absorb;units=50
+cast,cast.pipeline.20,Update all active casters,1.062857143,1.080000000,1.080000000,1.080000000,1.080000000,,,,2,7,25,false,false,0.186000,casters=20;subsystem=Cast + integrated pipeline;workload=state detection + castbar-related pipeline
+absorb,absorb.50,HasAbsorb + GetTotalAbsorbs,0.003571429,0.003500000,0.003500000,0.004000000,0.004000000,,,,2,7,2000,false,false,0.050000,subsystem=Absorb;units=50
 overlays,target.update,Target:UpdateTargetCDs,0.007142857,0.005000000,0.010000000,0.010000000,0.010000000,,,,2,7,200,false,false,0.010000,halo=true;subsystem=Target
 overlays,focus.update,Focus:UpdateFace,0.005238095,0.005000000,0.005000000,0.006666667,0.006666667,,,,2,7,600,false,false,0.022000,halo=false;portrait=true;subsystem=Focus
 halo_wheel,halo.cold,Halo.Create,0.017857143,0.000000000,0.000000000,0.125000000,0.125000000,96.4258,1.721889,,2,7,8,true,false,0.001000,path=cold/create;subsystem=Halo
-halo_wheel,halo.hot,ShowFor/Hide,0.000714286,0.000000000,0.001666667,0.001666667,0.001666667,,,,2,7,600,false,false,0.003000,path=hot/reused;subsystem=Halo
+halo_wheel,halo.hot,ShowFor/Hide,0.000714286,0.000000000,0.002500000,0.002500000,0.002500000,,,,2,7,400,false,false,0.002000,path=hot/reused;subsystem=Halo
 halo_wheel,wheel.disabled,Wheel.Update,0.000142857,0.000000000,0.000500000,0.000500000,0.000500000,,,,2,7,2000,false,false,0.002000,state=disabled;subsystem=Wheel
 halo_wheel,wheel.active,Wheel.Update,0.012857143,0.015000000,0.015000000,0.015000000,0.015000000,,,,2,7,200,false,false,0.018000,state=active;subsystem=Wheel
-pips,pips.hot,UpdatePips,0.011428571,0.010000000,0.015000000,0.015000000,0.015000000,,,,2,7,200,false,false,0.016000,path=hot/reused;subsystem=Pips
-pips,pips.radius,SetRadius,0.010357143,0.010000000,0.010000000,0.012500000,0.012500000,,,,2,7,400,false,false,0.029000,path=layout/config;subsystem=Pips
-steady,steady_state.50,ApplyToAll with unchanged state,2.817142857,2.800000000,2.840000000,2.840000000,2.840000000,,,,2,7,25,false,false,0.493000,subsystem=Integrated;units=50;workload=steady-state/no intentional changes
-recycling,recycle.1,add/update/remove/reuse lifecycle,0.160000000,0.160000000,0.160000000,0.160000000,0.160000000,458.2988,2.618850,0.1563,2,7,25,true,true,0.028000,cycles=1;subsystem=Lifecycle;workload=repeated lifecycle; compare 1/10/100 cycles
-recycling,recycle.10,add/update/remove/reuse lifecycle,0.160000000,0.160000000,0.160000000,0.160000000,0.160000000,458.3613,2.619208,0.1563,2,7,25,true,true,0.028000,cycles=10;subsystem=Lifecycle;workload=repeated lifecycle; compare 1/10/100 cycles
-integrated,workload.normal,representative event/update workload,0.062857143,0.080000000,0.080000000,0.080000000,0.080000000,118.3242,0.676138,,2,7,25,true,false,0.011000,casters=1;recycling=false;subsystem=Integrated;threat=1;units=10
+pips,pips.hot,UpdatePips,0.012142857,0.010000000,0.015000000,0.015000000,0.015000000,,,,2,7,200,false,false,0.017000,path=hot/reused;subsystem=Pips
+pips,pips.radius,SetRadius,0.011071429,0.010000000,0.012500000,0.012500000,0.012500000,,,,2,7,400,false,false,0.031000,path=layout/config;subsystem=Pips
+steady,steady_state.50,ApplyToAll with unchanged state,2.754285714,2.760000000,2.760000000,2.800000000,2.800000000,,,,2,7,25,false,false,0.482000,subsystem=Integrated;units=50;workload=steady-state/no intentional changes
+recycling,recycle.1,add/update/remove/reuse lifecycle,0.154285714,0.160000000,0.160000000,0.160000000,0.160000000,458.2988,2.618850,0.1563,2,7,25,true,true,0.027000,cycles=1;subsystem=Lifecycle;workload=repeated lifecycle; compare 1/10/100 cycles
+recycling,recycle.10,add/update/remove/reuse lifecycle,0.165714286,0.160000000,0.160000000,0.200000000,0.200000000,458.3613,2.619208,0.1563,2,7,25,true,true,0.029000,cycles=10;subsystem=Lifecycle;workload=repeated lifecycle; compare 1/10/100 cycles
+integrated,workload.normal,representative event/update workload,0.057142857,0.040000000,0.080000000,0.080000000,0.080000000,118.3242,0.676138,,2,7,25,true,false,0.010000,casters=1;recycling=false;subsystem=Integrated;threat=1;units=10
 integrated,workload.heavy,representative event/update workload,0.062857143,0.080000000,0.080000000,0.080000000,0.080000000,121.1436,0.692249,,2,7,25,true,false,0.011000,casters=10;recycling=true;subsystem=Integrated;threat=2;units=50
