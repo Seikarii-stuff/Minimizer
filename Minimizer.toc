@@ -35,6 +35,7 @@ Wheel/Wheel.lua
 Overlays/Focus.lua
 Overlays/Target.lua
 Menu.lua
+Overlays/Mouse.lua
 Options.lua
 Plater/Events.lua
 SlashCommands.lua
