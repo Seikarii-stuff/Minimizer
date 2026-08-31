@@ -23,6 +23,9 @@ bootstrapFrame:SetScript("OnEvent", function(_, event, name)
     if Minimizer.Wheel and Minimizer.Wheel.ApplyConfig then
         Minimizer.Wheel:ApplyConfig()
     end
+    if Minimizer.Mouse and Minimizer.Mouse.ApplyConfig then
+        Minimizer.Mouse:ApplyConfig()
+    end
     if Minimizer.Options and Minimizer.Options.Initialize then
         Minimizer.Options.Initialize()
     end
