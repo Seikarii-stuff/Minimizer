@@ -1,9 +1,12 @@
 local T = dofile("tests/test_harness.lua")
 local Mocks, addonTable, check = T.Mocks, T.addonTable, T.check
 
-T.fireAddonLoaded()
 Mocks.playerSpells = { [107574] = true, [147362] = true }
 Mocks.cooldowns[147362] = { start = Mocks.time, duration = 15 }
+T.fireAddonLoaded()
+if addonTable.Interrupt and addonTable.Interrupt.InvalidateSpellIDCache then
+    addonTable.Interrupt.InvalidateSpellIDCache()
+end
 
 Mocks.CreateTestUnit("target", { name = "Target Mob", level = 70, faction = "Horde", guid = "target_guid" })
 local plate = Mocks.CreateTestNameplate("target")
