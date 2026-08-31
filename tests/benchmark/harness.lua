@@ -7,17 +7,14 @@ local Addon = TestHarness.addonTable
 
 TestHarness.fireAddonLoaded()
 
-local Harness = {}
-Harness.Mocks = Mocks
-Harness.Addon = Addon
-Harness.ADDON_NAME = TestHarness.ADDON_NAME
-
 local PROFILES = {
     fast = {
         name = "fast",
         warmup = 2,
         samples = 7,
         batch = { tiny = 1000, normal = 200, heavy = 25, cold = 8 },
+        minSampleSeconds = 0.002,
+        maxBatch = { tiny = 100000, normal = 5000, heavy = 100, cold = 16 },
         allocation = false,
         retention = false,
     },
@@ -26,11 +23,17 @@ local PROFILES = {
         warmup = 3,
         samples = 15,
         batch = { tiny = 1000, normal = 200, heavy = 25, cold = 8 },
+        minSampleSeconds = 0.003,
+        maxBatch = { tiny = 250000, normal = 10000, heavy = 250, cold = 32 },
         allocation = true,
         retention = true,
     },
 }
 
+local Harness = {}
+Harness.Mocks = Mocks
+Harness.Addon = Addon
+Harness.ADDON_NAME = TestHarness.ADDON_NAME
 Harness.PROFILES = PROFILES
 Harness.profile = PROFILES.fast
 
@@ -52,6 +55,11 @@ end
 
 function Harness.batch(kind)
     local batches = Harness.profile.batch
+    return batches[kind or "normal"] or batches.normal
+end
+
+local function maxBatch(kind)
+    local batches = Harness.profile.maxBatch
     return batches[kind or "normal"] or batches.normal
 end
 
@@ -100,6 +108,24 @@ function Harness.heapKB()
     return collectgarbage("count")
 end
 
+local function calibrateBatch(spec, batch)
+    -- Explicit batches are part of the public harness contract (and are used
+    -- by the self-test). Only profile-selected tiny/normal work is calibrated.
+    if spec.batch ~= nil or spec.cost == "heavy" or spec.cost == "cold" then return batch end
+
+    local target = Harness.profile.minSampleSeconds
+    local cap = maxBatch(spec.cost)
+    local start = os.clock()
+    spec.body(batch)
+    local elapsed = os.clock() - start
+    if elapsed <= 0 or elapsed < target then
+        local multiplier = elapsed > 0 and math.ceil(target / elapsed) or 10
+        if multiplier < 2 then multiplier = 2 end
+        batch = math.min(cap, batch * multiplier)
+    end
+    return batch
+end
+
 function Harness.measure(spec)
     assert(type(spec) == "table" and type(spec.body) == "function", "benchmark spec/body required")
     local profile = Harness.profile
@@ -116,6 +142,7 @@ function Harness.measure(spec)
     local setupSeconds = os.clock() - setupStart
 
     for _ = 1, warmup do spec.body(batch) end
+    batch = calibrateBatch(spec, batch)
 
     -- Full GC is deliberately not part of every Fast measurement. It was one
     -- of the largest sources of runner overhead in the previous suite. The
@@ -136,7 +163,7 @@ function Harness.measure(spec)
         timings[#timings + 1] = os.clock() - start
     end
     local measureSeconds = os.clock() - measureStart
-    local allocationEnd = allocation and Harness.heapKB() or nil
+    local heapGrowthEnd = allocation and Harness.heapKB() or nil
     collectgarbage("restart")
 
     local cleanupStart = os.clock()
@@ -150,6 +177,8 @@ function Harness.measure(spec)
     end
 
     local timing = Harness.stats(timings)
+    local heapGrowthKB = allocation and math.max(0, heapGrowthEnd - retainedBefore) or nil
+    local retainedKB = retention and (retainedAfter - retainedBefore) or nil
     local result = {
         profile = profile.name,
         name = spec.name or "unnamed",
@@ -171,9 +200,11 @@ function Harness.measure(spec)
             p90 = timing.p90 * 1000 / batch,
             p99 = timing.p99 * 1000 / batch,
         },
-        allocationKB = allocation and math.max(0, allocationEnd - retainedBefore) or nil,
-        allocationKBPerOperation = allocation and math.max(0, allocationEnd - retainedBefore) / (batch * samples) or nil,
-        retainedKB = retention and (retainedAfter - retainedBefore) or nil,
+        -- This is net heap growth while GC is stopped, not an exact allocation
+        -- counter. A zero/negative net result cannot prove zero allocations.
+        heapGrowthKB = heapGrowthKB,
+        heapGrowthKBPerOperation = allocation and heapGrowthKB / (batch * samples) or nil,
+        retainedKB = retainedKB,
     }
     if spec.metadata then result.metadata = spec.metadata end
     return result
