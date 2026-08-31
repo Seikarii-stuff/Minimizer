@@ -1,496 +1,103 @@
 -- tests/benchmark/benchmark.lua
--- Run from the project root:  lua tests/benchmark/benchmark.lua
-local Mocks = dofile("tests/wow_mock.lua")
+-- Full benchmark entry point.
+-- Usage:
+--   lua tests/benchmark/benchmark.lua
+--   lua tests/benchmark/benchmark.lua --self-test
+--
+-- The suite is intentionally separate from tests/test_all.lua: benchmarks are
+-- measurements, not pass/fail functional tests, and their timing must not be
+-- contaminated by the normal test runner.
+local function getCommitSHA()
+    local pipe = io.popen("git rev-parse HEAD 2>/dev/null")
+    if not pipe then return "unknown" end
+    local sha = pipe:read("*l") or "unknown"
+    pipe:close()
+    return sha
+end
 
-local ADDON_NAME = "Minimizer"
-local addonTable = {}
-
-local function LoadAddonFile(filepath)
-    local func, err = loadfile(filepath)
-    if not func then
-        if filepath == "data/SpellData.lua" then
-            addonTable.Data = addonTable.Data or { INTERRUPT_SPELLS = {} }
-            return
-        end
-        error("Failed to load " .. filepath .. ": " .. tostring(err))
+local function runSelfTests()
+    local H = dofile("tests/benchmark/harness.lua")
+    local failures = 0
+    local function check(ok, message)
+        if ok then print("OK: " .. message) else failures = failures + 1; print("FAIL: " .. message) end
     end
-    func(ADDON_NAME, addonTable)
-end
 
--- 1. Load Addon (dynamic reading from Minimizer.toc)
-local function GetFileListFromToc(tocPath)
-    local list = {}
-    local fh = io.open(tocPath, "r")
-    if not fh then
-        error("No se pudo abrir el .toc en " .. tocPath .. " -- revisa la ruta")
-    end
-    for line in fh:lines() do
-        local trimmed = line:match("^%s*(.-)%s*$")
-        trimmed = trimmed:gsub("\\", "/")
-        if trimmed ~= "" and not trimmed:match("^#") and not trimmed:match("^%.%.") then
-            if trimmed:match("%.lua$") then
-                table.insert(list, trimmed)
-            end
-        end
-    end
-    fh:close()
-    return list
-end
-
-local files = GetFileListFromToc("Minimizer.toc")
-for _, file in ipairs(files) do LoadAddonFile(file) end
-
-Mocks.FireEvent("ADDON_LOADED", ADDON_NAME)
-
--- 2. Setup Benchmark Data (50 Nameplates)
-local NUM_NAMEPLATES = 50
-for i = 1, NUM_NAMEPLATES do
-    local unitId = "nameplate" .. i
-    local isCasting = (i % 3 == 0)
-
-    Mocks.CreateTestUnit(unitId, {
-        name = "Test Mob " .. i,
-        health = math.random(10, 100),
-        healthMax = 100,
-        level = 70,
-        faction = "Horde",
-        isPlayer = false,
-        classification = (i % 10 == 0) and "elite" or "normal",
-        threatSituation = math.random(0, 3),
-        cast = isCasting and {
-            name = "Test Spell",
-            startTime = Mocks.time * 1000,
-            endTime = (Mocks.time + 2) * 1000,
-            uninterruptible = (i % 6 == 0),
-        } or nil,
-        auras = {
-            { name = "Test Buff", icon = 123, count = 1, duration = 10,
-              expirationTime = Mocks.time + 10, source = "player",
-              helpful = false, harmful = true }
-        }
-    })
-    Mocks.CreateTestNameplate(unitId)
-    Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", unitId)
-end
-
--- 3. Profile Modules
-local moduleStats = {}
-for name, module in pairs(addonTable.Modules) do
-    if type(module.UpdateNamePlate) == "function" then
-        moduleStats[name] = { count = 0, time = 0 }
-        local orig = module.UpdateNamePlate
-        module.UpdateNamePlate = function(self, unit, nameplate, snapshot)
-            local start = os.clock()
-            orig(self, unit, nameplate, snapshot)
-            local elapsed = os.clock() - start
-            moduleStats[name].count = moduleStats[name].count + 1
-            moduleStats[name].time  = moduleStats[name].time  + elapsed
-        end
-    end
-end
-
--- 3b. Profile Decision y Classification (no son modulos registrados, pero
--- consumen tiempo real dentro de Core.ApplyToUnit -> son invisibles en el
--- profiling de "Module Breakdown" de arriba si no se instrumentan aparte).
-local extraStats = {}
-
--- Compat shim: table.pack no existe en Lua 5.1, empaquetar valores y contar n.
-local function pack_results(...)
-    local t = {...}
-    t.n = select('#', ...)
-    return t
-end
-
-local function WrapFunction(namespace, fnName)
-    if not namespace then return end
-    local orig = namespace[fnName]
-    if type(orig) ~= "function" then return end
-    extraStats[fnName] = { count = 0, time = 0 }
-    namespace[fnName] = function(...)
-        local start = os.clock()
-        -- table.pack conserva TODOS los valores de retorno (incluye .n para
-        -- distinguir nils explícitos de "no hubo más valores"), a diferencia
-        -- de `local a,b,c,d = orig(...)` que truncaba silenciosamente a 4.
-        local results = (table.pack and table.pack(orig(...))) or pack_results(orig(...))
-        local elapsed = os.clock() - start
-        extraStats[fnName].count = extraStats[fnName].count + 1
-        extraStats[fnName].time = extraStats[fnName].time + elapsed
-        local unpack_fn = table.unpack or unpack
-        return unpack_fn(results, 1, results.n)
-    end
-end
-
-WrapFunction(addonTable.Decision, "ShouldSimplifyUnit")
-WrapFunction(addonTable.Classification, "GetEliteType")
-WrapFunction(addonTable.Threat, "PlayerHasAggro")
-WrapFunction(addonTable.Absorb, "HasAbsorb")
-
--- Dispatcher Profiling Wrapper
-local coreStats = { count = 0, time = 0 }
-local origApplyToAll = addonTable.Dispatcher.ApplyToAll
-addonTable.Dispatcher.ApplyToAll = function(...)
-    local start = os.clock()
-    origApplyToAll(...)
-    local elapsed = os.clock() - start
-    coreStats.count = coreStats.count + 1
-    coreStats.time  = coreStats.time  + elapsed
-end
-
--- Sanity: cuantos modulos instrumentados tenemos (deberia incluir HealthBarColor, CastingBar, Markers)
-do
-    local wrappedCount = 0
-    for name, stats in pairs(moduleStats) do wrappedCount = wrappedCount + 1 end
-    print(string.format("Modulos instrumentados para profiling: %d (esperado: 3)", wrappedCount))
-end
-
--- ============================================================
--- Regresion check: CastingBar no debe releer Cast.GetState
--- (UnitCastingInfo/UnitChannelInfo) dentro del mismo ApplyToUnit.
--- ============================================================
-do
-    Mocks.unitCastingInfoCallCounts = Mocks.unitCastingInfoCallCounts or {}
-    Mocks.unitChannelInfoCallCounts = Mocks.unitChannelInfoCallCounts or {}
-
-    local sampleUnit = "nameplate3" -- unidad con cast garantizado por el setup (i % 3 == 0)
-    Mocks.unitCastingInfoCallCounts[sampleUnit] = 0
-    Mocks.unitChannelInfoCallCounts[sampleUnit] = 0
-
-    addonTable.Dispatcher.ApplyToUnit(sampleUnit, true)
-
-    local castCalls = Mocks.unitCastingInfoCallCounts[sampleUnit] or 0
-    local channelCalls = Mocks.unitChannelInfoCallCounts[sampleUnit] or 0
-
-    print("")
-    print("--- Regresion: llamadas a UnitCastingInfo/UnitChannelInfo por ApplyToUnit ---")
-    print(string.format("UnitCastingInfo=%d UnitChannelInfo=%d (objetivo: 1 y 1)", castCalls, channelCalls))
-    if castCalls > 1 or channelCalls > 1 then
-        io.stderr:write("REGRESION: Cast.GetState se esta llamando mas de una vez por ApplyToUnit (CastingBar no esta reusando el snapshot)\n")
-    end
-end
-
--- 4. Run Benchmark
--- ============================================================
--- 3c. Medicion dedicada de ApplyToAll: antes de este cambio, cada llamada
--- alocaba una tabla nueva via C_NamePlate.GetNamePlates(); tras el cambio,
--- itera Minimizer.ActiveNameplates (tabla ya existente, sin allocation
--- extra por llamada). Este bloque cuantifica el KB/llamada de ApplyToAll
--- de forma aislada del resto del benchmark.
--- ============================================================
-do
-    collectgarbage("collect")
-    collectgarbage("stop")
-    local gcStart = collectgarbage("count")
-    local APPLY_TO_ALL_SAMPLES = 200
-    for i = 1, APPLY_TO_ALL_SAMPLES do
-        addonTable.Dispatcher.ApplyToAll(false)
-    end
-    local gcEnd = collectgarbage("count")
-    collectgarbage("restart")
-    collectgarbage("collect")
-
-    local totalKB = gcEnd - gcStart
-    local kbPerCall = totalKB / APPLY_TO_ALL_SAMPLES
-
-    print("")
-    print("--- ApplyToAll: coste de asignacion aislado ---")
-    print(string.format("Muestras: %d llamadas -- Total: %.2f KB -- %.4f KB/llamada",
-        APPLY_TO_ALL_SAMPLES, totalKB, kbPerCall))
-    print("(Con Minimizer.ActiveNameplates este numero deberia ser notablemente menor")
-    print(" que con C_NamePlate.GetNamePlates(), que alocaba una tabla de tamano N por llamada)")
-end
-
--- Improved benchmark: realistic hot-path is ApplyToUnit per event/unit.
--- We simulate per-unit events, random state churn (casts/threat/absorbs), and
--- occasional bursts of simultaneous updates to exercise worst-cases.
-local ITERATIONS = 1000
-local NUM_RUNS = 6
-local BASE_SEED = tonumber(os.time())
-
-local function run_single(runIndex, seed)
-    math.randomseed(seed)
-    print(string.format("Run %d/%d — seed=%d — iterations=%d x %d nameplates", runIndex, NUM_RUNS, seed, ITERATIONS, NUM_NAMEPLATES))
-
-    local perCallSamples = {} -- elapsed times (s) per ApplyToUnit call
-    local perFrameApplyCounts = {} -- number of ApplyToUnit calls per frame
-
-    -- Medicion de basura generada DURANTE el pase cronometrado, no del setup
-    -- previo (creacion de nameplates/mocks, que ya paso antes de entrar aqui).
-    -- Se detiene el GC para la ventana medida: collectgarbage("count") normalmente
-    -- refleja el heap NETO (ya descontando lo que el colector automatico haya
-    -- liberado a mitad de camino), lo que esconde el churn real -- exactamente
-    -- el numero que nos interesa para detectar el tipo de basura que causa
-    -- stuttering. Con el GC detenido, nada se libera durante el loop, asi que
-    -- el delta de KB es el total ASIGNADO, no el neto retenido.
-    collectgarbage("collect")
-    collectgarbage("stop")
-    local gcStartKB = collectgarbage("count")
-
-    local benchStart = os.clock()
-    for frame = 1, ITERATIONS do
-    -- Advance a small time slice (simulate 100 FPS-ish)
-    Mocks.AdvanceTime(0.01)
-
-    -- Occasionally create a burst (simulate many nameplates recycled / many casts start)
-    local burst = (math.random() < 0.02) -- 2% of frames are bursts
-    local updatesThisFrame = burst and math.random(10, math.min(30, NUM_NAMEPLATES)) or math.random(1, 5)
-
-    -- Choose random units to update this frame
+    check(math.abs(H.percentile({1, 2, 3, 4, 5}, 0.50) - 3) < 0.001, "median percentile")
+    check(math.abs(H.percentile({1, 2, 3, 4, 5}, 0.90) - 5) < 0.001, "p90 percentile")
     local calls = 0
-    for j = 1, updatesThisFrame do
-        local idx = math.random(1, NUM_NAMEPLATES)
-        local unit = "nameplate" .. idx
-
-        -- Introduce churn: with some probability mutate the unit state so
-        -- code paths that invalidate caches and flip persistent flags are hit.
-        local u = Mocks.units[unit]
-        if u then
-            -- End casts whose endTime passed
-            if u.cast and (u.cast.endTime or 0) <= Mocks.time then
-                u.cast = nil
-            end
-            -- Start a new cast sometimes
-            if (not u.cast) and (math.random() < 0.05 or burst and math.random() < 0.3) then
-                local dur = 0.8 + math.random() * 3.0
-                u.cast = {
-                    name = "Bench Spell",
-                    startTime = Mocks.time * 1000,
-                    endTime = (Mocks.time + dur) * 1000,
-                    castID = math.random(1, 1000000),
-                    uninterruptible = (math.random() < 0.1),
-                }
-            end
-            -- Randomly toggle absorbs/threat to exercise Decision/Absorb/Threat
-            if math.random() < 0.03 then
-                u.absorbs = (math.random() < 0.5) and math.random(10, 500) or 0
-            end
-            if math.random() < 0.05 then
-                u.threatSituation = math.random(0, 3)
-            end
-        end
-
-        -- Measure ApplyToUnit (hot-path)
-        local start = os.clock()
-        addonTable.Dispatcher.ApplyToUnit(unit)
-        local elapsed = os.clock() - start
-        perCallSamples[#perCallSamples + 1] = elapsed
-        calls = calls + 1
-    end
-    perFrameApplyCounts[#perFrameApplyCounts + 1] = calls
-    end
-
-    -- Reactivar el GC INMEDIATAMENTE tras el loop cronometrado -- no dejar
-    -- nunca el colector detenido mas alla de la ventana medida. Si en el
-    -- futuro NUM_NAMEPLATES/ITERATIONS suben mucho, revisar el pico de
-    -- memoria durante esta ventana antes de asumir que sigue siendo inofensivo.
-    local gcEndKB = collectgarbage("count")
-    collectgarbage("restart")
-    collectgarbage("collect")
-    local totalGarbageKB = gcEndKB - gcStartKB
-
-    local totalTime = os.clock() - benchStart
-
-    -- Compute per-call statistics (ms) and percentiles
-    local totalCalls = #perCallSamples
-    local totalCallTime = 0
-    for _, v in ipairs(perCallSamples) do totalCallTime = totalCallTime + v end
-    local avgCallMs = (totalCalls > 0) and (totalCallTime / totalCalls) * 1000 or 0
-    local kbPerCall = (totalCalls > 0) and (totalGarbageKB / totalCalls) or 0
-
-    local sortedSamples = {}
-    for i, v in ipairs(perCallSamples) do sortedSamples[i] = v end
-    table.sort(sortedSamples)
-    local function percentile(p)
-        if #sortedSamples == 0 then return 0 end
-        local idx = math.max(1, math.floor(#sortedSamples * p / 100 + 0.5))
-        return sortedSamples[idx] * 1000
-    end
-    local p50 = percentile(50)
-    local p90 = percentile(90)
-    local p99 = percentile(99)
-    local maxCallMs = (#sortedSamples > 0) and (sortedSamples[#sortedSamples] * 1000) or 0
-
-    local worstFrameCalls = 0
-    for _, c in ipairs(perFrameApplyCounts) do if c > worstFrameCalls then worstFrameCalls = c end end
-
-    -- Build a compact summary table to return
-    local summary = {
-        timestamp = os.date("%Y-%m-%d %H:%M:%S"),
-        iterations = ITERATIONS,
-        nameplates = NUM_NAMEPLATES,
-        totalTime = totalTime,
-        totalCalls = totalCalls,
-        avgCallMs = avgCallMs,
-        totalGarbageKB = totalGarbageKB,
-        kbPerCall = kbPerCall,
-        p50 = p50,
-        p90 = p90,
-        p99 = p99,
-        maxCallMs = maxCallMs,
-        worstFrameCalls = worstFrameCalls,
-        moduleStats = moduleStats,
-        extraStats = extraStats,
-    }
-
-    -- Also rebuild the human-readable report (reuse previous lines construction)
-    local lines = {}
-    local function line(s) lines[#lines + 1] = s end
-    line("")
-    line("=== Minimizer Benchmark Results (run " .. runIndex .. ") ===")
-    line("Date       : " .. summary.timestamp)
-    line(string.format("Iterations : %d frames", summary.iterations))
-    line(string.format("Nameplates : %d units", summary.nameplates))
-    line(string.format("Total Time : %.4f s", summary.totalTime))
-    line(string.format("Total ApplyToUnit calls : %d", summary.totalCalls))
-    line(string.format("Basura generada (GC)    : %.2f KB total / %.4f KB por ApplyToUnit", summary.totalGarbageKB, summary.kbPerCall))
-    line(string.format("Avg ApplyToUnit  : %.6f ms", summary.avgCallMs))
-    line(string.format("P50 / P90 / P99 / Max : %.3f ms / %.3f ms / %.3f ms / %.3f ms", summary.p50, summary.p90, summary.p99, summary.maxCallMs))
-    line(string.format("Worst frame (calls)   : %d", summary.worstFrameCalls))
-    line("")
-    line("--- Module Breakdown (sorted by total cost) ---")
-    line(string.format("%-22s %-12s %-14s %-10s %s", "Module", "Total (s)", "Avg/call (ms)", "Calls", "Share"))
-    line(string.rep("-", 72))
-    local sortedModules = {}
-    for name, stats in pairs(moduleStats) do
-        table.insert(sortedModules, { name = name, stats = stats })
-    end
-    table.sort(sortedModules, function(a, b) return a.stats.time > b.stats.time end)
-    for _, mod in ipairs(sortedModules) do
-        local s = mod.stats
-        if s.count > 0 then
-            local avgMs   = (s.time / s.count) * 1000
-            local percent = (s.time / totalTime) * 100
-            line(string.format("%-22s %-12.4f %-14.6f %-10d %5.2f%%",
-                mod.name, s.time, avgMs, s.count, percent))
-        end
-    end
-    line("")
-    line("--- Funciones no-modulo instrumentadas (Decision/Classification/Threat/Absorb) ---")
-    line(string.format("%-22s %-12s %-14s %-10s %s", "Funcion", "Total (s)", "Avg/call (ms)", "Calls", "Share"))
-    line(string.rep("-", 72))
-    local sortedExtra = {}
-    for name, stats in pairs(extraStats) do
-        table.insert(sortedExtra, { name = name, stats = stats })
-    end
-    table.sort(sortedExtra, function(a, b) return a.stats.time > b.stats.time end)
-    for _, item in ipairs(sortedExtra) do
-        local s = item.stats
-        if s.count > 0 then
-            local avgMs = (s.time / s.count) * 1000
-            local percent = (s.time / totalTime) * 100
-            line(string.format("%-22s %-12.4f %-14.6f %-10d %5.2f%%",
-                item.name, s.time, avgMs, s.count, percent))
-        end
-    end
-
-    -- Throttle check block (recompute target/focus counts inline)
-    if addonTable.Target and addonTable.Focus then
-        local targetPaintCount, focusPaintCount = 0, 0
-        local origTargetUpdate = addonTable.Target.UpdateTargetCDs
-        addonTable.Target.UpdateTargetCDs = function(...)
-            targetPaintCount = targetPaintCount + 1
-            return origTargetUpdate(...)
-        end
-        local origFocusUpdate = addonTable.Focus.UpdateFace
-        addonTable.Focus.UpdateFace = function(...)
-            focusPaintCount = focusPaintCount + 1
-            return origFocusUpdate(...)
-        end
-        local SIMULATED_EVENTS = 100
-        for i = 1, SIMULATED_EVENTS do
-            Mocks.AdvanceTime(0.01)
-            Mocks.FireEvent("SPELL_UPDATE_COOLDOWN")
-        end
-        line("")
-        line("--- Throttle check: Target/Focus repaints bajo rafaga de eventos ---")
-        line(string.format("Eventos SPELL_UPDATE_COOLDOWN simulados : %d (en ~1s simulado)", SIMULATED_EVENTS))
-        line(string.format("Target:UpdateTargetCDs() llamadas reales: %d", targetPaintCount))
-        line(string.format("Focus:UpdateFace() llamadas reales       : %d", focusPaintCount))
-        line("(Si estos numeros son cercanos a " .. SIMULATED_EVENTS .. ", el debounce actual NO esta limitando el repintado real y hace falta un throttle explicito, p.ej. limitar a max 1 repintado cada 0.1s con C_Timer)")
-        line("")
-    end
-
-    local report = table.concat(lines, "\n")
-    return summary, report
+    local result = H.measure({
+        name = "self-test",
+        unit = "call",
+        warmup = 1,
+        samples = 2,
+        batch = 10,
+        body = function(batch)
+            for _ = 1, batch do calls = calls + 1 end
+        end,
+    })
+    check(calls == 30, "warmup + measured batch accounting")
+    check(result.msPerOperation.p50 >= 0, "timing statistics are non-negative")
+    check(result.allocationKBPerOperation >= 0, "allocation accounting is non-negative")
+    check(type(result.retainedKB) == "number", "retained memory accounting exists")
+    if failures > 0 then os.exit(1) end
+    print("=== Benchmark harness self-tests: PASS ===")
 end
 
--- Main: run multiple passes with different seeds and aggregate results
-print(string.format("Running benchmark: %d runs x %d iterations x %d nameplates (base seed=%d)", NUM_RUNS, ITERATIONS, NUM_NAMEPLATES, BASE_SEED))
-local allSummaries = {}
-local allReports = {}
-for run = 1, NUM_RUNS do
-    -- reset per-run instrumentation counters
-    -- NOTE: Do NOT re-wrap functions each run. Wrapping is performed once
-    -- above during initialization; re-wrapping here would stack wrappers and
-    -- artificially inflate timings and allocations across runs.
-    moduleStats = {}
-    for name, module in pairs(addonTable.Modules) do
-        if type(module.UpdateNamePlate) == "function" then
-            moduleStats[name] = { count = 0, time = 0 }
-        end
+if arg and arg[1] == "--self-test" then
+    runSelfTests()
+    return
+end
+
+local H = dofile("tests/benchmark/harness.lua")
+local Scenarios = dofile("tests/benchmark/scenarios.lua")
+
+local sha = getCommitSHA()
+local startedAt = os.date("!%Y-%m-%dT%H:%M:%SZ")
+local results = Scenarios.all()
+
+local function csvField(value)
+    value = tostring(value == nil and "" or value)
+    if value:find('[,\"]') then value = '"' .. value:gsub('"', '""') .. '"' end
+    return value
+end
+
+local lines = {}
+lines[#lines + 1] = "# Minimizer benchmark suite v2"
+lines[#lines + 1] = "commit=" .. sha
+lines[#lines + 1] = "started_at=" .. startedAt
+lines[#lines + 1] = "timing=CPU time via os.clock; each sample times a batch of operations"
+lines[#lines + 1] = "allocation=heap growth with GC stopped during measured batches; this is allocation pressure, not an exact allocation counter"
+lines[#lines + 1] = "retained=heap delta after cleanup and two full collections; negative values are possible measurement noise and are not treated as leaks"
+lines[#lines + 1] = "thresholds=disabled until a stable baseline is recorded for this suite/environment"
+lines[#lines + 1] = ""
+lines[#lines + 1] = table.concat({"group","name","unit","mean_ms","p50_ms","p90_ms","p99_ms","max_ms","allocation_kb","allocation_kb_per_op","retained_kb","warmup","samples","batch","metadata"}, ",")
+
+for _, r in ipairs(results) do
+    local metadata = ""
+    if r.metadata then
+        local parts = {}
+        for k, v in pairs(r.metadata) do parts[#parts + 1] = tostring(k) .. "=" .. tostring(v) end
+        table.sort(parts)
+        metadata = table.concat(parts, ";")
     end
-    -- Reset counters in extraStats without replacing the table so that the
-    -- wrappers created at initialization keep their references. Replacing
-    -- the table would make existing wrappers attempt to index missing keys
-    -- and crash (see discussion in the test plan).
-    for k, v in pairs(extraStats) do
-        if type(v) == "table" then
-            v.count = 0
-            v.time = 0
-        end
-    end
-
-    local seed = BASE_SEED + run
-    local summary, report = run_single(run, seed)
-    allSummaries[#allSummaries + 1] = summary
-    allReports[#allReports + 1] = report
+    lines[#lines + 1] = table.concat({
+        csvField(r.group), csvField(r.name), csvField(r.unit),
+        string.format("%.9f", r.msPerOperation.mean),
+        string.format("%.9f", r.msPerOperation.p50),
+        string.format("%.9f", r.msPerOperation.p90),
+        string.format("%.9f", r.msPerOperation.p99),
+        string.format("%.9f", r.msPerOperation.max),
+        string.format("%.4f", r.allocationKB),
+        string.format("%.6f", r.allocationKBPerOperation),
+        string.format("%.4f", r.retainedKB),
+        r.warmup, r.samples, r.batch, csvField(metadata),
+    }, ",")
 end
 
--- Aggregate results: compute medians for p90 and avgCallMs
-local function median(values)
-    table.sort(values)
-    local n = #values
-    if n == 0 then return 0 end
-    if n % 2 == 1 then return values[(n+1)/2] end
-    return (values[n/2] + values[n/2 + 1]) / 2
-end
-local p90_vals = {}
-local avg_vals = {}
-local kb_vals = {}
-for _, s in ipairs(allSummaries) do
-    p90_vals[#p90_vals + 1] = s.p90
-    avg_vals[#avg_vals + 1] = s.avgCallMs
-    kb_vals[#kb_vals + 1] = s.kbPerCall
-end
-local agg_p90 = median(p90_vals)
-local agg_avg = median(avg_vals)
-local agg_kb = median(kb_vals)
-
--- Write aggregated report into single file
--- Output handling: by default write to a fixed path so each run replaces
--- the previous aggregated benchmark. If the script is run with the
--- command-line argument "compare", also emit a timestamped "pre" file
--- and an unversioned "benchmark_latest.txt" to ease diffing/comparison.
-local mode = arg and arg[1]
-local dateTag = os.date("%Y%m%d_%H%M%S")
-
-local function build_aggregated_content()
-    local buf = {}
-    table.insert(buf, "Aggregated Benchmark Runs: " .. #allSummaries .. "\n")
-    for i, rep in ipairs(allReports) do
-        table.insert(buf, rep)
-        table.insert(buf, "\n" .. string.rep("=", 72) .. "\n")
-    end
-    table.insert(buf, string.format("\nAGGREGATE SUMMARY (median across runs): p90 = %.4f ms, avgApplyToUnit = %.6f ms, GC = %.4f KB/call\n", agg_p90, agg_avg, agg_kb))
-    return table.concat(buf, "")
-end
-
-local aggContent = build_aggregated_content()
-
-local resultsDir = "tests/results"
-local function try_write(path, content)
+local function write(path, content)
     local fh, err = io.open(path, "w")
     if not fh then
-        io.stderr:write("Warning: could not write results file '" .. path .. "': " .. tostring(err) .. "\n")
+        io.stderr:write("Could not write " .. path .. ": " .. tostring(err) .. "\n")
         return false
     end
     fh:write(content)
@@ -498,27 +105,25 @@ local function try_write(path, content)
     return true
 end
 
-if mode == "compare" then
-    local prePath = resultsDir .. "/benchmark_pre_" .. dateTag .. ".txt"
-    local latestPath = resultsDir .. "/benchmark_latest.txt"
-    local ok1 = try_write(prePath, aggContent)
-    local ok2 = try_write(latestPath, aggContent)
-    if ok1 then print("Aggregated results saved to: " .. prePath) end
-    if ok2 then print("Aggregated results saved to: " .. latestPath) end
-else
-    local outPath = resultsDir .. "/benchmark_aggregated.txt"
-    local ok = try_write(outPath, aggContent)
-    if ok then print("Aggregated results saved to: " .. outPath) end
+local content = table.concat(lines, "\n") .. "\n"
+local stamp = os.date("!%Y%m%dT%H%M%SZ")
+local latest = "tests/results/benchmark_suite_latest.csv"
+local archive = "tests/results/benchmark_suite_" .. (sha ~= "unknown" and sha:sub(1, 12) or stamp) .. ".csv"
+
+assert(write(latest, content))
+if sha ~= "unknown" then write(archive, content) end
+
+print(string.format("Benchmark suite complete: %d scenarios", #results))
+print("Commit: " .. sha)
+print("Results: " .. latest)
+if sha ~= "unknown" then print("Archive: " .. archive) end
+print("")
+print("--- Hot-path candidates (ordered by measured mean, inclusive scenarios) ---")
+table.sort(results, function(a, b) return a.msPerOperation.mean > b.msPerOperation.mean end)
+for i = 1, math.min(15, #results) do
+    local r = results[i]
+    print(string.format("%2d. %-32s %10.6f ms/op  alloc=%8.4f KB/op  retained=%8.4f KB",
+        i, r.name, r.msPerOperation.mean, r.allocationKBPerOperation, r.retainedKB))
 end
-
--- Print a concise aggregated summary and perform regression check
-local REGRESSION_THRESHOLD_MS = 2.5 -- conservative threshold for p90 (ms)
-print(string.format("Aggregated median p90 = %.4f ms, median avg = %.6f ms, median GC = %.4f KB/call", agg_p90, agg_avg, agg_kb))
-if agg_p90 > REGRESSION_THRESHOLD_MS then
-    io.stderr:write(string.format("REGRESSION DETECTADA: median p90 = %.4f ms > threshold %.4f ms\n", agg_p90, REGRESSION_THRESHOLD_MS))
-    os.exit(1)
-else
-    print(string.format("Performance OK: median p90 = %.4f ms (threshold: %.4f ms)", agg_p90, REGRESSION_THRESHOLD_MS))
-end
-
-
+print("")
+print("No regression threshold is asserted: a baseline must first be recorded for this exact suite/environment.")
