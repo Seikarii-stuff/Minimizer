@@ -33,9 +33,6 @@ local totalRun = 0
 local totalPassed = 0
 
 local function processSucceeded(ok, reason, code)
-    -- Lua versions/platforms differ slightly in the values returned by
-    -- io.popen():close(). Treat an explicit non-zero exit code as failure and
-    -- otherwise accept a successful process termination.
     if ok == true then return true end
     if ok == nil then return false end
     if reason == "exit" and tonumber(code) == 0 then return true end
@@ -110,19 +107,18 @@ end
 
 local benchmarkSummaryKeys = {
     "Benchmark suite complete:",
+    "Timestamp:",
     "Total benchmark time:",
     "Measured operation time:",
     "Harness overhead:",
-    "Commit:",
     "Results:",
+    "Archive:",
     "Status:",
 }
-local printed = {}
 for line in benchmarkOutput:gmatch("([^\n\r]+)") do
     for _, key in ipairs(benchmarkSummaryKeys) do
         if line:find("^" .. key, 1, false) then
             print(line)
-            printed[#printed + 1] = line
             break
         end
     end
