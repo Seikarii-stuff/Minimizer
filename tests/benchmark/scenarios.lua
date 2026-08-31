@@ -55,17 +55,29 @@ function M.threatScaling()
         local units = {}
         for i = 1, n do units[i] = "nameplate" .. i end
 
-        results[#results + 1] = bench("threat.stable." .. n, "GetUnitThreatState", function(batch)
+        -- Per-unit query: deliberately isolates the cache/query cost. The
+        -- `units` metadata must not be mistaken for work done per operation.
+        results[#results + 1] = bench("threat.query." .. n, "GetUnitThreatState", function(batch)
             for i = 1, batch do A.Threat.GetUnitThreatState(units[((i - 1) % n) + 1]) end
-        end, { subsystem = "Threat", units = n, state = "stable/cached" }, { cost = "normal" })
+        end, { subsystem = "Threat", units = n, workload = "single-unit query" }, { cost = "normal" })
 
-        results[#results + 1] = bench("threat.invalidated." .. n, "Invalidate + GetUnitThreatState", function(batch)
-            for i = 1, batch do
-                local unit = units[((i - 1) % n) + 1]
-                A.Threat.Invalidate(unit)
-                A.Threat.GetUnitThreatState(unit)
+        -- System-shaped workload: every logical operation processes the whole
+        -- tracked set, so scaling the population changes the amount of Threat
+        -- work rather than only changing which unit is queried.
+        results[#results + 1] = bench("threat.multi_unit." .. n, "Threat query across all tracked units", function(batch)
+            for _ = 1, batch do
+                for i = 1, n do A.Threat.GetUnitThreatState(units[i]) end
             end
-        end, { subsystem = "Threat", units = n, state = "changed/event path" }, { cost = "normal", allocation = true })
+        end, { subsystem = "Threat", units = n, workload = "all tracked units" }, { cost = "heavy" })
+
+        results[#results + 1] = bench("threat.invalidation." .. n, "Invalidate + GetUnitThreatState across all units", function(batch)
+            for _ = 1, batch do
+                for i = 1, n do
+                    A.Threat.Invalidate(units[i])
+                    A.Threat.GetUnitThreatState(units[i])
+                end
+            end
+        end, { subsystem = "Threat", units = n, workload = "changed/event path for all units" }, { cost = "heavy", allocation = true })
     end
     return results
 end
@@ -96,12 +108,18 @@ function M.castScaling()
         H.resetState(); H.makeUnits(casters, { casters = casters })
         local units = {}
         for i = 1, casters do units[i] = "nameplate" .. i end
-        results[#results + 1] = bench("cast." .. casters, "Cast.GetState", function(batch)
+        results[#results + 1] = bench("cast.query." .. casters, "Cast.GetState", function(batch)
             for i = 1, batch do A.Cast.GetState(units[((i - 1) % casters) + 1]) end
-        end, { subsystem = "Cast", casters = casters }, { cost = "normal" })
-        results[#results + 1] = bench("cast.pipeline." .. casters, "ApplyToUnit for active casters", function(batch)
-            for i = 1, batch do A.Dispatcher.ApplyToUnit(units[((i - 1) % casters) + 1]) end
-        end, { subsystem = "Cast + integrated pipeline", casters = casters }, { cost = "heavy" })
+        end, { subsystem = "Cast", casters = casters, workload = "single-caster state query" }, { cost = "normal" })
+        results[#results + 1] = bench("cast.pipeline." .. casters, "Update all active casters", function(batch)
+            for _ = 1, batch do
+                for i = 1, casters do
+                    local unit = units[i]
+                    A.Cast.GetState(unit)
+                    A.Dispatcher.ApplyToUnit(unit, false)
+                end
+            end
+        end, { subsystem = "Cast + integrated pipeline", casters = casters, workload = "state detection + castbar-related pipeline" }, { cost = "heavy" })
     end
     return results
 end
@@ -197,10 +215,10 @@ end
 
 function M.recycling()
     local results = {}
-    for _, n in ipairs(levels({1, 10, 50}, {10})) do
+    for _, n in ipairs(levels({1, 10, 100}, {1, 10})) do
         H.resetState()
         local cycles = n
-        results[#results + 1] = bench("recycle." .. n, "add/update/remove/reuse", function(batch)
+        results[#results + 1] = bench("recycle." .. n, "add/update/remove/reuse lifecycle", function(batch)
             for cycle = 1, batch do
                 local unit = "nameplate" .. (((cycle - 1) % cycles) + 1)
                 if not Mocks.units[unit] then
@@ -221,7 +239,7 @@ function M.recycling()
                 if A.Lifecycle then A.Lifecycle.IncrementGeneration(unit) end
                 if A.Dispatcher then A.Dispatcher.TrackUnit(unit); A.Dispatcher.ApplyToUnit(unit, true) end
             end
-        end, { subsystem = "Lifecycle", units = n, cycles = cycles }, { cost = "heavy", allocation = true, retention = true })
+        end, { subsystem = "Lifecycle", cycles = cycles, workload = "repeated lifecycle; compare 1/10/100 cycles" }, { cost = "heavy", allocation = true, retention = true })
     end
     return results
 end
