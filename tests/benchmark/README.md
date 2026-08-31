@@ -56,9 +56,15 @@ timestamp=YYYY-MM-DDTHH:MM:SSZ
 benchmark_schema=v5
 ```
 
-The CSV stores `timestamp` as run-level metadata and no longer contains `commit` or `commit_source` fields. Archived result filenames use the timestamp and profile, for example `benchmark_suite_20260831T184213Z_fast.csv`.
+The stable output path is always:
 
-Historical result files are preserved as-is. Older files may contain commit metadata because they were produced by an earlier schema; their metadata is not rewritten or given fabricated timestamps. New and historical result formats should therefore be interpreted according to the schema documented by the run that produced them.
+```text
+tests/results/benchmark_suite_latest.csv
+```
+
+Each run overwrites that same file so the working-tree/Git diff shows the new measurement against the previous result. No timestamped result filenames are created by the benchmark.
+
+Historical result files are preserved as-is. Older files may contain commit metadata because they were produced by an earlier schema; their metadata is not rewritten or given fabricated timestamps. New results should therefore be interpreted according to the current timestamp-based schema.
 
 ## Runner integration
 
