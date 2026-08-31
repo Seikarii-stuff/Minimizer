@@ -15,6 +15,9 @@ Minimizer.Config.DEFAULTS = {
     wheelSize = 180,
     wheelPipRadius = 75,
 
+    -- Mouse overlay: interrupt + halo azul por defecto.
+    mouseHaloMode = "interrupt",
+
     menuPosition = {
         point = "CENTER",
         relativePoint = "CENTER",
