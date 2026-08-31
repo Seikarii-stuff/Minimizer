@@ -5,12 +5,36 @@
 --   lua tests/benchmark/benchmark.lua fast
 --   lua tests/benchmark/benchmark.lua deep
 --   lua tests/benchmark/benchmark.lua --self-test
+
+local function validSHA(value)
+    return type(value) == "string" and value:match("^[0-9a-fA-F]{40}$") ~= nil
+end
+
 local function getCommitSHA()
-    local pipe = io.popen("git rev-parse HEAD 2>/dev/null")
-    if not pipe then return "unknown" end
+    -- CI runners normally expose the exact checkout SHA. Prefer it because it
+    -- remains correct even when the process is launched outside the worktree.
+    local envSHA = os.getenv("GITHUB_SHA") or os.getenv("CI_COMMIT_SHA") or os.getenv("MINIMIZER_BENCHMARK_SHA")
+    if validSHA(envSHA) then return envSHA:lower(), "environment" end
+
+    if type(io.popen) ~= "function" then return "unknown", "io.popen unavailable" end
+
+    -- `--show-toplevel` makes the second command independent of the caller's
+    -- working directory as long as the process starts inside the repository.
+    local rootPipe = io.popen("git rev-parse --show-toplevel 2>/dev/null")
+    if not rootPipe then return "unknown", "git unavailable" end
+    local root = rootPipe:read("*l")
+    rootPipe:close()
+    if not root or root == "" then return "unknown", "not inside a git worktree" end
+
+    -- Quote the path for shells; the normal repository path has no shell
+    -- metacharacters, but spaces are common enough to handle explicitly.
+    local quotedRoot = '"' .. root:gsub('"', '\\"') .. '"'
+    local pipe = io.popen("git -C " .. quotedRoot .. " rev-parse HEAD 2>/dev/null")
+    if not pipe then return "unknown", "git rev-parse unavailable" end
     local sha = pipe:read("*l") or "unknown"
     pipe:close()
-    return sha
+    if validSHA(sha) then return sha:lower(), "git" end
+    return "unknown", "git returned an invalid SHA"
 end
 
 local function parseProfile()
@@ -56,7 +80,7 @@ local H = dofile("tests/benchmark/harness.lua")
 H.setProfile(profile)
 local Scenarios = dofile("tests/benchmark/scenarios.lua")
 
-local sha = getCommitSHA()
+local sha, shaSource = getCommitSHA()
 local startedAt = os.date("!%Y-%m-%dT%H:%M:%SZ")
 local runnerStart = os.clock()
 local results, groupTimings = Scenarios.all()
@@ -77,22 +101,23 @@ local function csvField(value)
 end
 
 local lines = {
-    "# Minimizer benchmark suite v3",
+    "# Minimizer benchmark suite v4",
     "profile=" .. profile,
     "commit=" .. sha,
+    "commit_source=" .. shaSource,
     "started_at=" .. startedAt,
     "total_runtime_seconds=" .. string.format("%.6f", runnerSeconds),
     "measurement_seconds=" .. string.format("%.6f", measurementSeconds),
     "harness_seconds=" .. string.format("%.6f", harnessSeconds),
     "setup_seconds=" .. string.format("%.6f", setupSeconds),
     "cleanup_seconds=" .. string.format("%.6f", cleanupSeconds),
-    "timing=CPU time via os.clock; each sample times a batch of operations with GC stopped",
-    "allocation=only scenarios marked for allocation measurement stop GC and report heap growth; this is allocation pressure, not an exact allocation counter",
-    "retained=only retention scenarios force collection before/after cleanup; negative deltas are runtime noise, not proof of reclamation",
+    "timing=CPU time via os.clock; each sample times a batch of operations with adaptive batching for tiny/normal work; GC is stopped during timed work",
+    "allocation=heap growth while GC is stopped; this is allocation pressure/net heap growth, not an exact allocation counter and does not prove zero allocations",
+    "retained=heap delta after cleanup and forced collection; negative values are runtime noise and are not proof of a leak-free lifecycle",
     "fast=representative regression workload; deep=full scaling/microbenchmark/retention workload",
     "thresholds=disabled until a stable baseline is recorded for this exact profile/environment",
     "",
-    "group,name,unit,mean_ms,p50_ms,p90_ms,p99_ms,max_ms,allocation_kb,allocation_kb_per_op,retained_kb,warmup,samples,batch,allocation_measured,retention_measured,measurement_seconds,metadata",
+    "group,name,unit,mean_ms,p50_ms,p90_ms,p99_ms,max_ms,heap_growth_kb,heap_growth_kb_per_op,retained_kb,warmup,samples,batch,allocation_measured,retention_measured,measurement_seconds,metadata",
 }
 
 for _, r in ipairs(results) do
@@ -110,8 +135,8 @@ for _, r in ipairs(results) do
         string.format("%.9f", r.msPerOperation.p90),
         string.format("%.9f", r.msPerOperation.p99),
         string.format("%.9f", r.msPerOperation.max),
-        r.allocationKB and string.format("%.4f", r.allocationKB) or "",
-        r.allocationKBPerOperation and string.format("%.6f", r.allocationKBPerOperation) or "",
+        r.heapGrowthKB and string.format("%.4f", r.heapGrowthKB) or "",
+        r.heapGrowthKBPerOperation and string.format("%.6f", r.heapGrowthKBPerOperation) or "",
         r.retainedKB and string.format("%.4f", r.retainedKB) or "",
         r.warmup, r.samples, r.batch,
         tostring(r.allocationMeasured), tostring(r.retentionMeasured),
@@ -130,14 +155,14 @@ local stamp = os.date("!%Y%m%dT%H%M%SZ")
 local latest = "tests/results/benchmark_suite_latest.csv"
 local archiveKey = sha ~= "unknown" and sha:sub(1, 12) or stamp
 local archive = "tests/results/benchmark_suite_" .. archiveKey .. "_" .. profile .. ".csv"
-assert(write(latest, content))
-if sha ~= "unknown" then write(archive, content) end
+if not write(latest, content) then os.exit(1) end
+if sha ~= "unknown" and not write(archive, content) then os.exit(1) end
 
 print(string.format("Benchmark suite complete: profile=%s scenarios=%d", profile, #results))
 print(string.format("Total benchmark time: %.3fs", runnerSeconds))
 print(string.format("Measured operation time: %.3fs", measurementSeconds))
 print(string.format("Harness overhead: %.3fs (setup %.3fs, cleanup %.3fs)", harnessSeconds, setupSeconds, cleanupSeconds))
-print("Commit: " .. sha)
+print("Commit: " .. sha .. " (source=" .. shaSource .. ")")
 print("Results: " .. latest)
 if sha ~= "unknown" then print("Archive: " .. archive) end
 print("")
@@ -148,9 +173,10 @@ print("--- Hot-path candidates (ordered by measured mean, inclusive scenarios) -
 table.sort(results, function(a, b) return a.msPerOperation.mean > b.msPerOperation.mean end)
 for i = 1, math.min(15, #results) do
     local r = results[i]
-    print(string.format("%2d. %-32s %10.6f ms/op  alloc=%s  retained=%s", i, r.name, r.msPerOperation.mean,
-        r.allocationKBPerOperation and string.format("%.4f KB/op", r.allocationKBPerOperation) or "n/a",
+    print(string.format("%2d. %-32s %10.6f ms/op  heap=%s  retained=%s", i, r.name, r.msPerOperation.mean,
+        r.heapGrowthKBPerOperation and string.format("%.4f KB/op", r.heapGrowthKBPerOperation) or "n/a",
         r.retainedKB and string.format("%.4f KB", r.retainedKB) or "n/a"))
 end
 print("")
+print("Status: PASS")
 print("No regression threshold is asserted: a baseline must first be recorded for this exact suite/profile/environment.")
