@@ -118,11 +118,8 @@ local function write(path, value)
     fh:write(value); fh:close(); return true
 end
 
-local stamp = os.date("!%Y%m%dT%H%M%SZ")
 local latest = "tests/results/benchmark_suite_latest.csv"
-local archive = "tests/results/benchmark_suite_" .. stamp .. "_" .. profile .. ".csv"
 if not write(latest, content) then os.exit(1) end
-if not write(archive, content) then os.exit(1) end
 
 print(string.format("Benchmark suite complete: profile=%s scenarios=%d", profile, #results))
 print(string.format("Timestamp: %s", startedAt))
@@ -130,7 +127,6 @@ print(string.format("Total benchmark time: %.3fs", runnerSeconds))
 print(string.format("Measured operation time: %.3fs", measurementSeconds))
 print(string.format("Harness overhead: %.3fs (setup %.3fs, cleanup %.3fs)", harnessSeconds, setupSeconds, cleanupSeconds))
 print("Results: " .. latest)
-print("Archive: " .. archive)
 print("")
 print("--- Group runtime ---")
 for group, seconds in pairs(groupTimings) do print(string.format("%-16s %.3fs", group, seconds)) end
