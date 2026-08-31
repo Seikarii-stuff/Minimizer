@@ -45,11 +45,20 @@ No production Threat code is changed to make these measurements possible.
 
 Lifecycle recycling compares 1, 10 and 100 repeated cycles in Deep, with a reduced 1/10 smoke sweep in Fast. The intended leak signal is progressive retained growth as cycle count increases.
 
-## Commit identity
+## Run metadata
 
-The benchmark first accepts a valid 40-character SHA from `GITHUB_SHA`, `CI_COMMIT_SHA`, or `MINIMIZER_BENCHMARK_SHA`. Otherwise it asks Git for the worktree root and runs `git -C <root> rev-parse HEAD`. This removes dependence on the caller's current directory while still requiring the process to start inside the checkout.
+Every new benchmark result records the UTC start timestamp and the benchmark schema version. The timestamp identifies **when** a measurement was taken; it is not a version identifier and does not identify the exact source revision.
 
-If `io.popen`, Git, or the repository is unavailable, the result explicitly records `commit=unknown` and a `commit_source` reason. No SHA is fabricated. When a real SHA is available, archived CSVs use its first 12 characters in the filename.
+New output uses:
+
+```text
+timestamp=YYYY-MM-DDTHH:MM:SSZ
+benchmark_schema=v5
+```
+
+The CSV stores `timestamp` as run-level metadata and no longer contains `commit` or `commit_source` fields. Archived result filenames use the timestamp and profile, for example `benchmark_suite_20260831T184213Z_fast.csv`.
+
+Historical result files are preserved as-is. Older files may contain commit metadata because they were produced by an earlier schema; their metadata is not rewritten or given fabricated timestamps. New and historical result formats should therefore be interpreted according to the schema documented by the run that produced them.
 
 ## Runner integration
 
@@ -59,10 +68,10 @@ The functional test list intentionally excludes helper/debug files and the bench
 
 ## Output
 
-The CSV stores `profile`, `commit`, `commit_source`, total/measurement/harness timing, setup/cleanup timing, timing percentiles, `heap_growth_kb`, `heap_growth_kb_per_op`, and `retained_kb`. The benchmark prints a compact summary including total runtime, measured operation time, harness overhead, commit and explicit status.
+The CSV stores `profile`, `timestamp`, `benchmark_schema`, total/measurement/harness timing, setup/cleanup timing, timing percentiles, `heap_growth_kb`, `heap_growth_kb_per_op`, and `retained_kb`. The benchmark prints a compact summary including total runtime, measured operation time, harness overhead, timestamp and explicit status.
 
 The intended Fast budget is roughly **5–10 seconds or less** on the development machine class. The suite does not trade away coverage merely to hit a lower number; if an 8-second run is more stable than a 4-second run, the 8-second run is preferred.
 
 ## Reproducibility
 
-For a baseline, run Fast five times in the same environment and record total runtime, representative p50/p90/p99 values and memory columns. Run Deep separately for full scaling, allocation and retention analysis. A large change should be repeated before being treated as a regression.
+For a baseline, run Fast five times in the same environment and record timestamp, total runtime, representative p50/p90/p99 values and memory columns. Run Deep separately for full scaling, allocation and retention analysis. Because timestamp is temporal metadata rather than source identity, preserve the benchmark input/configuration alongside baselines when exact source provenance matters.
