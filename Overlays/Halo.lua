@@ -17,6 +17,7 @@ function Halo.Create(parent, options)
     local size = tonumber(options.size) or DEFAULT_SIZE
     local frame = CreateFrame("Frame", name, parent or UIParent)
     frame:SetSize(size, size)
+    frame.MinimizerHaloSize = size
     frame:Hide()
 
     local texture = frame:CreateTexture(nil, "ARTWORK")
