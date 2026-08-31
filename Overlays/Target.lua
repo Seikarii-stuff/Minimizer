@@ -8,7 +8,10 @@ local HALO_SIZE = 46
 local STRIPED_PATTERN_TEXTURE = "Interface\\AddOns\\Minimizer\\assets\\striped_pattern"
 local STRIPED_PATTERN_ALPHA = 0.6
 
-local haloFrame = Minimizer.Widgets.CreateHalo("MinimizerTargetHalo", nil, HALO_SIZE)
+local haloFrame = Minimizer.Halo.Create(nil, {
+    name = "MinimizerTargetHalo",
+    size = HALO_SIZE,
+})
 
 local interruptCountdown = CreateFrame("Cooldown", "MinimizerTargetInterruptCountdown", haloFrame, "CooldownFrameTemplate")
 interruptCountdown:SetAllPoints()
@@ -39,8 +42,6 @@ local function EnsureStripedOverlay(healthBar)
     texture:SetTexture(STRIPED_PATTERN_TEXTURE)
     texture:SetAlpha(STRIPED_PATTERN_ALPHA)
     texture:SetBlendMode("BLEND")
-    -- Keep the source and draw-order invariants inspectable in the lightweight
-    -- test environment without depending on WoW's texture introspection APIs.
     texture.MinimizerTexturePath = STRIPED_PATTERN_TEXTURE
     texture.MinimizerDrawLayer = "OVERLAY"
 
@@ -81,18 +82,22 @@ local function UpdateInterruptCountdown()
     interruptCountdown:Show()
 end
 
+local function HideHalo()
+    haloFrame:Hide()
+    interruptCountdown:Hide()
+    haloFrame:SetHost(nil)
+end
+
 function Target:UpdateTargetCDs()
     if not UnitExists("target") or UnitIsDead("target") then
-        haloFrame:Hide()
-        interruptCountdown:Hide()
+        HideHalo()
         HideStripedOverlay()
         return
     end
 
     local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit("target")
     if not plate then
-        haloFrame:Hide()
-        interruptCountdown:Hide()
+        HideHalo()
         HideStripedOverlay()
         return
     end
@@ -108,7 +113,8 @@ function Target:UpdateTargetCDs()
         and Minimizer.Interrupt.GetSpellID()
 
     if interruptSpellID then
-        Minimizer.Widgets.UpdateHalo(haloFrame, interruptSpellID)
+        haloFrame:SetHost(plate)
+        haloFrame:ShowFor(interruptSpellID)
         haloFrame:ClearAllPoints()
         haloFrame:SetPoint("CENTER", plate, "BOTTOM", 0, 10 + (HALO_SIZE / 2))
         local plateLevel = (plate:GetFrameLevel() or 0)
@@ -116,8 +122,7 @@ function Target:UpdateTargetCDs()
         interruptCountdown:SetFrameLevel((haloFrame:GetFrameLevel() or 0) + 10)
         UpdateInterruptCountdown()
     else
-        haloFrame:Hide()
-        interruptCountdown:Hide()
+        HideHalo()
     end
 end
 

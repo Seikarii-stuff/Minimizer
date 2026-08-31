@@ -16,11 +16,13 @@ local MIN_PIP_RADIUS, MAX_PIP_RADIUS = 45, 105
 local WHEEL_X = 0
 local WHEEL_Y = -45
 
+-- Player UI uses Blizzard's normal window strata. The component itself does not
+-- elevate its children above that context; future overlays (e.g. Mouse) may opt
+-- into a higher context independently.
 local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", UIParent)
 wheelFrame:SetSize(DEFAULT_SIZE, DEFAULT_SIZE)
-wheelFrame:SetFrameStrata("HIGH")
+wheelFrame:SetFrameStrata("MEDIUM")
 wheelFrame:SetPoint("CENTER", UIParent, "CENTER", WHEEL_X, WHEEL_Y)
-wheelFrame:SetFrameLevel(100)
 
 local wheelTexture = wheelFrame:CreateTexture(nil, "ARTWORK")
 wheelTexture:SetAllPoints()
@@ -51,7 +53,7 @@ Minimizer.Widgets.ConfigureCooldownFrame(interruptCooldown, {
     swipeTexture = "Interface\\AddOns\\Minimizer\\assets\\halo_ring",
     swipeColor = { 0.00, 0.00, 0.00, 0.75 },
 })
-interruptCooldown:SetFrameLevel(110)
+interruptCooldown:SetFrameLevel((wheelFrame:GetFrameLevel() or 0) + 10)
 wheelFrame.MinimizerWheelInterrupt = interruptCooldown
 
 Wheel._enabled = nil

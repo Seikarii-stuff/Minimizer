@@ -10,6 +10,7 @@
 Bootstrap.lua
 Core/Utils.lua
 Overlays/Widgets.lua
+Overlays/Halo.lua
 Plater/HitTest.lua
 Config.lua
 Core/Constants.lua
