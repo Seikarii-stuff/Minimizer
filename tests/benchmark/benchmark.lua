@@ -26,9 +26,9 @@ local function getCommitSHA()
     rootPipe:close()
     if not root or root == "" then return "unknown", "not inside a git worktree" end
 
-    -- Quote the path for shells; the normal repository path has no shell
-    -- metacharacters, but spaces are common enough to handle explicitly.
-    local quotedRoot = '"' .. root:gsub('"', '\\"') .. '"'
+    -- Single-quote the path and escape embedded single quotes so shell
+    -- metacharacters/spaces cannot change the git command.
+    local quotedRoot = "'" .. root:gsub("'", "'\\''") .. "'"
     local pipe = io.popen("git -C " .. quotedRoot .. " rev-parse HEAD 2>/dev/null")
     if not pipe then return "unknown", "git rev-parse unavailable" end
     local sha = pipe:read("*l") or "unknown"
