@@ -1,12 +1,10 @@
 -- tests/benchmark/harness.lua
--- Shared benchmark harness. It deliberately measures batches of operations so
--- Lua 5.1/LuaJIT's coarse os.clock resolution does not collapse p50/p90 to 0ms.
+-- Shared benchmark harness. The runner uses profile-driven sampling so the
+-- normal suite stays fast without turning very cheap operations into timer-noise.
 local TestHarness = dofile("tests/test_harness.lua")
 local Mocks = TestHarness.Mocks
 local Addon = TestHarness.addonTable
 
--- Match the lifecycle used by the functional suite: the addon is fully loaded
--- before any benchmark scenario mutates configuration or nameplates.
 TestHarness.fireAddonLoaded()
 
 local Harness = {}
@@ -14,11 +12,48 @@ Harness.Mocks = Mocks
 Harness.Addon = Addon
 Harness.ADDON_NAME = TestHarness.ADDON_NAME
 
-Harness.DEFAULTS = {
-    warmup = 3,
-    samples = 9,
-    batch = 100,
+local PROFILES = {
+    fast = {
+        name = "fast",
+        warmup = 2,
+        samples = 7,
+        batch = { tiny = 1000, normal = 200, heavy = 25, cold = 8 },
+        allocation = false,
+        retention = false,
+    },
+    deep = {
+        name = "deep",
+        warmup = 3,
+        samples = 15,
+        batch = { tiny = 1000, normal = 200, heavy = 25, cold = 8 },
+        allocation = true,
+        retention = true,
+    },
 }
+
+Harness.PROFILES = PROFILES
+Harness.profile = PROFILES.fast
+
+function Harness.setProfile(name)
+    local profile = PROFILES[name]
+    assert(profile, "unknown benchmark profile: " .. tostring(name))
+    Harness.profile = profile
+end
+
+function Harness.getProfile()
+    return Harness.profile
+end
+
+function Harness.profileValue(key, default)
+    local value = Harness.profile[key]
+    if value == nil then return default end
+    return value
+end
+
+function Harness.batch(kind)
+    local batches = Harness.profile.batch
+    return batches[kind or "normal"] or batches.normal
+end
 
 local function sorted(values)
     local copy = {}
@@ -67,42 +102,67 @@ end
 
 function Harness.measure(spec)
     assert(type(spec) == "table" and type(spec.body) == "function", "benchmark spec/body required")
-    local warmup = spec.warmup or Harness.DEFAULTS.warmup
-    local samples = spec.samples or Harness.DEFAULTS.samples
-    local batch = spec.batch or Harness.DEFAULTS.batch
+    local profile = Harness.profile
+    local warmup = spec.warmup or profile.warmup
+    local samples = spec.samples or profile.samples
+    local batch = spec.batch or Harness.batch(spec.cost)
+    local allocation = spec.allocation
+    if allocation == nil then allocation = profile.allocation end
+    local retention = spec.retention
+    if retention == nil then retention = profile.retention end
 
+    local setupStart = os.clock()
     if spec.setup then spec.setup() end
-    for _ = 1, warmup do
-        spec.body(batch)
+    local setupSeconds = os.clock() - setupStart
+
+    for _ = 1, warmup do spec.body(batch) end
+
+    -- Full GC is deliberately not part of every Fast measurement. It was one
+    -- of the largest sources of runner overhead in the previous suite. The
+    -- timed operation still runs with GC stopped; isolated allocation/retention
+    -- scenarios opt back into the full collection protocol.
+    local retainedBefore
+    if allocation or retention then
+        forceCollect()
+        retainedBefore = Harness.heapKB()
     end
 
-    forceCollect()
-    local retainedBefore = Harness.heapKB()
-    local allocationStart = retainedBefore
     local timings = {}
-
     collectgarbage("stop")
+    local measureStart = os.clock()
     for _ = 1, samples do
         local start = os.clock()
         spec.body(batch)
         timings[#timings + 1] = os.clock() - start
     end
-    local allocationEnd = Harness.heapKB()
+    local measureSeconds = os.clock() - measureStart
+    local allocationEnd = allocation and Harness.heapKB() or nil
     collectgarbage("restart")
 
-    local timing = Harness.stats(timings)
-    local retainedAfter
+    local cleanupStart = os.clock()
     if spec.cleanup then spec.cleanup() end
-    forceCollect()
-    retainedAfter = Harness.heapKB()
+    local cleanupSeconds = os.clock() - cleanupStart
 
+    local retainedAfter
+    if retention then
+        forceCollect()
+        retainedAfter = Harness.heapKB()
+    end
+
+    local timing = Harness.stats(timings)
     local result = {
+        profile = profile.name,
         name = spec.name or "unnamed",
         unit = spec.unit or "operation",
         batch = batch,
         samples = samples,
         warmup = warmup,
         secondsPerBatch = timing,
+        measurementSeconds = measureSeconds,
+        setupSeconds = setupSeconds,
+        cleanupSeconds = cleanupSeconds,
+        allocationMeasured = allocation == true,
+        retentionMeasured = retention == true,
         msPerOperation = {
             mean = timing.mean * 1000 / batch,
             min = timing.min * 1000 / batch,
@@ -111,13 +171,11 @@ function Harness.measure(spec)
             p90 = timing.p90 * 1000 / batch,
             p99 = timing.p99 * 1000 / batch,
         },
-        allocationKB = math.max(0, allocationEnd - allocationStart),
-        allocationKBPerOperation = math.max(0, allocationEnd - allocationStart) / batch / samples,
-        retainedKB = retainedAfter - retainedBefore,
+        allocationKB = allocation and math.max(0, allocationEnd - retainedBefore) or nil,
+        allocationKBPerOperation = allocation and math.max(0, allocationEnd - retainedBefore) / (batch * samples) or nil,
+        retainedKB = retention and (retainedAfter - retainedBefore) or nil,
     }
-    if spec.metadata then
-        result.metadata = spec.metadata
-    end
+    if spec.metadata then result.metadata = spec.metadata end
     return result
 end
 

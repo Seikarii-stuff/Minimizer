@@ -1,18 +1,23 @@
 -- tests/benchmark/benchmark.lua
 -- Full benchmark entry point.
 -- Usage:
---   lua tests/benchmark/benchmark.lua
+--   lua tests/benchmark/benchmark.lua          -- Fast (default)
+--   lua tests/benchmark/benchmark.lua fast
+--   lua tests/benchmark/benchmark.lua deep
 --   lua tests/benchmark/benchmark.lua --self-test
---
--- The suite is intentionally separate from tests/test_all.lua: benchmarks are
--- measurements, not pass/fail functional tests, and their timing must not be
--- contaminated by the normal test runner.
 local function getCommitSHA()
     local pipe = io.popen("git rev-parse HEAD 2>/dev/null")
     if not pipe then return "unknown" end
     local sha = pipe:read("*l") or "unknown"
     pipe:close()
     return sha
+end
+
+local function parseProfile()
+    local value = arg and arg[1]
+    if value == "--self-test" then return "self-test" end
+    if value == "deep" or value == "--deep" then return "deep" end
+    return "fast"
 end
 
 local function runSelfTests()
@@ -25,35 +30,45 @@ local function runSelfTests()
     check(math.abs(H.percentile({1, 2, 3, 4, 5}, 0.50) - 3) < 0.001, "median percentile")
     check(math.abs(H.percentile({1, 2, 3, 4, 5}, 0.90) - 5) < 0.001, "p90 percentile")
     local calls = 0
-    local result = H.measure({
-        name = "self-test",
-        unit = "call",
-        warmup = 1,
-        samples = 2,
-        batch = 10,
-        body = function(batch)
-            for _ = 1, batch do calls = calls + 1 end
-        end,
-    })
+    local result = H.measure({ name = "self-test", unit = "call", warmup = 1, samples = 2, batch = 10,
+        body = function(batch) for _ = 1, batch do calls = calls + 1 end end })
     check(calls == 30, "warmup + measured batch accounting")
     check(result.msPerOperation.p50 >= 0, "timing statistics are non-negative")
-    check(result.allocationKBPerOperation >= 0, "allocation accounting is non-negative")
-    check(type(result.retainedKB) == "number", "retained memory accounting exists")
+    check(result.profile == "fast", "default profile is fast")
+    check(result.measurementSeconds >= 0, "measurement timing exists")
+    check(result.setupSeconds >= 0 and result.cleanupSeconds >= 0, "harness overhead timing exists")
+
+    H.setProfile("deep")
+    check(H.getProfile().name == "deep", "deep profile selection")
+    check(H.getProfile().samples > H.PROFILES.fast.samples, "deep uses more samples")
+    H.setProfile("fast")
     if failures > 0 then os.exit(1) end
     print("=== Benchmark harness self-tests: PASS ===")
 end
 
-if arg and arg[1] == "--self-test" then
+local profile = parseProfile()
+if profile == "self-test" then
     runSelfTests()
     return
 end
 
 local H = dofile("tests/benchmark/harness.lua")
+H.setProfile(profile)
 local Scenarios = dofile("tests/benchmark/scenarios.lua")
 
 local sha = getCommitSHA()
 local startedAt = os.date("!%Y-%m-%dT%H:%M:%SZ")
-local results = Scenarios.all()
+local runnerStart = os.clock()
+local results, groupTimings = Scenarios.all()
+local runnerSeconds = os.clock() - runnerStart
+
+local measurementSeconds, setupSeconds, cleanupSeconds = 0, 0, 0
+for _, r in ipairs(results) do
+    measurementSeconds = measurementSeconds + (r.measurementSeconds or 0)
+    setupSeconds = setupSeconds + (r.setupSeconds or 0)
+    cleanupSeconds = cleanupSeconds + (r.cleanupSeconds or 0)
+end
+local harnessSeconds = math.max(0, runnerSeconds - measurementSeconds)
 
 local function csvField(value)
     value = tostring(value == nil and "" or value)
@@ -61,16 +76,24 @@ local function csvField(value)
     return value
 end
 
-local lines = {}
-lines[#lines + 1] = "# Minimizer benchmark suite v2"
-lines[#lines + 1] = "commit=" .. sha
-lines[#lines + 1] = "started_at=" .. startedAt
-lines[#lines + 1] = "timing=CPU time via os.clock; each sample times a batch of operations"
-lines[#lines + 1] = "allocation=heap growth with GC stopped during measured batches; this is allocation pressure, not an exact allocation counter"
-lines[#lines + 1] = "retained=heap delta after cleanup and two full collections; negative values are possible measurement noise and are not treated as leaks"
-lines[#lines + 1] = "thresholds=disabled until a stable baseline is recorded for this suite/environment"
-lines[#lines + 1] = ""
-lines[#lines + 1] = table.concat({"group","name","unit","mean_ms","p50_ms","p90_ms","p99_ms","max_ms","allocation_kb","allocation_kb_per_op","retained_kb","warmup","samples","batch","metadata"}, ",")
+local lines = {
+    "# Minimizer benchmark suite v3",
+    "profile=" .. profile,
+    "commit=" .. sha,
+    "started_at=" .. startedAt,
+    "total_runtime_seconds=" .. string.format("%.6f", runnerSeconds),
+    "measurement_seconds=" .. string.format("%.6f", measurementSeconds),
+    "harness_seconds=" .. string.format("%.6f", harnessSeconds),
+    "setup_seconds=" .. string.format("%.6f", setupSeconds),
+    "cleanup_seconds=" .. string.format("%.6f", cleanupSeconds),
+    "timing=CPU time via os.clock; each sample times a batch of operations with GC stopped",
+    "allocation=only scenarios marked for allocation measurement stop GC and report heap growth; this is allocation pressure, not an exact allocation counter",
+    "retained=only retention scenarios force collection before/after cleanup; negative deltas are runtime noise, not proof of reclamation",
+    "fast=representative regression workload; deep=full scaling/microbenchmark/retention workload",
+    "thresholds=disabled until a stable baseline is recorded for this exact profile/environment",
+    "",
+    "group,name,unit,mean_ms,p50_ms,p90_ms,p99_ms,max_ms,allocation_kb,allocation_kb_per_op,retained_kb,warmup,samples,batch,allocation_measured,retention_measured,measurement_seconds,metadata",
+}
 
 for _, r in ipairs(results) do
     local metadata = ""
@@ -87,43 +110,47 @@ for _, r in ipairs(results) do
         string.format("%.9f", r.msPerOperation.p90),
         string.format("%.9f", r.msPerOperation.p99),
         string.format("%.9f", r.msPerOperation.max),
-        string.format("%.4f", r.allocationKB),
-        string.format("%.6f", r.allocationKBPerOperation),
-        string.format("%.4f", r.retainedKB),
-        r.warmup, r.samples, r.batch, csvField(metadata),
+        r.allocationKB and string.format("%.4f", r.allocationKB) or "",
+        r.allocationKBPerOperation and string.format("%.6f", r.allocationKBPerOperation) or "",
+        r.retainedKB and string.format("%.4f", r.retainedKB) or "",
+        r.warmup, r.samples, r.batch,
+        tostring(r.allocationMeasured), tostring(r.retentionMeasured),
+        string.format("%.6f", r.measurementSeconds or 0), csvField(metadata),
     }, ",")
 end
 
-local function write(path, content)
+local content = table.concat(lines, "\n") .. "\n"
+local function write(path, value)
     local fh, err = io.open(path, "w")
-    if not fh then
-        io.stderr:write("Could not write " .. path .. ": " .. tostring(err) .. "\n")
-        return false
-    end
-    fh:write(content)
-    fh:close()
-    return true
+    if not fh then io.stderr:write("Could not write " .. path .. ": " .. tostring(err) .. "\n"); return false end
+    fh:write(value); fh:close(); return true
 end
 
-local content = table.concat(lines, "\n") .. "\n"
 local stamp = os.date("!%Y%m%dT%H%M%SZ")
 local latest = "tests/results/benchmark_suite_latest.csv"
-local archive = "tests/results/benchmark_suite_" .. (sha ~= "unknown" and sha:sub(1, 12) or stamp) .. ".csv"
-
+local archiveKey = sha ~= "unknown" and sha:sub(1, 12) or stamp
+local archive = "tests/results/benchmark_suite_" .. archiveKey .. "_" .. profile .. ".csv"
 assert(write(latest, content))
 if sha ~= "unknown" then write(archive, content) end
 
-print(string.format("Benchmark suite complete: %d scenarios", #results))
+print(string.format("Benchmark suite complete: profile=%s scenarios=%d", profile, #results))
+print(string.format("Total benchmark time: %.3fs", runnerSeconds))
+print(string.format("Measured operation time: %.3fs", measurementSeconds))
+print(string.format("Harness overhead: %.3fs (setup %.3fs, cleanup %.3fs)", harnessSeconds, setupSeconds, cleanupSeconds))
 print("Commit: " .. sha)
 print("Results: " .. latest)
 if sha ~= "unknown" then print("Archive: " .. archive) end
+print("")
+print("--- Group runtime ---")
+for group, seconds in pairs(groupTimings) do print(string.format("%-16s %.3fs", group, seconds)) end
 print("")
 print("--- Hot-path candidates (ordered by measured mean, inclusive scenarios) ---")
 table.sort(results, function(a, b) return a.msPerOperation.mean > b.msPerOperation.mean end)
 for i = 1, math.min(15, #results) do
     local r = results[i]
-    print(string.format("%2d. %-32s %10.6f ms/op  alloc=%8.4f KB/op  retained=%8.4f KB",
-        i, r.name, r.msPerOperation.mean, r.allocationKBPerOperation, r.retainedKB))
+    print(string.format("%2d. %-32s %10.6f ms/op  alloc=%s  retained=%s", i, r.name, r.msPerOperation.mean,
+        r.allocationKBPerOperation and string.format("%.4f KB/op", r.allocationKBPerOperation) or "n/a",
+        r.retainedKB and string.format("%.4f KB", r.retainedKB) or "n/a"))
 end
 print("")
-print("No regression threshold is asserted: a baseline must first be recorded for this exact suite/environment.")
+print("No regression threshold is asserted: a baseline must first be recorded for this exact suite/profile/environment.")
