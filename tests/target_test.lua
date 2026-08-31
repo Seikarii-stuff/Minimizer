@@ -1,6 +1,10 @@
 local T = dofile("tests/test_harness.lua")
 local Mocks, addonTable, check = T.Mocks, T.addonTable, T.check
 
+-- Target's interrupt fixture is Counter Shot, so make the mocked player a Hunter.
+-- This keeps the test aligned with Data/SpellData.lua instead of relying on a
+-- Warrior default from the shared mock.
+Mocks.units.player.class = "HUNTER"
 Mocks.playerSpells = { [107574] = true, [147362] = true }
 Mocks.cooldowns[147362] = { start = Mocks.time, duration = 15 }
 T.fireAddonLoaded()
