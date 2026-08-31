@@ -16,45 +16,28 @@ local MIN_PIP_RADIUS, MAX_PIP_RADIUS = 45, 105
 local WHEEL_X = 0
 local WHEEL_Y = -45
 
--- Player UI uses Blizzard's normal window strata. The component itself does not
--- elevate its children above that context; future overlays (e.g. Mouse) may opt
--- into a higher context independently.
+-- Player UI uses Blizzard's normal window strata. The host owns this context;
+-- Halo only supplies the reusable visual representation.
 local wheelFrame = CreateFrame("Frame", "MinimizerPlayerWheel", UIParent)
 wheelFrame:SetSize(DEFAULT_SIZE, DEFAULT_SIZE)
 wheelFrame:SetFrameStrata("MEDIUM")
 wheelFrame:SetPoint("CENTER", UIParent, "CENTER", WHEEL_X, WHEEL_Y)
 
-local wheelTexture = wheelFrame:CreateTexture(nil, "ARTWORK")
-wheelTexture:SetAllPoints()
-wheelTexture:SetTexture("Interface\\AddOns\\Minimizer\\assets\\halo_ring")
-wheelTexture:SetBlendMode("BLEND")
-wheelFrame.MinimizerWheelTexture = wheelTexture
+local wheelHalo = Minimizer.Halo.Create(wheelFrame, {
+    size = DEFAULT_SIZE,
+    cooldownName = "MinimizerPlayerWheelInterrupt",
+    cooldownFrameLevelOffset = 10,
+})
+wheelHalo:SetFrameLevel((wheelFrame:GetFrameLevel() or 0) + 1)
+wheelHalo:SetPoint("CENTER", wheelFrame, "CENTER")
+wheelFrame.MinimizerWheelHalo = wheelHalo
+wheelFrame.MinimizerWheelInterrupt = wheelHalo.MinimizerHaloCooldown
 
 local wheelPips = Minimizer.Pips and Minimizer.Pips.CreatePips(
     wheelFrame,
     "MinimizerPlayerWheelPip",
     DEFAULT_PIP_RADIUS
 )
-
-local interruptCooldown = CreateFrame(
-    "Cooldown",
-    "MinimizerPlayerWheelInterrupt",
-    wheelFrame,
-    "CooldownFrameTemplate"
-)
-interruptCooldown:SetAllPoints()
-Minimizer.Widgets.ConfigureCooldownFrame(interruptCooldown, {
-    drawEdge = false,
-    useCircularEdge = true,
-    drawSwipe = true,
-    drawBling = false,
-    reverse = false,
-    hideCountdownNumbers = true,
-    swipeTexture = "Interface\\AddOns\\Minimizer\\assets\\halo_ring",
-    swipeColor = { 0.00, 0.00, 0.00, 0.75 },
-})
-interruptCooldown:SetFrameLevel((wheelFrame:GetFrameLevel() or 0) + 10)
-wheelFrame.MinimizerWheelInterrupt = interruptCooldown
 
 Wheel._enabled = nil
 Wheel._size = DEFAULT_SIZE
@@ -90,12 +73,11 @@ local function UpdateInterrupt()
     local spellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
         and Minimizer.Interrupt.GetSpellID()
     if not spellID or not Minimizer.Widgets.ApplyCooldownDuration then
-        interruptCooldown:Hide()
+        wheelHalo:Hide()
         return
     end
 
-    Minimizer.Widgets.ApplyCooldownDuration(interruptCooldown, spellID)
-    interruptCooldown:Show()
+    wheelHalo:ShowFor(spellID)
 end
 
 local function UpdatePips()
@@ -110,6 +92,7 @@ function Wheel:SetSize(size)
 
     self._size = size
     wheelFrame:SetSize(size, size)
+    wheelHalo:SetSize(size, size)
     return true
 end
 
@@ -131,7 +114,7 @@ function Wheel:SetEnabled(enabled)
     self._enabled = enabled
     if not enabled then
         wheelFrame:Hide()
-        interruptCooldown:Hide()
+        wheelHalo:Hide()
         if wheelPips and Minimizer.Pips and Minimizer.Pips.HidePips then
             Minimizer.Pips.HidePips(wheelPips)
         end

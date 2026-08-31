@@ -25,7 +25,9 @@ function Halo.Create(parent, options)
     texture:SetBlendMode("BLEND")
     frame.MinimizerHaloTexture = texture
 
-    local cooldown = CreateFrame("Cooldown", name and (name .. "Cooldown") or nil, frame, "CooldownFrameTemplate")
+    local cooldownName = options.cooldownName
+        or (name and (name .. "Cooldown") or nil)
+    local cooldown = CreateFrame("Cooldown", cooldownName, frame, "CooldownFrameTemplate")
     cooldown:SetAllPoints()
     Minimizer.Widgets.ConfigureCooldownFrame(cooldown, {
         drawEdge = false,
@@ -39,6 +41,11 @@ function Halo.Create(parent, options)
     })
     frame.MinimizerHaloCooldown = cooldown
     frame.MinimizerHaloHost = parent
+
+    local cooldownLevelOffset = tonumber(options.cooldownFrameLevelOffset) or 0
+    if cooldownLevelOffset ~= 0 then
+        cooldown:SetFrameLevel((frame:GetFrameLevel() or 0) + cooldownLevelOffset)
+    end
 
     function frame:SetHost(host)
         if self.MinimizerHaloHost == host then return end
