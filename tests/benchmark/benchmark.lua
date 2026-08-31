@@ -6,37 +6,6 @@
 --   lua tests/benchmark/benchmark.lua deep
 --   lua tests/benchmark/benchmark.lua --self-test
 
-local function validSHA(value)
-    return type(value) == "string" and value:match("^[0-9a-fA-F]{40}$") ~= nil
-end
-
-local function getCommitSHA()
-    -- CI runners normally expose the exact checkout SHA. Prefer it because it
-    -- remains correct even when the process is launched outside the worktree.
-    local envSHA = os.getenv("GITHUB_SHA") or os.getenv("CI_COMMIT_SHA") or os.getenv("MINIMIZER_BENCHMARK_SHA")
-    if validSHA(envSHA) then return envSHA:lower(), "environment" end
-
-    if type(io.popen) ~= "function" then return "unknown", "io.popen unavailable" end
-
-    -- `--show-toplevel` makes the second command independent of the caller's
-    -- working directory as long as the process starts inside the repository.
-    local rootPipe = io.popen("git rev-parse --show-toplevel 2>/dev/null")
-    if not rootPipe then return "unknown", "git unavailable" end
-    local root = rootPipe:read("*l")
-    rootPipe:close()
-    if not root or root == "" then return "unknown", "not inside a git worktree" end
-
-    -- Single-quote the path and escape embedded single quotes so shell
-    -- metacharacters/spaces cannot change the git command.
-    local quotedRoot = "'" .. root:gsub("'", "'\\''") .. "'"
-    local pipe = io.popen("git -C " .. quotedRoot .. " rev-parse HEAD 2>/dev/null")
-    if not pipe then return "unknown", "git rev-parse unavailable" end
-    local sha = pipe:read("*l") or "unknown"
-    pipe:close()
-    if validSHA(sha) then return sha:lower(), "git" end
-    return "unknown", "git returned an invalid SHA"
-end
-
 local function parseProfile()
     local value = arg and arg[1]
     if value == "--self-test" then return "self-test" end
@@ -80,7 +49,6 @@ local H = dofile("tests/benchmark/harness.lua")
 H.setProfile(profile)
 local Scenarios = dofile("tests/benchmark/scenarios.lua")
 
-local sha, shaSource = getCommitSHA()
 local startedAt = os.date("!%Y-%m-%dT%H:%M:%SZ")
 local runnerStart = os.clock()
 local results, groupTimings = Scenarios.all()
@@ -101,11 +69,10 @@ local function csvField(value)
 end
 
 local lines = {
-    "# Minimizer benchmark suite v4",
+    "# Minimizer benchmark suite v5",
     "profile=" .. profile,
-    "commit=" .. sha,
-    "commit_source=" .. shaSource,
-    "started_at=" .. startedAt,
+    "timestamp=" .. startedAt,
+    "benchmark_schema=v5",
     "total_runtime_seconds=" .. string.format("%.6f", runnerSeconds),
     "measurement_seconds=" .. string.format("%.6f", measurementSeconds),
     "harness_seconds=" .. string.format("%.6f", harnessSeconds),
@@ -153,18 +120,17 @@ end
 
 local stamp = os.date("!%Y%m%dT%H%M%SZ")
 local latest = "tests/results/benchmark_suite_latest.csv"
-local archiveKey = sha ~= "unknown" and sha:sub(1, 12) or stamp
-local archive = "tests/results/benchmark_suite_" .. archiveKey .. "_" .. profile .. ".csv"
+local archive = "tests/results/benchmark_suite_" .. stamp .. "_" .. profile .. ".csv"
 if not write(latest, content) then os.exit(1) end
-if sha ~= "unknown" and not write(archive, content) then os.exit(1) end
+if not write(archive, content) then os.exit(1) end
 
 print(string.format("Benchmark suite complete: profile=%s scenarios=%d", profile, #results))
+print(string.format("Timestamp: %s", startedAt))
 print(string.format("Total benchmark time: %.3fs", runnerSeconds))
 print(string.format("Measured operation time: %.3fs", measurementSeconds))
 print(string.format("Harness overhead: %.3fs (setup %.3fs, cleanup %.3fs)", harnessSeconds, setupSeconds, cleanupSeconds))
-print("Commit: " .. sha .. " (source=" .. shaSource .. ")")
 print("Results: " .. latest)
-if sha ~= "unknown" then print("Archive: " .. archive) end
+print("Archive: " .. archive)
 print("")
 print("--- Group runtime ---")
 for group, seconds in pairs(groupTimings) do print(string.format("%-16s %.3fs", group, seconds)) end
