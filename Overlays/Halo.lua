@@ -47,6 +47,16 @@ function Halo.Create(parent, options)
         cooldown:SetFrameLevel((frame:GetFrameLevel() or 0) + cooldownLevelOffset)
     end
 
+    -- In WoW hiding the parent also hides its children. Keep that relationship
+    -- explicit so the reusable component has deterministic lifecycle semantics.
+    local originalHide = frame.Hide
+    function frame:Hide()
+        if self.MinimizerHaloCooldown then
+            self.MinimizerHaloCooldown:Hide()
+        end
+        return originalHide(self)
+    end
+
     function frame:SetHost(host)
         if self.MinimizerHaloHost == host then return end
         self:ClearAllPoints()
