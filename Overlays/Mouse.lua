@@ -50,6 +50,23 @@ local function OnUpdate(_, elapsed)
     UpdateCursorPosition()
 end
 
+local function UpdateHaloCooldown()
+    local interruptSpellID = Minimizer.Interrupt and Minimizer.Interrupt.GetSpellID
+        and Minimizer.Interrupt.GetSpellID()
+    if not interruptSpellID or not Minimizer.Widgets or not Minimizer.Widgets.ApplyCooldownDuration then
+        return
+    end
+    Minimizer.Widgets.ApplyCooldownDuration(haloFrame.MinimizerHaloCooldown, interruptSpellID)
+end
+
+Mouse.DebouncedUpdate = Minimizer.Utils.Throttle(UpdateHaloCooldown, 0.033)
+
+function Mouse:OnCooldownTick()
+    if enabled then
+        self.DebouncedUpdate()
+    end
+end
+
 function Mouse:SetEnabled(value)
     enabled = value == true
     if not enabled then
@@ -63,6 +80,7 @@ function Mouse:SetEnabled(value)
     cursorElapsed = 0
     lastCursorX, lastCursorY = nil, nil
     UpdateCursorPosition()
+    UpdateHaloCooldown()
     host:SetScript("OnUpdate", OnUpdate)
 end
 
