@@ -12,6 +12,7 @@ Minimizer.Config.DEFAULTS = {
 
     -- Player Wheel: preferencias globales de UI, no por personaje.
     wheelEnabled = true,
+    enableMouseHalo = true,
     wheelSize = 180,
     wheelPipRadius = 75,
 
