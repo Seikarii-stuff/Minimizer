@@ -12,9 +12,11 @@ check(host:GetScript("OnUpdate") ~= nil, "Mouse: enabled por defecto registra On
 
 local setPointCalls = 0
 local lastPoint
+local originalSetPoint = host.SetPoint
 host.SetPoint = function(self, point, relativeTo, relativePoint, x, y)
     setPointCalls = setPointCalls + 1
     lastPoint = { point, relativeTo, relativePoint, x, y }
+    return originalSetPoint(self, point, relativeTo, relativePoint, x, y)
 end
 
 Mocks.cursorPosition = { x = 200, y = 100 }
@@ -25,9 +27,17 @@ check(lastPoint and lastPoint[1] == "CENTER" and lastPoint[2] == _G.UIParent
     and lastPoint[3] == "BOTTOMLEFT" and lastPoint[4] == 200 and lastPoint[5] == 100,
     "Mouse: sigue las coordenadas del cursor")
 
+onUpdate(host, 0.02)
+check(setPointCalls == 1, "Mouse: cursor quieto no vuelve a llamar SetPoint")
+
+Mocks.cursorPosition = { x = 201, y = 100 }
+onUpdate(host, 0.02)
+check(setPointCalls == 2, "Mouse: nuevo cursor vuelve a reposicionar")
+
 setPointCalls = 0
 lastPoint = nil
 onUpdate = host:GetScript("OnUpdate")
+Mocks.cursorPosition = { x = 300, y = 150 }
 for _ = 1, 6 do
     onUpdate(host, 0.001)
 end
