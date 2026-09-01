@@ -52,6 +52,11 @@ Mocks.unitClassificationCallCounts = {}
 -- Counters for UnitCastingInfo/UnitChannelInfo to assert we don't double-call
 Mocks.unitCastingInfoCallCounts = {}
 Mocks.unitChannelInfoCallCounts = {}
+Mocks.cursorPosition = { x = 0, y = 0 }
+
+function _G.GetCursorPosition()
+    return Mocks.cursorPosition.x, Mocks.cursorPosition.y
+end
 
 function _G.GetTime()
     return Mocks.time
@@ -149,6 +154,21 @@ function FrameMixin:GetHideCountdownNumbers() return self.hideCountdownNumbers =
 function FrameMixin:GetParent()
     return rawget(self, "parent")
 end
+function FrameMixin:GetEffectiveScale()
+    return 1
+end
+function FrameMixin:EnableMouse(value)
+    self.mouseEnabled = value ~= false
+end
+function FrameMixin:DisableMouse()
+    self.mouseEnabled = false
+end
+function FrameMixin:Enable()
+    self.enabled = true
+end
+function FrameMixin:Disable()
+    self.enabled = false
+end
 
 function FrameMixin:SetAllHitTestPoints(clickRegion)
     self.MinimizerHitTestRegion = clickRegion
@@ -176,7 +196,7 @@ setmetatable(FrameMixin, {
         if type(k) == "string" then
             if k:match("^Create") then
                 return dummyCreateObject
-            elseif k:match("^Set") or k:match("^Clear") or k:match("^Play") or k:match("^Stop") or k:match("^Hook") then
+            elseif k:match("^Set") or k:match("^Clear") or k:match("^Play") or k:match("^Stop") or k:match("^Hook") or k:match("^Enable") or k:match("^Disable") then
                 return dummyMethod
             elseif k:match("^Get") then
                 return function() return 1, 1, 1, 1 end
@@ -564,6 +584,7 @@ function Mocks.CreateTestNameplate(unitId)
     return np
 end
 
+_G.UIParent = _G.CreateFrame("Frame", "UIParent")
 _G.NamePlateDriverFrame = _G.CreateFrame("Frame", "NamePlateDriverFrame")
 function _G.NamePlateDriverFrame:OnNamePlateAdded(unit) end
 function _G.NamePlateDriverFrame:OnNamePlateRemoved(unit) end

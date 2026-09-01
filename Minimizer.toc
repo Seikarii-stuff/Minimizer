@@ -34,6 +34,7 @@ Wheel/Pips.lua
 Wheel/Wheel.lua
 Overlays/Focus.lua
 Overlays/Target.lua
+Overlays/Mouse.lua
 Menu.lua
 Options.lua
 Plater/Events.lua

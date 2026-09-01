@@ -352,11 +352,18 @@ local function BuildWheelTab(parent)
         table.insert(dropdowns, drop)
     end
 
+    local mouseHaloToggle = CreateCheckbox(parent, "MinimizerMenuMouseHaloToggle", "Enable mouse halo", dropdowns[#dropdowns], -10,
+        MinimizerDB and MinimizerDB.enableMouseHalo ~= false, function(self)
+            if MinimizerDB then MinimizerDB.enableMouseHalo = self:GetChecked() end
+            if Minimizer.Mouse then Minimizer.Mouse:SetEnabled(self:GetChecked()) end
+        end)
+
     parent.controls = {
         wheelToggle = wheelToggle,
         sizeSlider = sizeSlider,
         radiusSlider = radiusSlider,
         dropdowns = dropdowns,
+        mouseHaloToggle = mouseHaloToggle,
     }
 end
 
@@ -448,6 +455,7 @@ function Menu.Refresh()
     controls.wheel.wheelToggle:SetChecked(MinimizerDB and MinimizerDB.wheelEnabled ~= false)
     controls.wheel.sizeSlider:Refresh(tonumber(MinimizerDB and MinimizerDB.wheelSize) or 180)
     controls.wheel.radiusSlider:Refresh(tonumber(MinimizerDB and MinimizerDB.wheelPipRadius) or 75)
+    controls.wheel.mouseHaloToggle:SetChecked(MinimizerDB and MinimizerDB.enableMouseHalo ~= false)
     for _, dropdown in ipairs(controls.wheel.dropdowns or {}) do
         if dropdown.Refresh then dropdown.Refresh() end
     end

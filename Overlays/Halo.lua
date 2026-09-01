@@ -24,6 +24,9 @@ function Halo.Create(parent, options)
     texture:SetAllPoints()
     texture:SetTexture(options.texture or HALO_TEXTURE)
     texture:SetBlendMode("BLEND")
+    if options.color then
+        texture:SetVertexColor(options.color[1], options.color[2], options.color[3], 1)
+    end
     frame.MinimizerHaloTexture = texture
 
     local cooldownName = options.cooldownName
