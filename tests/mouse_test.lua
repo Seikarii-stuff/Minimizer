@@ -80,6 +80,7 @@ Minimizer.Widgets.ApplyCooldownDuration = function(cooldown, spellID)
     return originalApplyCooldownDuration(cooldown, spellID)
 end
 addonTable.Mouse:OnCooldownTick()
+Mocks.AdvanceTime(0.033)
 check(cooldownCalls == 1, "Mouse: OnCooldownTick refleja el interrupt en el halo")
 check(receivedCooldown == halo.MinimizerHaloCooldown, "Mouse: actualiza el cooldown propio del halo")
 check(receivedSpellID == 147362, "Mouse: usa el spellID resuelto por Interrupt")
