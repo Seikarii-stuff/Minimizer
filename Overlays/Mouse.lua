@@ -7,7 +7,7 @@ Minimizer.Mouse = Mouse
 local GetCursorPosition = GetCursorPosition
 local UIParent = UIParent
 
-local HALO_SIZE = 24
+local HALO_SIZE = 46
 local CURSOR_UPDATE_INTERVAL = 0.006944
 
 local host = CreateFrame("Frame", "MinimizerMouseHost", UIParent)
