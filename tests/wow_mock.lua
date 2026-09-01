@@ -52,6 +52,11 @@ Mocks.unitClassificationCallCounts = {}
 -- Counters for UnitCastingInfo/UnitChannelInfo to assert we don't double-call
 Mocks.unitCastingInfoCallCounts = {}
 Mocks.unitChannelInfoCallCounts = {}
+Mocks.cursorPosition = { x = 0, y = 0 }
+
+function _G.GetCursorPosition()
+    return Mocks.cursorPosition.x, Mocks.cursorPosition.y
+end
 
 function _G.GetTime()
     return Mocks.time
@@ -148,6 +153,9 @@ function FrameMixin:SetHideCountdownNumbers(value) self.hideCountdownNumbers = v
 function FrameMixin:GetHideCountdownNumbers() return self.hideCountdownNumbers == true end
 function FrameMixin:GetParent()
     return rawget(self, "parent")
+end
+function FrameMixin:GetEffectiveScale()
+    return 1
 end
 
 function FrameMixin:SetAllHitTestPoints(clickRegion)
@@ -564,6 +572,7 @@ function Mocks.CreateTestNameplate(unitId)
     return np
 end
 
+_G.UIParent = _G.CreateFrame("Frame", "UIParent")
 _G.NamePlateDriverFrame = _G.CreateFrame("Frame", "NamePlateDriverFrame")
 function _G.NamePlateDriverFrame:OnNamePlateAdded(unit) end
 function _G.NamePlateDriverFrame:OnNamePlateRemoved(unit) end
