@@ -15,6 +15,10 @@ local ok, err = pcall(T.fireAddonLoaded)
 check(ok, "Smoke: ADDON_LOADED procesa el addon sin errores" .. (err and (" (" .. tostring(err) .. ")") or ""))
 check(type(addonTable.Dispatcher) == "table" and type(addonTable.Overlays) == "table", "Smoke: Dispatcher y Overlays quedan inicializados")
 
+local mockFrame = CreateFrame("Frame", "MinimizerSmokeFrame")
+check(type(mockFrame.EnableMouse) == "function", "Smoke: el mock de frame expone EnableMouse")
+check(type(mockFrame.DisableMouse) == "function", "Smoke: el mock de frame expone DisableMouse")
+
 local unit = "nameplate1"
 Mocks.CreateTestUnit(unit, {
     name = "Enemy Grunt",

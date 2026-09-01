@@ -157,6 +157,18 @@ end
 function FrameMixin:GetEffectiveScale()
     return 1
 end
+function FrameMixin:EnableMouse(value)
+    self.mouseEnabled = value ~= false
+end
+function FrameMixin:DisableMouse()
+    self.mouseEnabled = false
+end
+function FrameMixin:Enable()
+    self.enabled = true
+end
+function FrameMixin:Disable()
+    self.enabled = false
+end
 
 function FrameMixin:SetAllHitTestPoints(clickRegion)
     self.MinimizerHitTestRegion = clickRegion
@@ -184,7 +196,7 @@ setmetatable(FrameMixin, {
         if type(k) == "string" then
             if k:match("^Create") then
                 return dummyCreateObject
-            elseif k:match("^Set") or k:match("^Clear") or k:match("^Play") or k:match("^Stop") or k:match("^Hook") then
+            elseif k:match("^Set") or k:match("^Clear") or k:match("^Play") or k:match("^Stop") or k:match("^Hook") or k:match("^Enable") or k:match("^Disable") then
                 return dummyMethod
             elseif k:match("^Get") then
                 return function() return 1, 1, 1, 1 end
