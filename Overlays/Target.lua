@@ -32,24 +32,34 @@ local function EnsureStripedOverlay(healthBar)
     local overlay = healthBar.MinimizerTargetStripedOverlay
     if overlay then return overlay end
 
-    overlay = CreateFrame("Frame", nil, healthBar)
+    overlay = CreateFrame("StatusBar", nil, healthBar)
     overlay:SetAllPoints(healthBar)
     local frameLevel = (healthBar:GetFrameLevel() or 0) + 2
     overlay:SetFrameLevel(frameLevel)
 
-    local texture = overlay:CreateTexture(nil, "OVERLAY")
-    texture:SetAllPoints(overlay)
-    texture:SetTexture(STRIPED_PATTERN_TEXTURE)
-    texture:SetAlpha(STRIPED_PATTERN_ALPHA)
-    texture:SetBlendMode("BLEND")
-    texture.MinimizerTexturePath = STRIPED_PATTERN_TEXTURE
-    texture.MinimizerDrawLayer = "OVERLAY"
+    overlay:SetStatusBarTexture(STRIPED_PATTERN_TEXTURE)
+    overlay:SetStatusBarColor(1, 1, 1, STRIPED_PATTERN_ALPHA)
+    overlay:SetOrientation("HORIZONTAL")
+    overlay:SetReverseFill(false)
+    if type(overlay.EnableMouse) == "function" then overlay:EnableMouse(false) end
 
-    overlay.MinimizerTexture = texture
     overlay.MinimizerFrameLevel = frameLevel
     overlay:Hide()
     healthBar.MinimizerTargetStripedOverlay = overlay
     return overlay
+end
+
+local function UpdateStripedOverlay(healthBar, unit)
+    local overlay = EnsureStripedOverlay(healthBar)
+    local maxHealth = UnitHealthMax(unit)
+    local health = UnitHealth(unit)
+
+    overlay:SetMinMaxValues(0, maxHealth)
+    overlay:SetValue(health)
+    overlay:Show()
+
+    stripedHealthBar = healthBar
+    stripedOverlay = overlay
 end
 
 local function HideStripedOverlay()
@@ -60,15 +70,12 @@ local function HideStripedOverlay()
     stripedOverlay = nil
 end
 
-local function ShowStripedOverlay(healthBar)
+local function ShowStripedOverlay(healthBar, unit)
     if stripedHealthBar and stripedHealthBar ~= healthBar and stripedOverlay then
         stripedOverlay:Hide()
     end
 
-    local overlay = EnsureStripedOverlay(healthBar)
-    overlay:Show()
-    stripedHealthBar = healthBar
-    stripedOverlay = overlay
+    UpdateStripedOverlay(healthBar, unit)
 end
 
 local function UpdateInterruptCountdown()
@@ -104,7 +111,7 @@ function Target:UpdateTargetCDs()
 
     local healthBar = Minimizer.Utils and Minimizer.Utils.GetHealthBar and Minimizer.Utils.GetHealthBar(plate)
     if healthBar then
-        ShowStripedOverlay(healthBar)
+        ShowStripedOverlay(healthBar, "target")
     else
         HideStripedOverlay()
     end
