@@ -8,13 +8,13 @@ WIDTH = 256
 HEIGHT = 256
 
 # Ancho de cada franja blanca
-STRIPE_WIDTH = 18
+STRIPE_WIDTH = 120
 
 # Separación entre franjas
-STRIPE_GAP = 46
+STRIPE_GAP = 120
 
 # Grosor del borde negro
-OUTLINE = 3
+OUTLINE = 10
 
 OUTPUT = "striped_pattern.tga"
 
