@@ -6,6 +6,7 @@ MinimizerCharDB = {}
 T.fireAddonLoaded()
 
 local host = _G.MinimizerMouseHost
+local halo = _G.MinimizerMouseHalo
 check(addonTable.Overlays.Get("Mouse") == addonTable.Mouse, "Mouse: registrado en Overlays")
 check(host:IsShown() == true, "Mouse: enabled por defecto muestra el host")
 check(host:GetScript("OnUpdate") ~= nil, "Mouse: enabled por defecto registra OnUpdate")
@@ -49,9 +50,48 @@ addonTable.Mouse:SetEnabled(false)
 check(host:IsShown() == false, "Mouse: OFF oculta el host")
 check(host:GetScript("OnUpdate") == nil, "Mouse: OFF elimina realmente OnUpdate")
 
+local cooldownCallsWhenOff = 0
+local originalDebouncedUpdate = addonTable.Mouse.DebouncedUpdate
+addonTable.Mouse.DebouncedUpdate = function(...)
+    cooldownCallsWhenOff = cooldownCallsWhenOff + 1
+    return originalDebouncedUpdate(...)
+end
+addonTable.Mouse:OnCooldownTick()
+addonTable.Mouse:OnCooldownTick()
+addonTable.Mouse:OnCooldownTick()
+check(cooldownCallsWhenOff == 0, "Mouse: OnCooldownTick hace early-out cuando disabled")
+addonTable.Mouse.DebouncedUpdate = originalDebouncedUpdate
+
 addonTable.Mouse:SetEnabled(true)
 check(host:IsShown() == true, "Mouse: reactivacion muestra el host")
 check(host:GetScript("OnUpdate") ~= nil, "Mouse: reactivacion reengancha OnUpdate")
+
+Mocks.playerSpells = { [147362] = true }
+Mocks.units.player.class = "HUNTER"
+Mocks.cooldowns[147362] = { start = 0, duration = 10 }
+addonTable.Interrupt.InvalidateSpellIDCache()
+local cooldownCalls = 0
+local receivedCooldown, receivedSpellID
+local originalApplyCooldownDuration = Minimizer.Widgets.ApplyCooldownDuration
+Minimizer.Widgets.ApplyCooldownDuration = function(cooldown, spellID)
+    cooldownCalls = cooldownCalls + 1
+    receivedCooldown = cooldown
+    receivedSpellID = spellID
+    return originalApplyCooldownDuration(cooldown, spellID)
+end
+addonTable.Mouse:OnCooldownTick()
+check(cooldownCalls == 1, "Mouse: OnCooldownTick refleja el interrupt en el halo")
+check(receivedCooldown == halo.MinimizerHaloCooldown, "Mouse: actualiza el cooldown propio del halo")
+check(receivedSpellID == 147362, "Mouse: usa el spellID resuelto por Interrupt")
+Minimizer.Widgets.ApplyCooldownDuration = originalApplyCooldownDuration
+
+local positionBeforeCooldown = lastPoint
+local setPointCallsBeforeCooldown = setPointCalls
+addonTable.Mouse:OnCooldownTick()
+addonTable.Mouse:OnCooldownTick()
+addonTable.Mouse:OnCooldownTick()
+check(setPointCalls == setPointCallsBeforeCooldown, "Mouse: OnCooldownTick no llama SetPoint de posicion")
+check(lastPoint == positionBeforeCooldown, "Mouse: OnCooldownTick no altera el estado de posicion")
 
 local framesBeforeApply = #Mocks.frames
 local scriptBeforeApply = host:GetScript("OnUpdate")
@@ -66,6 +106,9 @@ check(not source:match("CreateMaskTexture"), "Mouse: no crea mascaras redundante
 check(not source:match('CreateFrame%(%s*"Cooldown"'), "Mouse: no crea Cooldown propio")
 check(source:match('SetFrameStrata%(%s*"HIGH"%s*%)'), "Mouse: HIGH esta en el host")
 check(not source:match("RegisterEvent"), "Mouse: no registra eventos")
+check(source:match("Minimizer%.Widgets%.ApplyCooldownDuration"), "Mouse: actualiza cooldown mediante Widgets")
+check(not source:match("haloFrame:ShowFor"), "Mouse: no usa Halo:ShowFor para el interrupt")
+check(not source:match("haloFrame:SetCooldown%("), "Mouse: no usa Halo:SetCooldown para el interrupt")
 
 local haloSource = assert(io.open("Overlays/Halo.lua", "r")):read("*a")
 check(not haloSource:match("SetFrameStrata"), "Halo: no conoce la strata")
