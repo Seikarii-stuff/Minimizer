@@ -28,11 +28,17 @@ end
 
 local cursorElapsed = 0
 local enabled = false
+local lastCursorX, lastCursorY
 
 local function UpdateCursorPosition()
     local cursorX, cursorY = GetCursorPosition()
+    if not cursorX or not cursorY then return end
+    if cursorX == lastCursorX and cursorY == lastCursorY then return end
+
     local scale = UIParent:GetEffectiveScale()
-    if not cursorX or not cursorY or not scale or scale <= 0 then return end
+    if not scale or scale <= 0 then return end
+
+    lastCursorX, lastCursorY = cursorX, cursorY
     host:ClearAllPoints()
     host:SetPoint("CENTER", UIParent, "BOTTOMLEFT", cursorX / scale, cursorY / scale)
 end
@@ -55,6 +61,7 @@ function Mouse:SetEnabled(value)
     host:Show()
     haloFrame:Show()
     cursorElapsed = 0
+    lastCursorX, lastCursorY = nil, nil
     UpdateCursorPosition()
     host:SetScript("OnUpdate", OnUpdate)
 end
