@@ -307,6 +307,11 @@ local function BuildPlaterTab(parent)
             if Minimizer.Focus then Minimizer.Focus:SetArrowsEnabled(self:GetChecked())
             elseif MinimizerDB then MinimizerDB.enableFocusArrows = self:GetChecked() end
         end)
+    local mouseHaloToggle = CreateCheckbox(left, "MinimizerMenuMouseHaloToggle", "Enable mouse halo", arrowsToggle, -18,
+        MinimizerDB and MinimizerDB.enableMouseHalo ~= false, function(self)
+            if MinimizerDB then MinimizerDB.enableMouseHalo = self:GetChecked() end
+            if Minimizer.Mouse then Minimizer.Mouse:SetEnabled(self:GetChecked()) end
+        end)
 
     BuildLegend(legend)
     parent.controls = {
@@ -315,6 +320,7 @@ local function BuildPlaterTab(parent)
         focusMarkers = focusMarkers,
         faceToggle = faceToggle,
         arrowsToggle = arrowsToggle,
+        mouseHaloToggle = mouseHaloToggle,
         legend = legend,
         divider = divider,
     }
@@ -352,18 +358,11 @@ local function BuildWheelTab(parent)
         table.insert(dropdowns, drop)
     end
 
-    local mouseHaloToggle = CreateCheckbox(parent, "MinimizerMenuMouseHaloToggle", "Enable mouse halo", dropdowns[#dropdowns], -10,
-        MinimizerDB and MinimizerDB.enableMouseHalo ~= false, function(self)
-            if MinimizerDB then MinimizerDB.enableMouseHalo = self:GetChecked() end
-            if Minimizer.Mouse then Minimizer.Mouse:SetEnabled(self:GetChecked()) end
-        end)
-
     parent.controls = {
         wheelToggle = wheelToggle,
         sizeSlider = sizeSlider,
         radiusSlider = radiusSlider,
         dropdowns = dropdowns,
-        mouseHaloToggle = mouseHaloToggle,
     }
 end
 
@@ -451,11 +450,11 @@ function Menu.Refresh()
     controls.plater.focusMarkers:SetChecked(MinimizerDB and MinimizerDB.enableFocusMarkers ~= false)
     controls.plater.faceToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusFace == true)
     controls.plater.arrowsToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusArrows == true)
+    controls.plater.mouseHaloToggle:SetChecked(MinimizerDB and MinimizerDB.enableMouseHalo ~= false)
 
     controls.wheel.wheelToggle:SetChecked(MinimizerDB and MinimizerDB.wheelEnabled ~= false)
     controls.wheel.sizeSlider:Refresh(tonumber(MinimizerDB and MinimizerDB.wheelSize) or 180)
     controls.wheel.radiusSlider:Refresh(tonumber(MinimizerDB and MinimizerDB.wheelPipRadius) or 75)
-    controls.wheel.mouseHaloToggle:SetChecked(MinimizerDB and MinimizerDB.enableMouseHalo ~= false)
     for _, dropdown in ipairs(controls.wheel.dropdowns or {}) do
         if dropdown.Refresh then dropdown.Refresh() end
     end

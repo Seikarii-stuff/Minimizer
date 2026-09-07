@@ -21,6 +21,8 @@ check(frame1.tabs and frame1.tabs.Plater and frame1.tabs.Wheel, "Menu: existen t
 check(frame1.activeTab == "Plater", "Menu: abre en Plater")
 check(frame1.MinimizerMenuControls.plater.legend ~= nil, "Menu: legend pertenece a Plater")
 check(frame1.MinimizerMenuControls.plater.divider ~= nil, "Menu: divider se crea en Menu.lua")
+check(frame1.MinimizerMenuControls.plater.mouseHaloToggle ~= nil, "Menu: mouse halo pertenece a Plater")
+check(frame1.MinimizerMenuControls.wheel.mouseHaloToggle == nil, "Menu: mouse halo no pertenece a Wheel")
 
 local platerTab = frame1.tabs.Plater
 local wheelTab = frame1.tabs.Wheel
