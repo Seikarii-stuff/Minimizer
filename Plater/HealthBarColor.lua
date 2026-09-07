@@ -72,6 +72,7 @@ local function GetSafeHealthColor(kind)
     if kind == "caster" then return COLORS.caster end
     if kind == "boss" then return COLORS.boss end
     if kind == "miniboss" then return COLORS.miniboss end
+    if kind == "normal" then return COLORS.normal end
     if kind == "focus" then return COLORS.focus end
     if kind == "absorb" then return COLORS.absorb end
     if kind == "aggro" then return COLORS.aggro end

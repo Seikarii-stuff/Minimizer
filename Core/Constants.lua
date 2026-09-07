@@ -9,6 +9,7 @@ Minimizer.Constants.HealthColors = {
     caster = { 0.20, 0.55, 1.00 },
     boss = { 0.65, 0.25, 1.00 },
     miniboss = { 0.65, 0.25, 1.00 },
+    normal = { 1.00, 0.55, 0.00 },
     focus = { 1.00, 0.90, 0.00 },
     absorb = { 1.00, 0.45, 0.75 },
     aggro = { 1.00, 0.00, 0.00 },

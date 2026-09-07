@@ -82,6 +82,8 @@ function Minimizer.Classification.GetEliteType(unit)
             result = superior
         elseif HasMana(unit) then
             result = "caster"
+        elseif classification == "normal" then
+            result = "normal"
         else
             result = "melee"
         end

@@ -37,7 +37,7 @@ function Minimizer.Decision.ShouldSimplifyUnit(unit, nameplate, snapshot)
     if eliteType == nil and Minimizer.Classification and Minimizer.Classification.GetEliteType then
         eliteType = Minimizer.Classification.GetEliteType(unit)
     end
-    if eliteType == "boss" or eliteType == "miniboss" or eliteType == "caster" then
+    if eliteType == "boss" or eliteType == "miniboss" or eliteType == "caster" or eliteType == "normal" then
         return false, "no simp"
     end
 

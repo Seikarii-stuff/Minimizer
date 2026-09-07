@@ -602,11 +602,11 @@ do
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", token)
     addonTable.Dispatcher.ApplyToUnit(token, true)
 
-    assert_eq(npNew.MinimizerDesimplifiedPersistent, nil, "Recycle Test: Recycled unit does NOT inherit MinimizerDesimplifiedPersistent")
+    assert_eq(npNew.MinimizerDesimplifiedPersistent, true, "Recycle Test: Recycled normal melee keeps its own no-simp persistent flag")
     assert_eq(npNew.MinimizerHasHadAbsorb, nil, "Recycle Test: Recycled unit does NOT inherit MinimizerHasHadAbsorb")
     assert_eq(npNew.MinimizerPersistentCastColor, nil, "Recycle Test: Recycled unit does NOT inherit MinimizerPersistentCastColor")
-    assert_eq(npNew.simplified, true, "Recycle Test: Recycled unit correctly simplified for normal melee")
-    assert_eq(npNew.MinimizerState, true, "Recycle Test: Recycled unit MinimizerState is true")
+    assert_eq(npNew.simplified, false, "Recycle Test: Recycled normal melee remains protected from simplification")
+    assert_eq(npNew.MinimizerState, false, "Recycle Test: Recycled normal melee leaves MinimizerState false")
 end
 
 -- --------------------------------------------------------------------------

@@ -19,8 +19,28 @@ check(addonTable.Classification.GetEliteType("t_miniboss_lt") == "miniboss", "Cl
 Mocks.CreateTestUnit("t_caster", { level = 70, classification = "normal", faction = "Horde", powerType = 0 })
 check(addonTable.Classification.GetEliteType("t_caster") == "caster", "Classification: mana = caster")
 
-Mocks.CreateTestUnit("t_melee", { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
-check(addonTable.Classification.GetEliteType("t_melee") == "melee", "Classification: sin mana = melee")
+Mocks.CreateTestUnit("t_melee", { level = 70, classification = "rare", faction = "Horde", powerType = 1 })
+check(addonTable.Classification.GetEliteType("t_melee") == "melee", "Classification: melee no normal = melee")
+
+Mocks.CreateTestUnit("t_normal", { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
+check(addonTable.Classification.GetEliteType("t_normal") == "normal", "Classification: normal melee = normal")
+
+Mocks.CreateTestUnit("t_normal_caster", { level = 70, classification = "normal", faction = "Horde", powerType = 0 })
+check(addonTable.Classification.GetEliteType("t_normal_caster") == "caster", "Classification: normal con mana conserva caster")
+
+check(addonTable.Constants.HealthColors.normal[1] == 1.00 and addonTable.Constants.HealthColors.normal[2] == 0.55 and addonTable.Constants.HealthColors.normal[3] == 0.00, "Color: normal usa naranja")
+
+local npNormal = Mocks.CreateTestNameplate("t_normal_display")
+Mocks.CreateTestUnit("t_normal_display", { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
+local snapNormal = addonTable.Snapshot.Build("t_normal_display", npNormal)
+check(snapNormal.eliteType == "normal", "Snapshot: eliteType conserva normal")
+check(snapNormal.displayKind == "normal", "Snapshot: displayKind = normal sin estados superiores")
+
+local focusData = { level = 70, classification = "normal", faction = "Horde", powerType = 1, guid = "guid_t_normal_focus" }
+Mocks.CreateTestUnit("t_normal_focus", focusData)
+Mocks.CreateTestUnit("focus", focusData)
+local npFocus = Mocks.CreateTestNameplate("t_normal_focus")
+check(addonTable.Snapshot.ComputeDisplayKind("t_normal_focus", npFocus) == "focus", "Snapshot: focus sobre normal")
 
 Mocks.unitClassificationCallCounts = {}
 Mocks.CreateTestUnit("t_cache_gen", { level = 70, classification = "normal", faction = "Horde", powerType = 1 })
