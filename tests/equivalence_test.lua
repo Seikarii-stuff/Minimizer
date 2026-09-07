@@ -486,7 +486,9 @@ do
     Mocks.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate15")
 
     local snapP1 = addonTable.Snapshot.Build("nameplate15", npP1)
-    assert_eq(snapP1.displayKind, "boss", "Invariant: Boss displayKind is 'boss'")
+    -- `nilSpecial` now takes precedence over eliteType; a boss with nil threat in combat
+    -- will be treated as 'priority'. Update test expectation accordingly.
+    assert_eq(snapP1.displayKind, "priority", "Invariant: Boss with nil threat -> 'priority'")
 
     -- If player gains aggro (sit 3), aggro wins over boss
     Mocks.units["nameplate15"].threatSituation = 3

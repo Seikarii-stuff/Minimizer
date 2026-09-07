@@ -41,7 +41,6 @@ function Minimizer.Snapshot.Build(unit, nameplate)
     s.threatSituation = details and details.situation or nil
     s.otherTankAggro = details and details.otherTankAggro or false
     s.isNilSpecial = details and details.nilSpecial == true or false
-    s.nilSince = details and details.nilSince or nil
     s.inCombat = (details and Minimizer.Threat and Minimizer.Threat.IsInCombatWith and Minimizer.Threat.IsInCombatWith(unit, details)) or false
     s.isPlayerTank = (Minimizer.Threat and Minimizer.Threat.IsPlayerTank and Minimizer.Threat.IsPlayerTank()) or false
     s.hasAggro = Minimizer.Threat and Minimizer.Threat.PlayerHasAggro and Minimizer.Threat.PlayerHasAggro(unit) or false

@@ -79,7 +79,8 @@ function Minimizer.Decision.ShouldUnsimplify(unit, snapshot)
     if snapshot then
         local situation = snapshot.threatSituation
         if situation == nil then
-            return snapshot.nilSince ~= nil and snapshot.inCombat
+            -- Use `isNilSpecial` to immediately force unsimplify for nil threat.
+            return snapshot.isNilSpecial == true
         end
         if snapshot.isPlayerTank then
             if not snapshot.inCombat then return false end
@@ -95,7 +96,8 @@ function Minimizer.Decision.ShouldUnsimplify(unit, snapshot)
 
     local situation = details.situation
     if situation == nil then
-        return details.nilSince ~= nil and Minimizer.Threat.IsInCombatWith(unit, details)
+        -- Use `nilSpecial` (computed by Threat) to decide unsimplify.
+        return details.nilSpecial == true
     end
 
     if Minimizer.Threat.IsPlayerTank and Minimizer.Threat.IsPlayerTank() then

@@ -78,12 +78,12 @@ local function UpdateNilState(unit, result, generation, inCombat)
         nilState[unit] = state
     end
 
-    local canAttackPlayer = UnitCanAttack and UnitCanAttack(unit, "player")
-    local isNilSpecialCandidate = canAttackPlayer == false
+    -- Consider nilSpecial when threat is nil and the unit is in combat.
+    -- Previously we required the unit to be unable to attack the player
+    -- (UnitCanAttack == false). That distinction has been removed.
+    state.nilSpecial = result.situation == nil and inCombat
 
-    state.nilSpecial = result.situation == nil and inCombat and isNilSpecialCandidate
-
-    result.nilSince = nil
+    -- `nilSince` removed: obsolete temporal heuristic replaced by `nilSpecial`.
     result.nilSpecial = state.nilSpecial
     return result
 end
