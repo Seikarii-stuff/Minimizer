@@ -8,7 +8,6 @@ local ipairs = ipairs
 local table_insert = table.insert
 local wipe = wipe
 
-local _cache_epoch = 0
 local _resolution_cache = {}
 
 local function NormalizeSpellID(entry)
@@ -22,14 +21,7 @@ local function NormalizeSpellID(entry)
 end
 
 function Minimizer.Spells.InvalidateCache()
-    _cache_epoch = _cache_epoch + 1
-    if wipe then
-        wipe(_resolution_cache)
-        return
-    end
-    for key in pairs(_resolution_cache) do
-        _resolution_cache[key] = nil
-    end
+    wipe(_resolution_cache)
 end
 
 function Minimizer.Spells.IsKnown(spellID)
@@ -89,16 +81,10 @@ function Minimizer.Spells.ResolveForClass(dbTable, override, slotIndex, classTok
 
     local spellList = classToken and dbTable[classToken]
     local index = slotIndex or 1
-    local epochBucket = _resolution_cache[_cache_epoch]
-    if not epochBucket then
-        epochBucket = {}
-        _resolution_cache[_cache_epoch] = epochBucket
-    end
-
-    local dbBucket = epochBucket[dbTable]
+    local dbBucket = _resolution_cache[dbTable]
     if not dbBucket then
         dbBucket = {}
-        epochBucket[dbTable] = dbBucket
+        _resolution_cache[dbTable] = dbBucket
     end
 
     local classBucket = dbBucket[classToken or false]
