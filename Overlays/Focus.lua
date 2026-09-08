@@ -40,10 +40,7 @@ local function UpdateCooldown()
 end
 
 function Focus:SetFaceEnabled(enabled)
-    MinimizerDB.enableFocusFace = enabled == true
-    if MinimizerDB.enableFocusFace ~= true then
-        HideFace()
-    end
+    -- Kept as a compatibility no-op: focus face is permanently enabled.
     if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
         Minimizer.Dispatcher.RequestFullUpdate()
     elseif Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToAll then
@@ -52,7 +49,7 @@ function Focus:SetFaceEnabled(enabled)
 end
 
 function Focus:SetArrowsEnabled(enabled)
-    MinimizerDB.enableFocusArrows = enabled == true
+    -- Kept as a compatibility no-op: focus arrows are permanently enabled.
     if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
         Minimizer.Dispatcher.RequestFullUpdate()
     elseif Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToAll then
@@ -61,17 +58,13 @@ function Focus:SetArrowsEnabled(enabled)
 end
 
 function Focus:SetMode(mode)
-    if mode == "face" then self:SetFaceEnabled(true); return end
-    if mode == "arrows" then self:SetArrowsEnabled(true); return end
-    if mode == "noface" then self:SetFaceEnabled(false); return end
-    if mode == "noarrows" then self:SetArrowsEnabled(false); return end
+    -- Compatibility only. All focus indicators are always enabled.
+    if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
+        Minimizer.Dispatcher.RequestFullUpdate()
+    end
 end
 
 function Focus:UpdateFace()
-    if MinimizerDB.enableFocusFace ~= true then
-        HideFace()
-        return
-    end
     if not UnitExists("focus") or UnitIsDead("focus") then
         HideFace()
         return
