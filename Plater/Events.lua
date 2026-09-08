@@ -132,8 +132,8 @@ local function HandleRosterOrSpecChange(self, event)
     if Minimizer.Dispatcher and Minimizer.Dispatcher.UpdateMonitorState then
         Minimizer.Dispatcher.UpdateMonitorState()
     end
-    if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then
-        Minimizer.Widgets.InvalidateCDSpellCache()
+    if Minimizer.Spells and Minimizer.Spells.InvalidateCache then
+        Minimizer.Spells.InvalidateCache()
     end
     if Minimizer.Interrupt and Minimizer.Interrupt.InvalidateSpellIDCache then
         Minimizer.Interrupt.InvalidateSpellIDCache()

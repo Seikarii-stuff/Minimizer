@@ -38,63 +38,6 @@ function Minimizer.Widgets.FindCastBar(nameplate)
     return FindCastBarInChildren(healthBar, unitFrame:GetChildren())
 end
 
--- Cache anidado: cdSpellCache[dbTable][override or false][slotIndex] = spellID or false.
--- Todas las claves son valores estables; el hot path no necesita tostring/concat ni
--- construir tablas temporales por llamada una vez que el bucket está creado.
-local cdSpellCache = {}
-
-function Minimizer.Widgets.GetCDSpellID(dbTable, override, slotIndex)
-    if not dbTable then return nil end
-
-    local bucket = cdSpellCache[dbTable]
-    if not bucket then
-        bucket = {}
-        cdSpellCache[dbTable] = bucket
-    end
-
-    local overrideKey = override or false
-    local overrideBucket = bucket[overrideKey]
-    if not overrideBucket then
-        overrideBucket = {}
-        bucket[overrideKey] = overrideBucket
-    end
-
-    local index = slotIndex or 1
-    local cached = overrideBucket[index]
-    if cached ~= nil then
-        if cached == false then return nil end
-        return cached
-    end
-
-    local _, classToken = UnitClass("player")
-    local spellList = classToken and dbTable[classToken]
-
-    if override ~= nil then
-        local overrideAllowed = false
-        if type(spellList) == "table" then
-            for _, entry in ipairs(spellList) do
-                local spellID = (type(entry) == "number") and entry or (type(entry) == "table" and entry.id)
-                if spellID == override then
-                    overrideAllowed = true
-                    break
-                end
-            end
-        end
-        if overrideAllowed and Minimizer.Utils and Minimizer.Utils.IsSpellKnownByPlayer and Minimizer.Utils.IsSpellKnownByPlayer(override) then
-            overrideBucket[index] = override
-            return override
-        end
-    end
-
-    local result = Minimizer.Utils.FindKnownSpell(spellList, index)
-    overrideBucket[index] = result or false
-    return result
-end
-
-function Minimizer.Widgets.InvalidateCDSpellCache()
-    cdSpellCache = {}
-end
-
 function Minimizer.Widgets.ConfigureCooldownFrame(cooldown, opts)
     if not cooldown then return end
     opts = opts or {}

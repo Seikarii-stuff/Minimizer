@@ -21,7 +21,8 @@ function Minimizer.Interrupt.GetSpellID()
         return cachedSpellID
     end
     local _, classToken = UnitClass("player")
-    cachedSpellID = Minimizer.Utils.FindKnownSpell(INTERRUPT_SPELLS[classToken])
+    cachedSpellID = Minimizer.Spells and Minimizer.Spells.Resolve and Minimizer.Spells.Resolve(INTERRUPT_SPELLS[classToken], 1)
+        or nil
     cachedSpellIDResolved = true
     return cachedSpellID
 end
