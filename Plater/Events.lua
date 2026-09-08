@@ -61,6 +61,15 @@ handlers["ZONE_CHANGED_NEW_AREA"] = HandleFullRefreshEvent
 handlers["PLAYER_DIFFICULTY_CHANGED"] = HandleFullRefreshEvent
 handlers["PLAYER_REGEN_DISABLED"] = HandleFullRefreshEvent
 handlers["PLAYER_REGEN_ENABLED"] = HandleFullRefreshEvent
+handlers["SPELLS_CHANGED"] = function(self, event)
+    if Minimizer.Spells and Minimizer.Spells.InvalidateCache then
+        Minimizer.Spells.InvalidateCache()
+    end
+    if Minimizer.Interrupt and Minimizer.Interrupt.InvalidateSpellIDCache then
+        Minimizer.Interrupt.InvalidateSpellIDCache()
+    end
+    UpdateNameplates()
+end
 
 handlers["PLAYER_TARGET_CHANGED"] = function(self, event)
     HandleFullRefreshEvent(self, event)
@@ -266,6 +275,7 @@ EventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 EventFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
 EventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 EventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+EventFrame:RegisterEvent("SPELLS_CHANGED")
 EventFrame:RegisterEvent("PLAYER_ROLES_ASSIGNED")
 EventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 EventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")

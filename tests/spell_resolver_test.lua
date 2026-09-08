@@ -36,6 +36,14 @@ Mocks.playerSpells = {
 }
 check(addonTable.Spells.Resolve({111, 222, 333}, 2) == 222, "Spells: fallback conserva el entry N original si no hay suficientes conocidos")
 
+Mocks.playerSpells = { [147362] = true, [187707] = false }
+local firstResolved = addonTable.Spells.ResolveForClass(addonTable.Data.INTERRUPT_SPELLS, nil, 1, "HUNTER")
+check(firstResolved == 147362, "Spells: cache inicial resuelve el spell conocido actual")
+Mocks.playerSpells = { [147362] = false, [187707] = true }
+addonTable.Spells.InvalidateCache()
+local secondResolved = addonTable.Spells.ResolveForClass(addonTable.Data.INTERRUPT_SPELLS, nil, 1, "HUNTER")
+check(secondResolved == 187707, "Spells: invalidar cache recalcula cuando cambia el estado del jugador")
+
 Mocks.playerSpells = {
     [107574] = true,
     [1719] = true,
