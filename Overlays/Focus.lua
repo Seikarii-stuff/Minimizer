@@ -2,8 +2,6 @@ local _, Minimizer = ...
 if not Minimizer then return end
 -- Config.Initialize() ya fue invocada por Bootstrap.lua tras ADDON_LOADED.
 
-MinimizerDB = MinimizerDB or {}
-
 local Focus = {}
 Minimizer.Focus = Focus
 
@@ -39,39 +37,7 @@ local function UpdateCooldown()
     end
 end
 
-function Focus:SetFaceEnabled(enabled)
-    MinimizerDB.enableFocusFace = enabled == true
-    if MinimizerDB.enableFocusFace ~= true then
-        HideFace()
-    end
-    if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
-        Minimizer.Dispatcher.RequestFullUpdate()
-    elseif Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToAll then
-        Minimizer.Dispatcher.ApplyToAll()
-    end
-end
-
-function Focus:SetArrowsEnabled(enabled)
-    MinimizerDB.enableFocusArrows = enabled == true
-    if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
-        Minimizer.Dispatcher.RequestFullUpdate()
-    elseif Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToAll then
-        Minimizer.Dispatcher.ApplyToAll()
-    end
-end
-
-function Focus:SetMode(mode)
-    if mode == "face" then self:SetFaceEnabled(true); return end
-    if mode == "arrows" then self:SetArrowsEnabled(true); return end
-    if mode == "noface" then self:SetFaceEnabled(false); return end
-    if mode == "noarrows" then self:SetArrowsEnabled(false); return end
-end
-
 function Focus:UpdateFace()
-    if MinimizerDB.enableFocusFace ~= true then
-        HideFace()
-        return
-    end
     if not UnitExists("focus") or UnitIsDead("focus") then
         HideFace()
         return

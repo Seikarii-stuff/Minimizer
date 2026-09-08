@@ -5,10 +5,9 @@ if not Minimizer then return end
 Minimizer.Config = Minimizer.Config or {}
 Minimizer.Config.DEFAULTS = {
     simplifyEnabled = true,
-    enableTargetMarkers = true,
-    enableFocusMarkers = true,
-    enableFocusFace = true,
-    enableFocusArrows = true,
+
+    -- These indicators are always enabled and intentionally not persisted.
+    -- Do not add them back to SavedVariables: they are hardcoded behavior.
 
     -- Player Wheel: preferencias globales de UI, no por personaje.
     wheelEnabled = true,
@@ -49,20 +48,15 @@ function Minimizer.Config.Initialize()
         end
     end
 
-    -- Legacy focus indicator -> dos flags independientes.
-    if MinimizerDB.focusIndicator ~= nil then
-        local legacyMode = MinimizerDB.focusIndicator
-        MinimizerDB.enableFocusFace = (legacyMode == "face")
-        MinimizerDB.enableFocusArrows = (legacyMode ~= "face")
-        MinimizerDB.focusIndicator = nil
-    end
+    -- Estos flags fueron opciones configurables, pero ahora son comportamiento fijo.
+    -- Eliminarlos aquí limpia SavedVariables existentes y evita persistirlos de nuevo.
+    MinimizerDB.enableTargetMarkers = nil
+    MinimizerDB.enableFocusMarkers = nil
+    MinimizerDB.enableFocusFace = nil
+    MinimizerDB.enableFocusArrows = nil
 
-    if MinimizerDB.enableFocusFace == nil then
-        MinimizerDB.enableFocusFace = true
-    end
-    if MinimizerDB.enableFocusArrows == nil then
-        MinimizerDB.enableFocusArrows = true
-    end
+    -- Legacy focus indicator is no longer used because both focus indicators are fixed on.
+    MinimizerDB.focusIndicator = nil
 
     -- Migración de pips legacy. No se modifica ningún override pipN existente.
     if MinimizerCharDB.targetDefensive ~= nil then

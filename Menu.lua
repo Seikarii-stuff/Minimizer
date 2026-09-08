@@ -287,27 +287,7 @@ local function BuildPlaterTab(parent)
             if MinimizerDB then MinimizerDB.simplifyEnabled = self:GetChecked() end
             RequestFullUpdate()
         end)
-    local targetMarkers = CreateCheckbox(left, nil, "Enable target markers", simplifyToggle, -10,
-        MinimizerDB and MinimizerDB.enableTargetMarkers ~= false, function(self)
-            if MinimizerDB then MinimizerDB.enableTargetMarkers = self:GetChecked() end
-            RequestFullUpdate()
-        end)
-    local focusMarkers = CreateCheckbox(left, nil, "Enable focus markers", targetMarkers, -10,
-        MinimizerDB and MinimizerDB.enableFocusMarkers ~= false, function(self)
-            if MinimizerDB then MinimizerDB.enableFocusMarkers = self:GetChecked() end
-            RequestFullUpdate()
-        end)
-    local faceToggle = CreateCheckbox(left, nil, "Focus face enabled", focusMarkers, -10,
-        MinimizerDB and MinimizerDB.enableFocusFace == true, function(self)
-            if Minimizer.Focus then Minimizer.Focus:SetFaceEnabled(self:GetChecked())
-            elseif MinimizerDB then MinimizerDB.enableFocusFace = self:GetChecked() end
-        end)
-    local arrowsToggle = CreateCheckbox(left, nil, "Focus arrows enabled", faceToggle, -10,
-        MinimizerDB and MinimizerDB.enableFocusArrows == true, function(self)
-            if Minimizer.Focus then Minimizer.Focus:SetArrowsEnabled(self:GetChecked())
-            elseif MinimizerDB then MinimizerDB.enableFocusArrows = self:GetChecked() end
-        end)
-    local mouseHaloToggle = CreateCheckbox(left, "MinimizerMenuMouseHaloToggle", "Enable mouse halo", arrowsToggle, -18,
+    local mouseHaloToggle = CreateCheckbox(left, "MinimizerMenuMouseHaloToggle", "Enable mouse halo", simplifyToggle, -10,
         MinimizerDB and MinimizerDB.enableMouseHalo ~= false, function(self)
             if MinimizerDB then MinimizerDB.enableMouseHalo = self:GetChecked() end
             if Minimizer.Mouse then Minimizer.Mouse:SetEnabled(self:GetChecked()) end
@@ -316,10 +296,6 @@ local function BuildPlaterTab(parent)
     BuildLegend(legend)
     parent.controls = {
         simplifyToggle = simplifyToggle,
-        targetMarkers = targetMarkers,
-        focusMarkers = focusMarkers,
-        faceToggle = faceToggle,
-        arrowsToggle = arrowsToggle,
         mouseHaloToggle = mouseHaloToggle,
         legend = legend,
         divider = divider,
@@ -446,10 +422,6 @@ function Menu.Refresh()
     if not controls then return end
 
     controls.plater.simplifyToggle:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
-    controls.plater.targetMarkers:SetChecked(MinimizerDB and MinimizerDB.enableTargetMarkers ~= false)
-    controls.plater.focusMarkers:SetChecked(MinimizerDB and MinimizerDB.enableFocusMarkers ~= false)
-    controls.plater.faceToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusFace == true)
-    controls.plater.arrowsToggle:SetChecked(MinimizerDB and MinimizerDB.enableFocusArrows == true)
     controls.plater.mouseHaloToggle:SetChecked(MinimizerDB and MinimizerDB.enableMouseHalo ~= false)
 
     controls.wheel.wheelToggle:SetChecked(MinimizerDB and MinimizerDB.wheelEnabled ~= false)
