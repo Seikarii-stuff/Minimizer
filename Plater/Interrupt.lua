@@ -35,11 +35,23 @@ local cachedReady = true
 
 function Minimizer.Interrupt.RefreshReadyCache()
     local spellID = Minimizer.Interrupt.GetSpellID()
-    if spellID and C_Spell and C_Spell.GetSpellCooldownDuration then
-        local duration = C_Spell.GetSpellCooldownDuration(spellID)
-        if duration then
-            cachedReady = duration:IsZero()
-            return cachedReady
+    if spellID then
+        if Minimizer.Spells and Minimizer.Spells.GetState then
+            local state = Minimizer.Spells.GetState(spellID)
+            if state and state.cooldown then
+                -- If modern API provided an object with IsZero, use it; otherwise
+                -- fall back to assuming non-zero unless the object explicitly
+                -- reports zero via a field or method.
+                if type(state.cooldown) == "table" and type(state.cooldown.IsZero) == "function" then
+                    cachedReady = state.cooldown:IsZero()
+                    return cachedReady
+                end
+                -- If legacy table with duration, consider zero duration as ready
+                if state.cooldown.duration then
+                    cachedReady = (state.cooldown.duration == 0)
+                    return cachedReady
+                end
+            end
         end
     end
     cachedReady = true
