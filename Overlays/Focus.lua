@@ -2,8 +2,6 @@ local _, Minimizer = ...
 if not Minimizer then return end
 -- Config.Initialize() ya fue invocada por Bootstrap.lua tras ADDON_LOADED.
 
-MinimizerDB = MinimizerDB or {}
-
 local Focus = {}
 Minimizer.Focus = Focus
 
@@ -36,31 +34,6 @@ local function UpdateCooldown()
 
     if Minimizer.Interrupt and Minimizer.Interrupt.IsReady and Minimizer.Utils and Minimizer.Utils.ApplyReadyShade then
         Minimizer.Utils.ApplyReadyShade(portrait, Minimizer.Interrupt.IsReady())
-    end
-end
-
-function Focus:SetFaceEnabled(enabled)
-    -- Kept as a compatibility no-op: focus face is permanently enabled.
-    if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
-        Minimizer.Dispatcher.RequestFullUpdate()
-    elseif Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToAll then
-        Minimizer.Dispatcher.ApplyToAll()
-    end
-end
-
-function Focus:SetArrowsEnabled(enabled)
-    -- Kept as a compatibility no-op: focus arrows are permanently enabled.
-    if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
-        Minimizer.Dispatcher.RequestFullUpdate()
-    elseif Minimizer.Dispatcher and Minimizer.Dispatcher.ApplyToAll then
-        Minimizer.Dispatcher.ApplyToAll()
-    end
-end
-
-function Focus:SetMode(mode)
-    -- Compatibility only. All focus indicators are always enabled.
-    if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
-        Minimizer.Dispatcher.RequestFullUpdate()
     end
 end
 
