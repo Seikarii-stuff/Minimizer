@@ -7,6 +7,7 @@
 local tests = {
     "tests/smoke_test.lua",
     "tests/classification_test.lua",
+    "tests/spell_info_state_test.lua",
     "tests/spell_resolver_test.lua",
     "tests/utils_test.lua",
     "tests/interrupt_test.lua",
