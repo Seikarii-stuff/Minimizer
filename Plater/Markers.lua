@@ -40,23 +40,21 @@ function Markers:UpdateNamePlate(unit, nameplate)
     if not markers then return end
 
     local token = Minimizer.Utils.GetValidNamePlateToken(unit, nameplate) or unit
-    if not token or not UnitExists(token) then 
+    if not token or not UnitExists(token) then
         markers.targetLeft:Hide()
         markers.targetRight:Hide()
         markers.focusLeft:Hide()
         markers.focusRight:Hide()
-        return 
+        return
     end
 
-    local db = MinimizerDB or {}
-    local isTarget = (db.enableTargetMarkers ~= false) and UnitIsUnit(token, "target")
-    local isFocus  = (db.enableFocusMarkers ~= false) and UnitIsUnit(token, "focus")
+    local isTarget = UnitIsUnit(token, "target")
+    local isFocus = UnitIsUnit(token, "focus")
 
     markers.targetLeft:SetShown(isTarget == true)
     markers.targetRight:SetShown(isTarget == true)
-    local showFocusArrows = db.enableFocusArrows == true
-    markers.focusLeft:SetShown(isFocus == true and showFocusArrows)
-    markers.focusRight:SetShown(isFocus == true and showFocusArrows)
+    markers.focusLeft:SetShown(isFocus == true)
+    markers.focusRight:SetShown(isFocus == true)
 end
 
 function Markers:OnNamePlateRemoved(unit, nameplate)
