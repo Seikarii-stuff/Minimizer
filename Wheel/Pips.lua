@@ -24,11 +24,12 @@ function Pips.GetSpellID(slotIndex)
     if MinimizerCharDB then
         override = MinimizerCharDB["pip" .. slotIndex]
     end
+    local _, classToken = UnitClass("player")
     local spellList = Minimizer.Data and Minimizer.Data.PIPS_SPELLS
-    if not spellList or not Minimizer.Widgets or not Minimizer.Widgets.GetCDSpellID then
+    if not spellList or not Minimizer.Spells or not Minimizer.Spells.ResolveForClass then
         return nil
     end
-    return Minimizer.Widgets.GetCDSpellID(spellList, override, slotIndex)
+    return Minimizer.Spells.ResolveForClass(spellList, override, slotIndex, classToken)
 end
 
 local function PositionPip(pip, radius)

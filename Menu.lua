@@ -85,7 +85,7 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
         info.checked = selectedValue == nil
         info.func = function()
             if MinimizerCharDB then MinimizerCharDB[dbKey] = nil end
-            if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then Minimizer.Widgets.InvalidateCDSpellCache() end
+            if Minimizer.Spells and Minimizer.Spells.InvalidateCache then Minimizer.Spells.InvalidateCache() end
             RequestFullUpdate()
             ApplyWheelConfig()
             Menu.Refresh()
@@ -112,7 +112,7 @@ local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
                 option.checked = selectedValue == id
                 option.func = function()
                     if MinimizerCharDB then MinimizerCharDB[dbKey] = id end
-                    if Minimizer.Widgets and Minimizer.Widgets.InvalidateCDSpellCache then Minimizer.Widgets.InvalidateCDSpellCache() end
+                    if Minimizer.Spells and Minimizer.Spells.InvalidateCache then Minimizer.Spells.InvalidateCache() end
                     RequestFullUpdate()
                     ApplyWheelConfig()
                     Menu.Refresh()

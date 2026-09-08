@@ -15,4 +15,13 @@ Mocks.playerSpells = { [147362] = false, [187707] = true }
 addonTable.Interrupt.InvalidateSpellIDCache()
 check(addonTable.Interrupt.GetSpellID() == 187707, "Interrupt: invalida el cache al cambiar de spec")
 
+-- Doble cache: el consumidor y el resolver deben recalcular con estado actualizado.
+Mocks.playerSpells = { [147362] = true, [187707] = false }
+addonTable.Interrupt.InvalidateSpellIDCache()
+check(addonTable.Interrupt.GetSpellID() == 147362, "Interrupt: primera resolución conserva el spell actual")
+Mocks.playerSpells = { [147362] = false, [187707] = true }
+Mocks.FireEvent("SPELLS_CHANGED")
+addonTable.Interrupt.InvalidateSpellIDCache()
+check(addonTable.Interrupt.GetSpellID() == 187707, "Interrupt: el cambio de disponibilidad del spell invalida el resolver y el consumidor")
+
 T.finish("INTERRUPT TESTS")

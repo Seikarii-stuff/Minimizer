@@ -8,6 +8,7 @@
 ## SavedVariablesPerCharacter: MinimizerCharDB
 
 Bootstrap.lua
+Core/SpellResolver.lua
 Core/Utils.lua
 Overlays/Widgets.lua
 Overlays/Halo.lua
