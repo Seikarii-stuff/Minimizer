@@ -87,6 +87,31 @@ function Minimizer.Spells.GetInfo(spellID)
 
     local info = { id = spellID }
     info.baseID = GetBaseSpellIDInternal(spellID)
+    -- Resolve name safely, prefer modern C_Spell APIs then fallbacks
+    do
+        local resolvedName = nil
+        if C_Spell then
+            if C_Spell.GetSpellInfo then
+                local s = C_Spell.GetSpellInfo(spellID)
+                if s and type(s.name) == "string" and s.name ~= "" then
+                    resolvedName = s.name
+                end
+            end
+            if not resolvedName and C_Spell.GetSpellName then
+                local n = C_Spell.GetSpellName(spellID)
+                if type(n) == "string" and n ~= "" then
+                    resolvedName = n
+                end
+            end
+        end
+        if not resolvedName and GetSpellInfo then
+            local n = GetSpellInfo(spellID)
+            if type(n) == "string" and n ~= "" then
+                resolvedName = n
+            end
+        end
+        info.name = resolvedName or ("Spell " .. tostring(spellID))
+    end
     info.texture = GetSpellTextureSafeInternal(spellID)
     info.actionID = GetActionIDInternal(spellID)
 
@@ -112,25 +137,23 @@ function Minimizer.Spells.GetState(spellID)
         if start and duration then state.cooldown = { start = start, duration = duration } end
     end
 
-    -- Action display count / charges
+    -- Action display count (from action button) — independent from charges
     local actionID = GetActionIDInternal(spellID)
-    if actionID then
-        if C_ActionBar and C_ActionBar.GetActionDisplayCount then
-            state.displayCount = C_ActionBar.GetActionDisplayCount(actionID)
+    if actionID and C_ActionBar and C_ActionBar.GetActionDisplayCount then
+        state.displayCount = C_ActionBar.GetActionDisplayCount(actionID)
+    end
+
+    -- Charges: always attempt to read charges if API exists (do not discard when displayCount exists)
+    if C_Spell and C_Spell.GetSpellCharges then
+        local charges = C_Spell.GetSpellCharges(spellID)
+        if charges then
+            state.currentCharges = charges.currentCharges
+            state.maxCharges = charges.maxCharges
         end
     end
 
+    -- Fallback: if displayCount still nil, try C_Spell.GetSpellDisplayCount
     if state.displayCount == nil then
-        if C_Spell and C_Spell.GetSpellCharges then
-            local charges = C_Spell.GetSpellCharges(spellID)
-            if charges then
-                state.currentCharges = charges.currentCharges
-                state.maxCharges = charges.maxCharges
-            end
-        end
-    end
-
-    if state.displayCount == nil and (state.currentCharges == nil) then
         if C_Spell and C_Spell.GetSpellDisplayCount then
             local dc = C_Spell.GetSpellDisplayCount(spellID)
             if dc ~= nil then state.displayCount = dc end
