@@ -4,8 +4,6 @@ if not Minimizer then return end
 Minimizer.Spells = Minimizer.Spells or {}
 
 local type = type
-local ipairs = ipairs
-local table_insert = table.insert
 local wipe = wipe
 
 local _resolution_cache = {}
@@ -45,12 +43,8 @@ local function GetBaseSpellIDInternal(spellID)
         return cached
     end
     local baseID = nil
-    if C_Spell and C_Spell.GetBaseSpell then
-        baseID = C_Spell.GetBaseSpell(spellID)
-        if not baseID or baseID <= 0 then
-            baseID = spellID
-        end
-    else
+    baseID = C_Spell.GetBaseSpell(spellID)
+    if not baseID or baseID <= 0 then
         baseID = spellID
     end
     _base_spell_cache[spellID] = baseID
@@ -58,9 +52,7 @@ local function GetBaseSpellIDInternal(spellID)
 end
 
 local function GetActionIDInternal(spellID)
-    if not spellID or not C_ActionBar or not C_ActionBar.FindSpellActionButtons then
-        return nil
-    end
+    if not spellID then return nil end
 
     local baseID = GetBaseSpellIDInternal(spellID)
     if not baseID then return nil end
@@ -93,13 +85,9 @@ function Minimizer.Spells.GetInfo(spellID)
 
     local info = { id = spellID }
     info.baseID = GetBaseSpellIDInternal(spellID)
-    -- Texture: use modern C_Spell.GetSpellInfo().iconID when available
-    if C_Spell and C_Spell.GetSpellInfo then
-        local si = C_Spell.GetSpellInfo(spellID)
-        info.texture = si and si.iconID
-    else
-        info.texture = nil
-    end
+    -- Texture: use modern C_Spell.GetSpellInfo().iconID
+    local si = C_Spell.GetSpellInfo(spellID)
+    info.texture = si and si.iconID
     info.actionID = GetActionIDInternal(spellID)
 
     _info_cache[spellID] = info
@@ -110,18 +98,10 @@ function Minimizer.Spells.GetState(spellID)
     if type(spellID) ~= "number" then return nil end
     local state = {}
 
-    -- Cooldown: support modern and legacy APIs. Do not cache dynamic state here.
-    if C_Spell and C_Spell.GetSpellCooldownDuration then
-        local duration = C_Spell.GetSpellCooldownDuration(spellID)
-        if duration then
-            state.cooldown = duration
-        end
-    elseif C_Spell and C_Spell.GetSpellCooldown then
-        local info = C_Spell.GetSpellCooldown(spellID)
-        if info then state.cooldown = info end
-    elseif GetSpellCooldown then
-        local start, duration = GetSpellCooldown(spellID)
-        if start and duration then state.cooldown = { start = start, duration = duration } end
+    -- Cooldown: use Retail 12.1 API only.
+    local duration = C_Spell.GetSpellCooldownDuration(spellID)
+    if duration then
+        state.cooldown = duration
     end
 
     -- Action display count (from action button) — independent from charges
@@ -133,33 +113,23 @@ function Minimizer.Spells.GetState(spellID)
     if actionID == nil then
         actionID = GetActionIDInternal(spellID)
     end
-    if actionID and C_ActionBar and C_ActionBar.GetActionDisplayCount then
-        state.displayCount = C_ActionBar.GetActionDisplayCount(actionID)
-    end
+    state.displayCount = C_ActionBar.GetActionDisplayCount(actionID)
 
     -- Charges: always attempt to read charges if API exists (do not discard when displayCount exists)
-    if C_Spell and C_Spell.GetSpellCharges then
-        local charges = C_Spell.GetSpellCharges(spellID)
-        if charges then
-            state.currentCharges = charges.currentCharges
-            state.maxCharges = charges.maxCharges
-        end
+    local charges = C_Spell.GetSpellCharges(spellID)
+    if charges then
+        state.currentCharges = charges.currentCharges
+        state.maxCharges = charges.maxCharges
     end
 
     -- Fallback: if displayCount still nil, try C_Spell.GetSpellDisplayCount
     if state.displayCount == nil then
-        if C_Spell and C_Spell.GetSpellDisplayCount then
-            local dc = C_Spell.GetSpellDisplayCount(spellID)
-            if dc ~= nil then state.displayCount = dc end
-        end
+        local dc = C_Spell.GetSpellDisplayCount(spellID)
+        if dc ~= nil then state.displayCount = dc end
     end
 
     -- Activation overlay / highlight
-    if C_SpellActivationOverlay and C_SpellActivationOverlay.IsSpellOverlayed then
-        state.isOverlayed = C_SpellActivationOverlay.IsSpellOverlayed(spellID) == true
-    else
-        state.isOverlayed = false
-    end
+    state.isOverlayed = C_SpellActivationOverlay.IsSpellOverlayed(spellID) == true
 
     return state
 end
@@ -172,12 +142,7 @@ function Minimizer.Spells.IsKnown(spellID)
     if cached ~= nil then
         return cached
     end
-    local known = false
-    if C_SpellBook and C_SpellBook.IsSpellKnownOrInSpellBook then
-        known = C_SpellBook.IsSpellKnownOrInSpellBook(spellID) == true
-    else
-        known = false
-    end
+    local known = C_SpellBook.IsSpellKnownOrInSpellBook(spellID) == true
     _known_cache[spellID] = known
     return known
 end
@@ -249,7 +214,8 @@ function Minimizer.Spells.ResolveForClass(dbTable, override, slotIndex, classTok
             local lookup = _spelllist_lookup_cache[spellList]
             if not lookup then
                 lookup = {}
-                for _, entry in ipairs(spellList) do
+                for i = 1, #spellList do
+                    local entry = spellList[i]
                     local sid = NormalizeSpellID(entry)
                     if sid then lookup[sid] = true end
                 end

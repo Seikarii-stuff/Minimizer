@@ -300,6 +300,24 @@ _G.IsSpellKnown = function(spellID)
     return Mocks.playerSpells[spellID] == true
 end
 
+-- Minimal Retail 12.1 API defaults for tests (can be overridden by individual tests)
+_G.C_Spell = {
+    GetBaseSpell = function(id) return id end,
+    GetSpellInfo = function(id) return nil end,
+    GetSpellCooldownDuration = function(id) return nil end,
+    GetSpellCharges = function(id) return nil end,
+    GetSpellDisplayCount = function(id) return nil end,
+}
+
+_G.C_ActionBar = {
+    FindSpellActionButtons = function(baseID) return nil end,
+    GetActionDisplayCount = function(actionID) return nil end,
+}
+
+_G.C_SpellActivationOverlay = {
+    IsSpellOverlayed = function(id) return false end,
+}
+
 -- Mock secret helper used by tests to simulate Midnight/Secrets values.
 function Mocks.Secret(value)
     return { __minimizerMockSecret = true, __value = value }
