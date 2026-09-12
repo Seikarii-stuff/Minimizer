@@ -69,9 +69,10 @@ _G.C_SpellBook.IsSpellKnownOrInSpellBook = function(id)
     return id == 1001 or id == 1002
 end
 Spells.InvalidateCache()
-Spells.ResolveForClass({ HUNTER = lookupTable }, nil, 1, "HUNTER")
-Spells.ResolveForClass({ HUNTER = lookupTable }, nil, 1, "HUNTER")
-check(lookupCalls <= 2, "ResolveForClass: repeated lookups do not rebuild the spell list unnecessarily")
+local firstLookup = Spells.ResolveForClass({ HUNTER = lookupTable }, nil, 1, "HUNTER")
+local secondLookup = Spells.ResolveForClass({ HUNTER = lookupTable }, nil, 1, "HUNTER")
+check(firstLookup == 1001 and secondLookup == 1001 and lookupCalls == 1,
+    "ResolveForClass: repeated lookups reuse cached known-state resolution without rechecking IsKnown")
 _G.C_SpellBook.IsSpellKnownOrInSpellBook = originalLookup
 
 T.finish("SPELL RESOLVER TESTS")

@@ -125,17 +125,34 @@ end
 
 local function GetInfoInternal(spellID)
     if type(spellID) ~= "number" then return nil end
+
     local cached = _info_cache[spellID]
-    if cached then return cached end
+    if cached then
+        return {
+            id = cached.id,
+            baseID = cached.baseID,
+            texture = cached.texture,
+            actionID = GetActionIDInternal(spellID),
+        }
+    end
 
     local info = { id = spellID }
     info.baseID = GetBaseSpellIDInternal(spellID)
     local si = C_Spell.GetSpellInfo(spellID)
     info.texture = si and si.iconID
-    info.actionID = GetActionIDInternal(spellID)
 
-    _info_cache[spellID] = info
-    return info
+    _info_cache[spellID] = {
+        id = info.id,
+        baseID = info.baseID,
+        texture = info.texture,
+    }
+
+    return {
+        id = info.id,
+        baseID = info.baseID,
+        texture = info.texture,
+        actionID = GetActionIDInternal(spellID),
+    }
 end
 
 function Minimizer.Spells.GetInfo(spellID)

@@ -49,16 +49,18 @@ _G.C_SpellBook.IsSpellKnownOrInSpellBook = function(id)
     if id == 202 then
         knownCalls = knownCalls + 1
     end
-    return id == 202
+    return Mocks.playerSpells and Mocks.playerSpells[id] == true
 end
+Mocks.playerSpells = { [202] = true }
 Spells.InvalidateCache()
 local k1 = Spells.IsKnown(202)
 local k2 = Spells.IsKnown(202)
 check(knownCalls == 1 and k1 == true and k2 == true, "_known_cache: IsSpellKnown called once and cached")
 
+Mocks.playerSpells = { [202] = false }
 Mocks.FireEvent("SPELLS_CHANGED")
 local k3 = Spells.IsKnown(202)
-check(knownCalls == 2 and k3 == true, "_known_cache: SPELLS_CHANGED invalidates known cache")
+check(knownCalls == 2 and k3 == false, "_known_cache: SPELLS_CHANGED invalidates known cache")
 
 -- Resolution cache is invalidated when known state changes.
 local resolutionCalls = 0
@@ -73,13 +75,15 @@ local classTable = {
     HUNTER = { 100, 200 },
 }
 local resolvedBefore = Spells.ResolveForClass(classTable, nil, 1, "HUNTER")
-check(resolvedBefore == 100, "_resolution_cache: ResolveForClass resolves first known spell")
+local resolvedBeforeCached = Spells.ResolveForClass(classTable, nil, 1, "HUNTER")
+check(resolutionCalls == 1 and resolvedBefore == 100 and resolvedBeforeCached == 100,
+    "_resolution_cache: first resolution checks IsKnown and the second reuses the cached result")
 
 Mocks.playerSpells = { [100] = false, [200] = true }
-Spells.InvalidateCache("known")
 Mocks.FireEvent("PLAYER_SPECIALIZATION_CHANGED")
 local resolvedAfter = Spells.ResolveForClass(classTable, nil, 1, "HUNTER")
-check(resolvedAfter == 200, "_resolution_cache: specializes/known change invalidates stale resolution")
+check(resolutionCalls == 3 and resolvedAfter == 200,
+    "_resolution_cache: PLAYER_SPECIALIZATION_CHANGED revalidates known-dependent resolution")
 
 -- Talent/loadout style invalidation path on the existing event manager.
 local talentCalls = 0
@@ -92,12 +96,14 @@ end
 Mocks.playerSpells = { [300] = true, [301] = false }
 local talentTable = { HUNTER = { 300, 301 } }
 local talentBefore = Spells.ResolveForClass(talentTable, nil, 1, "HUNTER")
-check(talentBefore == 300, "_resolution_cache: initial talent loadout resolves from current known state")
+local talentBeforeCached = Spells.ResolveForClass(talentTable, nil, 1, "HUNTER")
+check(talentCalls == 1 and talentBefore == 300 and talentBeforeCached == 300,
+    "_resolution_cache: initial talent loadout resolves from current known state and then caches it")
 
 Mocks.playerSpells = { [300] = false, [301] = true }
-Spells.InvalidateCache("known")
 Mocks.FireEvent("ACTIVE_TALENT_GROUP_CHANGED")
 local talentAfter = Spells.ResolveForClass(talentTable, nil, 1, "HUNTER")
-check(talentAfter == 301, "_resolution_cache: talent-loadout invalidation refreshes known-dependent resolution")
+check(talentCalls == 3 and talentAfter == 301,
+    "_resolution_cache: ACTIVE_TALENT_GROUP_CHANGED refreshes known-dependent resolution")
 
 T.finish("SPELLRESOLVER CACHE TESTS")

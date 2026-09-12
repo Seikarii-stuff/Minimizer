@@ -88,9 +88,9 @@ _G.C_Spell = { GetBaseSpell = function(id) return id end, GetSpellInfo = functio
 Spells.InvalidateCache()
 local before = Spells.GetInfo(800).actionID
 _G.C_ActionBar = { FindSpellActionButtons = function() return { 2 } end }
-Spells.InvalidateCache()
+Spells.InvalidateCache("action")
 local after = Spells.GetInfo(800).actionID
-check(before ~= after and after == 2, "InvalidateCache: action button cache invalidated and refreshed")
+check(before == 1 and after == 2, "InvalidateCache(\"action\"): actionID refreshes from the current action bar state")
 
 T.finish("SPELL INFO/STATE TESTS")
 
