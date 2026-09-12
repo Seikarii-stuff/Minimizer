@@ -62,18 +62,6 @@ function _G.GetTime()
     return Mocks.time
 end
 
-function _G.GetSpellCooldownDuration(spellID)
-    local cd = Mocks.cooldowns[spellID]
-    if not cd then return nil end
-    return cd.duration or nil
-end
-
-function _G.GetSpellCooldown(spellID)
-    local cd = Mocks.cooldowns[spellID]
-    if not cd then return nil, nil end
-    return cd.start or 0, cd.duration or 0
-end
-
 function Mocks.AdvanceTime(seconds)
     Mocks.time = Mocks.time + seconds
     local i = 1
@@ -287,18 +275,25 @@ _G.C_SpellBook = {
     IsSpellKnownOrInSpellBook = function(spellID)
         return Mocks.playerSpells[spellID] == true
     end,
-    IsSpellKnown = function(spellID)
-        return Mocks.playerSpells[spellID] == true
-    end,
 }
 
-_G.IsPlayerSpell = function(spellID)
-    return Mocks.playerSpells[spellID] == true
-end
+-- Minimal Retail 12.1 API defaults for tests (can be overridden by individual tests)
+_G.C_Spell = {
+    GetBaseSpell = function(id) return id end,
+    GetSpellInfo = function(id) return nil end,
+    GetSpellCooldownDuration = function(id) return nil end,
+    GetSpellCharges = function(id) return nil end,
+    GetSpellDisplayCount = function(id) return nil end,
+}
 
-_G.IsSpellKnown = function(spellID)
-    return Mocks.playerSpells[spellID] == true
-end
+_G.C_ActionBar = {
+    FindSpellActionButtons = function(baseID) return nil end,
+    GetActionDisplayCount = function(actionID) return nil end,
+}
+
+_G.C_SpellActivationOverlay = {
+    IsSpellOverlayed = function(id) return false end,
+}
 
 -- Mock secret helper used by tests to simulate Midnight/Secrets values.
 function Mocks.Secret(value)

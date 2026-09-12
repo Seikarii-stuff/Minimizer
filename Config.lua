@@ -52,8 +52,13 @@ function Minimizer.Config.Initialize()
     -- Eliminarlos aquí limpia SavedVariables existentes y evita persistirlos de nuevo.
     MinimizerDB.enableTargetMarkers = nil
     MinimizerDB.enableFocusMarkers = nil
-    MinimizerDB.enableFocusFace = nil
-    MinimizerDB.enableFocusArrows = nil
+    -- Migrate legacy focusIndicator to modern booleans when present
+    if MinimizerDB.focusIndicator ~= nil then
+        if MinimizerDB.enableFocusFace == nil and MinimizerDB.enableFocusArrows == nil then
+            MinimizerDB.enableFocusFace = (MinimizerDB.focusIndicator == "face")
+            MinimizerDB.enableFocusArrows = (MinimizerDB.focusIndicator == "arrows")
+        end
+    end
 
     -- Legacy focus indicator is no longer used because both focus indicators are fixed on.
     MinimizerDB.focusIndicator = nil

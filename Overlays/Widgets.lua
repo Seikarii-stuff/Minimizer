@@ -89,30 +89,10 @@ end
 
 function Minimizer.Widgets.ApplyCooldownDuration(cooldown, spellID)
     if not cooldown or not spellID then return false end
-
-    if C_Spell and C_Spell.GetSpellCooldownDuration then
-        local duration = C_Spell.GetSpellCooldownDuration(spellID)
-        if duration and cooldown.SetCooldownFromDurationObject then
-            cooldown:SetCooldownFromDurationObject(duration)
-            return true
-        end
-    elseif C_Spell and C_Spell.GetSpellCooldown then
-        local info = C_Spell.GetSpellCooldown(spellID)
-        if info then
-            if cooldown.SetCooldownFromExpression then
-                cooldown:SetCooldownFromExpression(spellID)
-            elseif cooldown.SetCooldownTable then
-                cooldown:SetCooldownTable(info)
-            end
-            return true
-        end
-    elseif GetSpellCooldown then
-        local start, duration = GetSpellCooldown(spellID)
-        if start and duration then
-            cooldown:SetCooldown(start, duration)
-            return true
-        end
+    local duration = C_Spell.GetSpellCooldownDuration(spellID)
+    if duration and cooldown.SetCooldownFromDurationObject then
+        cooldown:SetCooldownFromDurationObject(duration)
+        return true
     end
-
     return false
 end

@@ -14,6 +14,9 @@ local cachedSpellIDResolved = false
 function Minimizer.Interrupt.InvalidateSpellIDCache()
     cachedSpellID = nil
     cachedSpellIDResolved = false
+    if Minimizer.Spells and Minimizer.Spells.InvalidateCache then
+        Minimizer.Spells.InvalidateCache("known")
+    end
 end
 
 function Minimizer.Interrupt.GetSpellID()
@@ -39,12 +42,10 @@ function Minimizer.Interrupt.RefreshReadyCache()
     -- Keep Interrupt on the direct cooldown API. Calling Spells.GetState here
     -- creates a fresh state table and performs unrelated action-bar/charge/
     -- overlay lookups on every SPELL_UPDATE_COOLDOWN event.
-    if spellID and C_Spell and C_Spell.GetSpellCooldownDuration then
-        local duration = C_Spell.GetSpellCooldownDuration(spellID)
-        if duration then
-            cachedReady = duration:IsZero()
-            return cachedReady
-        end
+    local duration = C_Spell.GetSpellCooldownDuration(spellID)
+    if duration then
+        cachedReady = duration:IsZero()
+        return cachedReady
     end
 
     cachedReady = true

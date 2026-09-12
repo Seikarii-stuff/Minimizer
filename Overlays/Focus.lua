@@ -38,6 +38,10 @@ local function UpdateCooldown()
 end
 
 function Focus:UpdateFace()
+    if MinimizerDB and MinimizerDB.enableFocusFace == false then
+        HideFace()
+        return
+    end
     if not UnitExists("focus") or UnitIsDead("focus") then
         HideFace()
         return
