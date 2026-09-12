@@ -5,6 +5,13 @@ T.fireAddonLoaded()
 Mocks.playerSpells = { [147362] = true }
 Mocks.cooldowns[147362] = { start = Mocks.time, duration = 15 }
 
+-- Provide modern cooldown API for halo tests
+_G.C_Spell.GetSpellCooldownDuration = function(id)
+	local cd = Mocks.cooldowns[id]
+	if not cd then return nil end
+	return { start = cd.start, duration = cd.duration, IsZero = function() return (cd.duration == 0) end }
+end
+
 local hostA = CreateFrame("Frame", "MinimizerHaloHostA", UIParent)
 local haloA = addonTable.Halo.Create(hostA, { size = 64, cooldownName = "MinimizerTestHaloCooldown" })
 

@@ -7,6 +7,13 @@ Mocks.cooldowns[147362] = { start = Mocks.time, duration = 15 }
 T.fireAddonLoaded()
 if addonTable.Interrupt and addonTable.Interrupt.InvalidateSpellIDCache then addonTable.Interrupt.InvalidateSpellIDCache() end
 
+-- Provide modern cooldown API for tests
+_G.C_Spell.GetSpellCooldownDuration = function(id)
+	local cd = Mocks.cooldowns[id]
+	if not cd then return nil end
+	return { start = cd.start, duration = cd.duration, IsZero = function() return (cd.duration == 0) end }
+end
+
 Mocks.CreateTestUnit("target", { name = "Target Mob", level = 70, health = 40, healthMax = 100, faction = "Horde", guid = "target_guid" })
 local plate = Mocks.CreateTestNameplate("target")
 local healthBar = addonTable.Utils.GetHealthBar(plate)
