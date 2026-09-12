@@ -61,14 +61,18 @@ handlers["ZONE_CHANGED_NEW_AREA"] = HandleFullRefreshEvent
 handlers["PLAYER_DIFFICULTY_CHANGED"] = HandleFullRefreshEvent
 handlers["PLAYER_REGEN_DISABLED"] = HandleFullRefreshEvent
 handlers["PLAYER_REGEN_ENABLED"] = HandleFullRefreshEvent
-handlers["SPELLS_CHANGED"] = function(self, event)
+local function InvalidateSpellKnownState()
     if Minimizer.Spells and Minimizer.Spells.InvalidateCache then
-        Minimizer.Spells.InvalidateCache()
+        Minimizer.Spells.InvalidateCache("known")
     end
     if Minimizer.Interrupt and Minimizer.Interrupt.InvalidateSpellIDCache then
         Minimizer.Interrupt.InvalidateSpellIDCache()
     end
     UpdateNameplates()
+end
+
+handlers["SPELLS_CHANGED"] = function(self, event)
+    InvalidateSpellKnownState()
 end
 
 handlers["PLAYER_TARGET_CHANGED"] = function(self, event)
@@ -142,7 +146,7 @@ local function HandleRosterOrSpecChange(self, event)
         Minimizer.Dispatcher.UpdateMonitorState()
     end
     if Minimizer.Spells and Minimizer.Spells.InvalidateCache then
-        Minimizer.Spells.InvalidateCache()
+        Minimizer.Spells.InvalidateCache("known")
     end
     if Minimizer.Interrupt and Minimizer.Interrupt.InvalidateSpellIDCache then
         Minimizer.Interrupt.InvalidateSpellIDCache()
@@ -155,6 +159,7 @@ end
 handlers["PLAYER_ROLES_ASSIGNED"] = HandleRosterOrSpecChange
 handlers["GROUP_ROSTER_UPDATE"] = HandleRosterOrSpecChange
 handlers["PLAYER_TALENT_UPDATE"] = HandleRosterOrSpecChange
+handlers["ACTIVE_TALENT_GROUP_CHANGED"] = HandleRosterOrSpecChange
 handlers["PLAYER_SPECIALIZATION_CHANGED"] = HandleRosterOrSpecChange
 
 local function HandleCastEvent(self, event, unit)
@@ -279,6 +284,7 @@ EventFrame:RegisterEvent("SPELLS_CHANGED")
 EventFrame:RegisterEvent("PLAYER_ROLES_ASSIGNED")
 EventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 EventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
+EventFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 EventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 EventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 EventFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")

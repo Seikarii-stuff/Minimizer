@@ -45,15 +45,9 @@ end
 
 local function ResolveSpellName(spellID)
     if type(spellID) ~= "number" then return nil end
-    if C_Spell then
-        if C_Spell.GetSpellInfo then
-            local info = C_Spell.GetSpellInfo(spellID)
-            if info and type(info.name) == "string" and info.name ~= "" then return info.name end
-        end
-        if C_Spell.GetSpellName then
-            local name = C_Spell.GetSpellName(spellID)
-            if type(name) == "string" and name ~= "" then return name end
-        end
+    local info = C_Spell.GetSpellInfo(spellID)
+    if info and type(info.name) == "string" and info.name ~= "" then
+        return info.name
     end
     return "Spell " .. tostring(spellID)
 end
