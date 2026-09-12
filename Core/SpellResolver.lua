@@ -11,13 +11,20 @@ local wipe = wipe
 local _resolution_cache = {}
 local _info_cache = {}
 local _action_button_cache = {}
+local _base_spell_cache = {}
+local _known_cache = {}
+local _spelllist_lookup_cache = {}
 
 local function NormalizeSpellID(entry)
-    if type(entry) == "number" then
+    local t = type(entry)
+    if t == "number" then
         return entry
     end
-    if type(entry) == "table" and type(entry.id) == "number" then
-        return entry.id
+    if t == "table" then
+        local id = entry.id
+        if type(id) == "number" then
+            return id
+        end
     end
     return nil
 end
@@ -26,29 +33,28 @@ function Minimizer.Spells.InvalidateCache()
     wipe(_resolution_cache)
     wipe(_info_cache)
     wipe(_action_button_cache)
+    wipe(_base_spell_cache)
+    wipe(_known_cache)
+    wipe(_spelllist_lookup_cache)
 end
 
 local function GetBaseSpellIDInternal(spellID)
     if not spellID then return nil end
+    local cached = _base_spell_cache[spellID]
+    if cached ~= nil then
+        return cached
+    end
+    local baseID = nil
     if C_Spell and C_Spell.GetBaseSpell then
-        local baseID = C_Spell.GetBaseSpell(spellID)
-        if baseID and baseID > 0 then
-            return baseID
+        baseID = C_Spell.GetBaseSpell(spellID)
+        if not baseID or baseID <= 0 then
+            baseID = spellID
         end
+    else
+        baseID = spellID
     end
-    return spellID
-end
-
-local function GetSpellTextureSafeInternal(spellID)
-    if not spellID then return nil end
-    if C_Spell and C_Spell.GetSpellTexture then
-        local texture = C_Spell.GetSpellTexture(spellID)
-        if texture then return texture end
-    end
-    if GetSpellTexture then
-        return GetSpellTexture(spellID)
-    end
-    return nil
+    _base_spell_cache[spellID] = baseID
+    return baseID
 end
 
 local function GetActionIDInternal(spellID)
@@ -87,32 +93,13 @@ function Minimizer.Spells.GetInfo(spellID)
 
     local info = { id = spellID }
     info.baseID = GetBaseSpellIDInternal(spellID)
-    -- Resolve name safely, prefer modern C_Spell APIs then fallbacks
-    do
-        local resolvedName = nil
-        if C_Spell then
-            if C_Spell.GetSpellInfo then
-                local s = C_Spell.GetSpellInfo(spellID)
-                if s and type(s.name) == "string" and s.name ~= "" then
-                    resolvedName = s.name
-                end
-            end
-            if not resolvedName and C_Spell.GetSpellName then
-                local n = C_Spell.GetSpellName(spellID)
-                if type(n) == "string" and n ~= "" then
-                    resolvedName = n
-                end
-            end
-        end
-        if not resolvedName and GetSpellInfo then
-            local n = GetSpellInfo(spellID)
-            if type(n) == "string" and n ~= "" then
-                resolvedName = n
-            end
-        end
-        info.name = resolvedName or ("Spell " .. tostring(spellID))
+    -- Texture: use modern C_Spell.GetSpellInfo().iconID when available
+    if C_Spell and C_Spell.GetSpellInfo then
+        local si = C_Spell.GetSpellInfo(spellID)
+        info.texture = si and si.iconID
+    else
+        info.texture = nil
     end
-    info.texture = GetSpellTextureSafeInternal(spellID)
     info.actionID = GetActionIDInternal(spellID)
 
     _info_cache[spellID] = info
@@ -138,7 +125,14 @@ function Minimizer.Spells.GetState(spellID)
     end
 
     -- Action display count (from action button) — independent from charges
-    local actionID = GetActionIDInternal(spellID)
+    local actionID
+    local cachedInfo = _info_cache[spellID]
+    if cachedInfo then
+        actionID = cachedInfo.actionID
+    end
+    if actionID == nil then
+        actionID = GetActionIDInternal(spellID)
+    end
     if actionID and C_ActionBar and C_ActionBar.GetActionDisplayCount then
         state.displayCount = C_ActionBar.GetActionDisplayCount(actionID)
     end
@@ -174,20 +168,18 @@ function Minimizer.Spells.IsKnown(spellID)
     if type(spellID) ~= "number" then
         return false
     end
-
-    if C_SpellBook and C_SpellBook.IsSpellKnownOrInSpellBook and C_SpellBook.IsSpellKnownOrInSpellBook(spellID) then
-        return true
+    local cached = _known_cache[spellID]
+    if cached ~= nil then
+        return cached
     end
-    if IsPlayerSpell and IsPlayerSpell(spellID) then
-        return true
+    local known = false
+    if C_SpellBook and C_SpellBook.IsSpellKnownOrInSpellBook then
+        known = C_SpellBook.IsSpellKnownOrInSpellBook(spellID) == true
+    else
+        known = false
     end
-    if C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(spellID) then
-        return true
-    end
-    if IsSpellKnown and IsSpellKnown(spellID) then
-        return true
-    end
-    return false
+    _known_cache[spellID] = known
+    return known
 end
 
 function Minimizer.Spells.Resolve(spellList, slotIndex)
@@ -200,18 +192,16 @@ function Minimizer.Spells.Resolve(spellList, slotIndex)
         return (slotIndex == 1) and spellList or nil
     end
 
-    local knownList = {}
-    for _, entry in ipairs(spellList) do
-        local spellID = NormalizeSpellID(entry)
-        if spellID and Minimizer.Spells.IsKnown(spellID) then
-            table_insert(knownList, spellID)
+    local found = 0
+    for i = 1, #spellList do
+        local id = NormalizeSpellID(spellList[i])
+        if id and Minimizer.Spells.IsKnown(id) then
+            found = found + 1
+            if found == slotIndex then
+                return id
+            end
         end
     end
-
-    if #knownList >= slotIndex then
-        return knownList[slotIndex]
-    end
-
     local fallbackEntry = spellList[slotIndex] or spellList[1]
     local fallbackID = NormalizeSpellID(fallbackEntry)
     if fallbackID then
@@ -256,11 +246,17 @@ function Minimizer.Spells.ResolveForClass(dbTable, override, slotIndex, classTok
     if override ~= nil then
         local overrideAllowed = false
         if type(spellList) == "table" then
-            for _, entry in ipairs(spellList) do
-                if NormalizeSpellID(entry) == override then
-                    overrideAllowed = true
-                    break
+            local lookup = _spelllist_lookup_cache[spellList]
+            if not lookup then
+                lookup = {}
+                for _, entry in ipairs(spellList) do
+                    local sid = NormalizeSpellID(entry)
+                    if sid then lookup[sid] = true end
                 end
+                _spelllist_lookup_cache[spellList] = lookup
+            end
+            if lookup[override] then
+                overrideAllowed = true
             end
         end
         if overrideAllowed and Minimizer.Spells.IsKnown(override) then

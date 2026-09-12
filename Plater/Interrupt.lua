@@ -14,6 +14,9 @@ local cachedSpellIDResolved = false
 function Minimizer.Interrupt.InvalidateSpellIDCache()
     cachedSpellID = nil
     cachedSpellIDResolved = false
+    if Minimizer.Spells and Minimizer.Spells.InvalidateCache then
+        Minimizer.Spells.InvalidateCache()
+    end
 end
 
 function Minimizer.Interrupt.GetSpellID()

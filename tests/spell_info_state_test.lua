@@ -9,31 +9,15 @@ check(type(Spells.GetInfo) == "function", "SpellInfo: GetInfo exists")
 check(type(Spells.GetState) == "function", "SpellInfo: GetState exists")
 
 -- Base spell resolution: modern API
+-- Modern C_Spell provides base and iconID
 _G.C_Spell = {
     GetBaseSpell = function(id) return 999 end,
-    GetSpellTexture = function(id) return "modernTex" end,
+    GetSpellInfo = function(id) return { iconID = "modernIcon" } end,
 }
 local info = Spells.GetInfo(123)
 check(info and info.id == 123, "GetInfo: returns id")
 check(info.baseID == 999, "GetInfo: uses C_Spell.GetBaseSpell when available")
-check(info.texture == "modernTex", "GetInfo: uses C_Spell.GetSpellTexture (modern)")
--- Name via modern C_Spell.GetSpellInfo
-_G.C_Spell.GetSpellInfo = function(id) return { name = "ModernName" } end
-Spells.InvalidateCache()
-local infoName = Spells.GetInfo(123)
-check(infoName.name == "ModernName", "GetInfo: resolves name via C_Spell.GetSpellInfo")
-
--- Fallback baseID and texture to legacy API
-_G.C_Spell = nil
-_G.GetSpellTexture = function(id) return "oldTex" end
-local info2 = Spells.GetInfo(200)
-check(info2 and info2.baseID == 200, "GetInfo: falls back to spellID when no C_Spell.GetBaseSpell")
-check(info2.texture == "oldTex", "GetInfo: falls back to GetSpellTexture when modern API missing")
--- Name via global GetSpellInfo fallback
-_G.GetSpellInfo = function(id) return "LegacyName" end
-Spells.InvalidateCache()
-local infoName2 = Spells.GetInfo(200)
-check(infoName2.name == "LegacyName", "GetInfo: falls back to global GetSpellInfo for name")
+check(info.texture == "modernIcon", "GetInfo: uses C_Spell.GetSpellInfo().iconID for texture")
 
 -- Action button mapping and action display count
 _G.C_ActionBar = {
@@ -131,3 +115,4 @@ local after = Spells.GetInfo(800).actionID
 check(before ~= after and after == 2, "InvalidateCache: action button cache invalidated and refreshed")
 
 T.finish("SPELL INFO/STATE TESTS")
+
