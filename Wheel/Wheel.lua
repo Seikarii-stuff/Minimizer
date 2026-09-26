@@ -38,6 +38,7 @@ if Minimizer.SpellRenderer and Minimizer.SpellRenderer.Create then
     wheelFrame.MinimizerWheelRenderer = Minimizer.SpellRenderer.Create(wheelFrame, { size = 48 })
     if wheelFrame.MinimizerWheelRenderer then
         wheelFrame.MinimizerWheelRenderer:SetSize(48)
+        wheelFrame.MinimizerWheelRenderer._frame:SetPoint("CENTER", wheelFrame, "CENTER")
     end
 end
 

@@ -22,6 +22,7 @@ local tests = {
     "tests/focus_test.lua",
     "tests/halo_test.lua",
     "tests/widgets_test.lua",
+    "tests/spellrenderer_test.lua",
     "tests/pips_test.lua",
     "tests/wheel_test.lua",
     "tests/mouse_test.lua",

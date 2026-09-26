@@ -130,6 +130,17 @@ function FrameMixin:Show() self.shown = true end
 function FrameMixin:IsShown() return self.shown end
 function FrameMixin:SetAlpha(alpha) self.alpha = alpha end
 function FrameMixin:GetAlpha() return self.alpha or 1 end
+function FrameMixin:SetTexture(texture) self.texture = texture end
+function FrameMixin:SetText(value) self.text = value end
+function FrameMixin:Clear()
+    self.cleared = true
+    self.cooldownDuration = nil
+end
+function FrameMixin:SetCooldownFromDurationObject(duration)
+    self.cleared = false
+    self.cooldownDuration = duration
+end
+function FrameMixin:SetUseCircularEdge(value) self.useCircularEdge = value == true end
 function FrameMixin:SetStatusBarColor(r, g, b, a) self.statusBarColor = { r, g, b, a or 1 } end
 function FrameMixin:GetStatusBarColor()
     if self.statusBarColor then

@@ -1,54 +1,75 @@
 -- ============================================================================
 -- Minimizer - SpellRenderer.lua
--- Presentational renderer for spells (icon, cooldown, charges, glow).
+-- Presentational renderer for spells (icon, cooldown, charges and glow).
 -- ============================================================================
 local _, Minimizer = ...
 if not Minimizer then return end
 
-Minimizer.SpellRenderer = Minimizer.SpellRenderer or {}
-
-local SR = {}
-Minimizer.SpellRenderer = SR
+local SpellRenderer = {}
+Minimizer.SpellRenderer = SpellRenderer
 
 local DEFAULT_SIZE = 32
+local GLOW_PULSE_SPEED = 3.2
 
-local function NewRenderer(parent, opts)
-    opts = opts or {}
-    local self = {}
-    self._parent = parent
-    self._size = opts.size or DEFAULT_SIZE
-    self._spellID = nil
-    self._overlayed = false
+function SpellRenderer.Create(parent, options)
+    if not parent then return nil end
+    options = options or {}
 
-    local frame = CreateFrame("Frame", nil, parent)
+    local self = {
+        _size = tonumber(options.size) or DEFAULT_SIZE,
+        _spellID = nil,
+        _overlayed = false,
+        _glowPhase = 0,
+        _showIcon = options.showIcon ~= false,
+    }
+
+    local frame = options.frame or CreateFrame("Frame", nil, parent)
     frame:SetSize(self._size, self._size)
-    frame:Hide()
+    if not options.frame then frame:Hide() end
 
     local icon = frame:CreateTexture(nil, "ARTWORK")
     icon:SetAllPoints()
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    local mask = frame:CreateMaskTexture()
+    mask:SetAllPoints(icon)
+    mask:SetTexture("Interface\\Masks\\CircleMaskScalable", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    icon:AddMaskTexture(mask)
 
-    local cooldown = opts.existingCooldown or CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
+    local cooldown = options.existingCooldown or CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     cooldown:SetAllPoints()
-    if not opts.existingCooldown and Minimizer.Widgets and Minimizer.Widgets.MakeCooldownCircular then
+    if options.cooldownOptions then
+        Minimizer.Widgets.ConfigureCooldownFrame(cooldown, options.cooldownOptions)
+    else
         Minimizer.Widgets.MakeCooldownCircular(cooldown, false)
     end
 
-    local countFS = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    countFS:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
-    countFS:Hide()
+    local count = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    count:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
+    count:Hide()
 
     local glow = frame:CreateTexture(nil, "OVERLAY")
-    glow:SetAllPoints()
+    glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
     glow:SetBlendMode("ADD")
+    glow:SetPoint("TOPLEFT", frame, "TOPLEFT", -7, 7)
+    glow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 7, -7)
+    glow:SetVertexColor(1.0, 0.55, 0.02, 1.0)
     glow:Hide()
 
-    frame.MinimizerSpellRendererFrame = true
+    local flash = frame:CreateTexture(nil, "OVERLAY")
+    flash:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+    flash:SetBlendMode("ADD")
+    flash:SetPoint("TOPLEFT", frame, "TOPLEFT", -11, 11)
+    flash:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 11, -11)
+    flash:SetVertexColor(1.0, 0.82, 0.15, 1.0)
+    flash:Hide()
 
     self._frame = frame
     self._icon = icon
+    self._mask = mask
     self._cooldown = cooldown
-    self._countFS = countFS
+    self._count = count
     self._glow = glow
+    self._flash = flash
 
     function self:SetSize(size)
         size = tonumber(size) or DEFAULT_SIZE
@@ -58,21 +79,29 @@ local function NewRenderer(parent, opts)
         return true
     end
 
-    local pulseTime = 0
-    function self:Update(dt)
-        if not self._overlayed then return end
-        pulseTime = (pulseTime + (dt or 0)) % 1.5
-        local alpha = 0.6 + 0.4 * math.abs(math.sin(pulseTime * math.pi * 2))
-        self._glow:SetAlpha(alpha)
-    end
-
     function self:SetOverlayed(active)
         self._overlayed = active == true
+        self._glowPhase = 0
         if self._overlayed then
+            self._glow:SetAlpha(1)
+            self._flash:SetAlpha(1)
             self._glow:Show()
+            self._flash:Show()
         else
+            self._glow:SetAlpha(0)
+            self._flash:SetAlpha(0)
             self._glow:Hide()
+            self._flash:Hide()
         end
+    end
+
+    function self:Update(elapsed)
+        if not self._overlayed then return end
+        self._glowPhase = self._glowPhase + (elapsed or 0) * GLOW_PULSE_SPEED
+        local wave = (math.sin(self._glowPhase) + 1) * 0.5
+        local flashWave = math.max(0, math.cos(self._glowPhase * 0.5))
+        self._glow:SetAlpha(0.65 + wave * 0.35)
+        self._flash:SetAlpha(0.12 + flashWave * 0.72)
     end
 
     function self:Show()
@@ -86,70 +115,64 @@ local function NewRenderer(parent, opts)
     function self:Clear()
         self._spellID = nil
         self._icon:SetTexture(nil)
-        -- hide/reset cooldown
-        if self._cooldown and self._cooldown.Hide then self._cooldown:Hide() end
-        self._countFS:SetText(nil)
-        self._countFS:Hide()
-        self._glow:Hide()
+        self._icon:Hide()
+        self._count:SetText(nil)
+        self._count:Hide()
+        self:SetOverlayed(false)
+        if self._cooldown.Clear then self._cooldown:Clear() end
+        self._cooldown:Hide()
         self._frame:Hide()
     end
 
     function self:Render(spellID, state)
         if not spellID then
             self:Clear()
-            return
+            return false
         end
 
         self._spellID = spellID
-        local info = Minimizer.Spells and Minimizer.Spells.GetInfo and Minimizer.Spells.GetInfo(spellID) or nil
-        if info and info.texture then
+        if self._showIcon then
+            local info = Minimizer.Spells.GetInfo(spellID)
+            if not info or not info.texture then
+                self:Clear()
+                return false
+            end
             self._icon:SetTexture(info.texture)
+            self._icon:Show()
         else
             self._icon:SetTexture(nil)
+            self._icon:Hide()
         end
 
-        -- apply cooldown: prefer provided state.cooldown to avoid re-resolving
-        if state and state.cooldown and self._cooldown and self._cooldown.SetCooldownFromDurationObject then
+        if state and state.cooldown and self._cooldown.SetCooldownFromDurationObject then
             self._cooldown:SetCooldownFromDurationObject(state.cooldown)
         else
-            if Minimizer.Widgets and Minimizer.Widgets.ApplyCooldownDuration then
-                Minimizer.Widgets.ApplyCooldownDuration(self._cooldown, spellID)
-            end
+            Minimizer.Widgets.ApplyCooldownDuration(self._cooldown, spellID)
         end
+        self._cooldown:Show()
 
-        -- charges / display count
-        local shownCount = nil
-        if state then
-            if state.displayCount and state.displayCount > 0 then
-                shownCount = state.displayCount
-            elseif state.currentCharges and state.currentCharges > 0 then
-                shownCount = state.currentCharges
-            end
+        local count = nil
+        if state and state.displayCount ~= nil then
+            count = state.displayCount
+        elseif state and state.maxCharges and state.maxCharges > 1 then
+            count = state.currentCharges
         end
-        if shownCount then
-            self._countFS:SetText(tostring(shownCount))
-            self._countFS:Show()
+        if count ~= nil then
+            self._count:SetText(tostring(count))
+            self._count:Show()
         else
-            self._countFS:SetText(nil)
-            self._countFS:Hide()
+            self._count:SetText(nil)
+            self._count:Hide()
         end
 
-        -- overlayed
-        if state and state.isOverlayed then
-            self:SetOverlayed(true)
-        else
-            self:SetOverlayed(false)
-        end
-
+        self:SetOverlayed(state and state.isOverlayed == true)
         self._frame:Show()
+        return true
     end
+
+    frame:SetScript("OnUpdate", function(_, elapsed)
+        self:Update(elapsed)
+    end)
 
     return self
 end
-
-function SR.Create(parent, opts)
-    if not parent then return nil end
-    return NewRenderer(parent, opts)
-end
-
-return SR
