@@ -101,6 +101,12 @@ function Pips.CreatePips(parentFrame, prefixName, radius, xOff, yOff)
         pip.MinimizerPipBG = bg
         pip.MinimizerPipMask = mask
         pip.MinimizerPipCooldown = cooldown
+        -- create a SpellRenderer for this pip reusing the existing cooldown and bg
+        if Minimizer.SpellRenderer and Minimizer.SpellRenderer.Create then
+            pip.MinimizerPipRenderer = Minimizer.SpellRenderer.Create(pip, {
+                existingCooldown = cooldown,
+            })
+        end
         table.insert(pips, pip)
     end
 
@@ -127,12 +133,22 @@ function Pips.UpdatePips(pips)
         local slotId = (slot and slot.id) or index
         local spellID = Pips.GetSpellID(slotId)
         if not spellID or not pip.MinimizerPipCooldown then
-            pip:Hide()
-        else
-            if Minimizer.Widgets and Minimizer.Widgets.ApplyCooldownDuration then
-                Minimizer.Widgets.ApplyCooldownDuration(pip.MinimizerPipCooldown, spellID)
+            if pip.MinimizerPipRenderer then
+                pip.MinimizerPipRenderer:Clear()
+            else
+                pip:Hide()
             end
-            pip:Show()
+        else
+            local state = Minimizer.Spells and Minimizer.Spells.GetState and Minimizer.Spells.GetState(spellID)
+            if pip.MinimizerPipRenderer then
+                pip.MinimizerPipRenderer:Render(spellID, state)
+                pip:Show()
+            else
+                if Minimizer.Widgets and Minimizer.Widgets.ApplyCooldownDuration then
+                    Minimizer.Widgets.ApplyCooldownDuration(pip.MinimizerPipCooldown, spellID)
+                end
+                pip:Show()
+            end
         end
     end
 end

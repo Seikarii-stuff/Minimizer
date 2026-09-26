@@ -33,6 +33,14 @@ wheelHalo:SetPoint("CENTER", wheelFrame, "CENTER")
 wheelFrame.MinimizerWheelHalo = wheelHalo
 wheelFrame.MinimizerWheelInterrupt = wheelHalo.MinimizerHaloCooldown
 
+-- central renderer for the wheel (presents the interrupt spell icon/cooldown)
+if Minimizer.SpellRenderer and Minimizer.SpellRenderer.Create then
+    wheelFrame.MinimizerWheelRenderer = Minimizer.SpellRenderer.Create(wheelFrame, { size = 48 })
+    if wheelFrame.MinimizerWheelRenderer then
+        wheelFrame.MinimizerWheelRenderer:SetSize(48)
+    end
+end
+
 local wheelPips = Minimizer.Pips and Minimizer.Pips.CreatePips(
     wheelFrame,
     "MinimizerPlayerWheelPip",
@@ -74,10 +82,17 @@ local function UpdateInterrupt()
         and Minimizer.Interrupt.GetSpellID()
     if not spellID or not Minimizer.Widgets.ApplyCooldownDuration then
         wheelHalo:Hide()
+        if wheelFrame.MinimizerWheelRenderer then
+            wheelFrame.MinimizerWheelRenderer:Clear()
+        end
         return
     end
 
     wheelHalo:ShowFor(spellID)
+    if wheelFrame.MinimizerWheelRenderer then
+        local state = Minimizer.Spells and Minimizer.Spells.GetState and Minimizer.Spells.GetState(spellID)
+        wheelFrame.MinimizerWheelRenderer:Render(spellID, state)
+    end
 end
 
 local function UpdatePips()
