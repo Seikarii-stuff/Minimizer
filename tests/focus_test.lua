@@ -21,9 +21,19 @@ local source = assert(io.open("Overlays/Focus.lua", "r")):read("*a")
 check(source:match("frame:SetParent%(%s*plate%s*%)"), "Focus: portrait usa la nameplate como contexto")
 check(not source:match("SetFrameStrata%s*%(%s*[\"']HIGH[\"']"), "Focus: no fuerza HIGH")
 check(source:match("frame:SetFrameLevel%(%s*plateLevel%s*%+%s*1%s*%)"), "Focus: portrait conserva FrameLevel relativo")
+check(source:match('glow:SetTexture%(%s*["\']Interface\\\\Buttons\\\\UI%-ActionButton%-Border["\']%s*%)'), "Focus: usa un contorno amarillo exterior")
+check(source:match("glow:SetVertexColor%(%s*1%.0%s*,%s*0%.78%s*,%s*0%.05%s*,%s*1%.0%s*%)"), "Focus: aplica el color amarillo al glow")
+check(source:match("glowFrame:SetFrameLevel%(%s*plateLevel%s*%+%s*3%s*%)"), "Focus: el glow usa la capa superior")
+check(source:match('CreateFrame%(%s*["\']Frame["\']%s*,%s*["\']MinimizerFocusGlow["\']'), "Focus: el glow vive en un frame independiente")
+
+local glowFrame = _G.MinimizerFocusGlow
+check(glowFrame ~= nil and glowFrame:IsShown() == true, "Focus: muestra el glow independiente")
+check(glowFrame and glowFrame:GetParent() == _G.C_NamePlate.GetNamePlateForUnit("focus"), "Focus: ancla el glow a la plate del focus")
+check(glowFrame and glowFrame:GetFrameLevel() == ((_G.C_NamePlate.GetNamePlateForUnit("focus"):GetFrameLevel() or 0) + 3), "Focus: glow queda sobre target-of-target")
 
 MinimizerDB.enableFocusFace = false
 addonTable.Focus:UpdateFace()
 check(portrait:IsShown() == false, "Focus: se oculta cuando face esta deshabilitado")
+check(glowFrame:IsShown() == false, "Focus: el glow se oculta cuando face esta deshabilitado")
 
 T.finish("FOCUS TESTS")

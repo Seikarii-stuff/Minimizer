@@ -12,12 +12,12 @@ local portrait = _G.MinimizerTargetOfTargetPortrait
 check(portrait ~= nil and portrait:IsShown() == true, "TargetOfTarget: muestra retrato 36x36 sobre el target")
 check(portrait:GetWidth() == 36 and portrait:GetHeight() == 36, "TargetOfTarget: usa las mismas dimensiones que focus")
 check(portrait:GetParent() == plate, "TargetOfTarget: ancla el retrato a la nameplate del target actual")
-check(portrait:GetFrameLevel() == (plate:GetFrameLevel() or 0), "TargetOfTarget: queda debajo del retrato de focus")
+check(portrait:GetFrameLevel() == (plate:GetFrameLevel() or 0) + 2, "TargetOfTarget: queda por encima del retrato de focus")
 check(addonTable.Overlays.Get("TargetOfTarget") == addonTable.TargetOfTarget, "TargetOfTarget: esta registrado en Overlays")
 
 Mocks.CreateTestUnit("focus", { name = "Shared Mob", faction = "Horde", guid = "tot_guid" })
 addonTable.TargetOfTarget:UpdatePortrait()
-check(portrait:IsShown() == true, "TargetOfTarget: el retrato permanece bajo y el focus queda encima")
+check(portrait:IsShown() == true, "TargetOfTarget: permanece visible con targettarget y focus sin depender de comparaciones")
 
 Mocks.units.focus = nil
 addonTable.TargetOfTarget:UpdatePortrait()

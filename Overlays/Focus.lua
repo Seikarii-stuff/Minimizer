@@ -13,6 +13,17 @@ frame:Hide()
 local portrait = frame:CreateTexture(nil, "ARTWORK")
 portrait:SetAllPoints()
 
+local glowFrame = CreateFrame("Frame", "MinimizerFocusGlow", UIParent)
+glowFrame:SetSize(46, 46)
+glowFrame:Hide()
+
+local glow = glowFrame:CreateTexture(nil, "OVERLAY")
+glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+glow:SetBlendMode("ADD")
+glow:SetAllPoints()
+glow:SetVertexColor(1.0, 0.78, 0.05, 1.0)
+glow:Show()
+
 local cooldown = CreateFrame("Cooldown", "MinimizerFocusCooldown", frame, "CooldownFrameTemplate")
 cooldown:SetAllPoints()
 Minimizer.Widgets.MakeCooldownCircular(cooldown, true)
@@ -21,6 +32,9 @@ local function HideFace()
     frame:Hide()
     frame:ClearAllPoints()
     frame:SetParent(UIParent)
+    glowFrame:Hide()
+    glowFrame:ClearAllPoints()
+    glowFrame:SetParent(UIParent)
 end
 
 local function UpdateCooldown()
@@ -60,6 +74,13 @@ function Focus:UpdateFace()
     local plateLevel = (plate:GetFrameLevel() or 0)
     frame:SetFrameLevel(plateLevel + 1)
     frame:Show()
+
+    glowFrame:ClearAllPoints()
+    glowFrame:SetParent(plate)
+    glowFrame:SetPoint("CENTER", plate, "BOTTOM", 0, 10 + (HALO_SIZE / 2))
+    glowFrame:SetFrameLevel(plateLevel + 3)
+    glowFrame:Show()
+
     UpdateCooldown()
 end
 

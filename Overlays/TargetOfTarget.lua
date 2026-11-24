@@ -46,9 +46,9 @@ function TargetOfTarget:UpdatePortrait()
     frame:SetParent(plate)
     frame:SetPoint("CENTER", plate, "BOTTOM", 0, 10 + (HALO_SIZE / 2))
     local plateLevel = (plate:GetFrameLevel() or 0)
-    -- Focus.lua uses plateLevel + 1, so this portrait stays underneath whenever
-    -- both overlays occupy the same nameplate position.
-    frame:SetFrameLevel(plateLevel)
+    -- Focus.lua uses plateLevel + 1. Target-of-target stays on top, while
+    -- the yellow focus glow remains visible outside the portrait bounds.
+    frame:SetFrameLevel(plateLevel + 2)
     frame:Show()
 end
 
