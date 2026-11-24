@@ -205,6 +205,7 @@ end
 FrameMixin.CreateTexture = dummyCreateObject
 FrameMixin.CreateFontString = dummyCreateObject
 FrameMixin.CreateMaskTexture = dummyCreateObject
+FrameMixin.AddMaskTexture = dummyMethod
 -- Smart __index for FrameMixin to auto-mock WoW UI methods
 setmetatable(FrameMixin, {
     __index = function(t, k)
