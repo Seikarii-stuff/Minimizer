@@ -179,6 +179,22 @@ function FrameMixin:GetChildren()
     return unpack(ch)
 end
 
+function FrameMixin:SetSize(width, height)
+    self.width = width
+    self.height = height
+end
+function FrameMixin:GetWidth() return self.width or 0 end
+function FrameMixin:GetHeight() return self.height or 0 end
+function FrameMixin:SetParent(parent)
+    self.parent = parent
+end
+function FrameMixin:SetFrameLevel(level)
+    self.frameLevel = level
+end
+function FrameMixin:GetFrameLevel()
+    return self.frameLevel or 0
+end
+
 -- Explicit dummy methods instead of catch-all __index
 local function dummyMethod() end
 local function dummyCreateObject(self)

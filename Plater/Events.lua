@@ -93,6 +93,14 @@ handlers["PLAYER_FOCUS_CHANGED"] = function(self, event)
     end
 end
 
+handlers["UNIT_TARGET"] = function(self, event, unit)
+    if Minimizer.Overlays and Minimizer.Overlays.OnUnitChanged then
+        Minimizer.Overlays.OnUnitChanged(unit or "target", "targetchanged")
+    elseif Minimizer.TargetOfTarget and Minimizer.TargetOfTarget.UpdatePortrait then
+        Minimizer.TargetOfTarget:UpdatePortrait()
+    end
+end
+
 
 local function HandleUnitStateChange(self, event, unit)
     if unit and unit:match("^nameplate%d+$") then
@@ -278,6 +286,7 @@ EventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 EventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
 EventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 EventFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
+EventFrame:RegisterEvent("UNIT_TARGET")
 EventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 EventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 EventFrame:RegisterEvent("SPELLS_CHANGED")

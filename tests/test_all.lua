@@ -19,6 +19,7 @@ local tests = {
     "tests/lifecycle_test.lua",
     "tests/overlays_test.lua",
     "tests/target_test.lua",
+    "tests/targetoftarget_test.lua",
     "tests/focus_test.lua",
     "tests/halo_test.lua",
     "tests/widgets_test.lua",

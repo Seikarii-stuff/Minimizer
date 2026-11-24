@@ -34,6 +34,7 @@ Plater/CastingBar.lua
 Overlays/Overlays.lua
 Overlays/Focus.lua
 Overlays/Target.lua
+Overlays/TargetOfTarget.lua
 Overlays/Mouse.lua
 Menu.lua
 Options.lua
