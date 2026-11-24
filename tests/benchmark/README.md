@@ -11,7 +11,7 @@ lua tests/benchmark/benchmark.lua deep
 lua tests/benchmark/benchmark.lua --self-test
 ```
 
-The default is **Fast**. Fast keeps representative coverage of Core/Dispatcher, Classification, Decision, Threat, Events, Cast, Absorb, Target, Focus, Halo, Wheel, Pips, steady-state, recycling and integrated workloads. Deep runs the complete scaling/microbenchmark matrix plus the more expensive memory experiments.
+The default is **Fast**. Fast keeps representative coverage of Core/Dispatcher, Classification, Decision, Threat, Events, Cast, Absorb, Target, Focus, Halo, Wheel, Pips. Deep runs the complete scaling/microbenchmark matrix plus the more expensive memory experiments.
 
 `--self-test` is a harness check, not a functional test. `tests/test_all.lua` deliberately does not invoke it because doing so would duplicate benchmark startup work.
 

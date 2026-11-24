@@ -9,11 +9,7 @@ Minimizer.Config.DEFAULTS = {
     -- These indicators are always enabled and intentionally not persisted.
     -- Do not add them back to SavedVariables: they are hardcoded behavior.
 
-    -- Player Wheel: preferencias globales de UI, no por personaje.
-    wheelEnabled = true,
     enableMouseHalo = true,
-    wheelSize = 180,
-    wheelPipRadius = 75,
 
     menuPosition = {
         point = "CENTER",
@@ -21,11 +17,6 @@ Minimizer.Config.DEFAULTS = {
         x = 0,
         y = 0,
     },
-}
-
--- Las selecciones de spell de los seis slots sí dependen del personaje/spec.
-Minimizer.Config.CHAR_DEFAULT_KEYS = {
-    "pip1", "pip2", "pip3", "pip4", "pip5", "pip6",
 }
 
 local function CopyDefault(value)
@@ -63,34 +54,22 @@ function Minimizer.Config.Initialize()
     -- Legacy focus indicator is no longer used because both focus indicators are fixed on.
     MinimizerDB.focusIndicator = nil
 
-    -- Migración de pips legacy. No se modifica ningún override pipN existente.
-    if MinimizerCharDB.targetDefensive ~= nil then
-        if MinimizerCharDB.pip1 == nil then
-            MinimizerCharDB.pip1 = MinimizerCharDB.targetDefensive
-        end
-        MinimizerCharDB.targetDefensive = nil
+    -- Wheel y sus pip slots fueron eliminados.
+    MinimizerDB.wheelEnabled = nil
+    MinimizerDB.wheelSize = nil
+    MinimizerDB.wheelPipRadius = nil
+    for index = 1, 6 do
+        MinimizerCharDB["pip" .. index] = nil
     end
-    if MinimizerCharDB.targetPip1 ~= nil then
-        if MinimizerCharDB.pip1 == nil then
-            MinimizerCharDB.pip1 = MinimizerCharDB.targetPip1
-        end
-        MinimizerCharDB.targetPip1 = nil
-    end
-    if MinimizerCharDB.focusCC ~= nil then
-        if MinimizerCharDB.pip2 == nil then
-            MinimizerCharDB.pip2 = MinimizerCharDB.focusCC
-        end
-        MinimizerCharDB.focusCC = nil
-    end
-    if MinimizerCharDB.focusPip1 ~= nil then
-        if MinimizerCharDB.pip2 == nil then
-            MinimizerCharDB.pip2 = MinimizerCharDB.focusPip1
-        end
-        MinimizerCharDB.focusPip1 = nil
-    end
+
+    -- Clean legacy Wheel/Pip keys left by previous versions.
+    MinimizerCharDB.targetDefensive = nil
+    MinimizerCharDB.targetPip1 = nil
     MinimizerCharDB.targetPip2 = nil
-    MinimizerCharDB.focusPip2 = nil
     MinimizerCharDB.targetOffensive = nil
+    MinimizerCharDB.focusCC = nil
+    MinimizerCharDB.focusPip1 = nil
+    MinimizerCharDB.focusPip2 = nil
 
     return MinimizerDB, MinimizerCharDB
 end

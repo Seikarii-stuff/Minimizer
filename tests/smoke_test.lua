@@ -5,9 +5,6 @@ local Mocks, addonTable, check = T.Mocks, T.addonTable, T.check
 
 MinimizerDB = {
     simplifyEnabled = true,
-    wheelEnabled = false,
-    wheelSize = 180,
-    wheelPipRadius = 75,
 }
 MinimizerCharDB = {}
 

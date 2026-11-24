@@ -4,11 +4,6 @@ if not Minimizer then return end
 Minimizer.Menu = Minimizer.Menu or {}
 local Menu = Minimizer.Menu
 
-local function GetClassToken()
-    local _, classToken = UnitClass("player")
-    return classToken
-end
-
 local function GetSavedPosition()
     local position = MinimizerDB and MinimizerDB.menuPosition or {}
     return {
@@ -43,102 +38,10 @@ local function GetWidgetText(frame)
     return frame.Text or nil
 end
 
-local function ResolveSpellName(spellID)
-    if type(spellID) ~= "number" then return nil end
-    local info = C_Spell.GetSpellInfo(spellID)
-    if info and type(info.name) == "string" and info.name ~= "" then
-        return info.name
-    end
-    return "Spell " .. tostring(spellID)
-end
-
 local function RequestFullUpdate()
     if Minimizer.Dispatcher and Minimizer.Dispatcher.RequestFullUpdate then
         Minimizer.Dispatcher.RequestFullUpdate()
     end
-end
-
-local function ApplyWheelConfig()
-    if Minimizer.Wheel and Minimizer.Wheel.ApplyConfig then
-        Minimizer.Wheel:ApplyConfig()
-    end
-end
-
-local function CreateDropdown(frame, name, labelText, tableKey, dbKey)
-    local dropdown = CreateFrame("Frame", name, frame, "UIDropDownMenuTemplate")
-    dropdown:SetSize(210, 28)
-    dropdown.label = dropdown:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    dropdown.label:SetPoint("TOPLEFT", dropdown, "TOPLEFT", 16, 12)
-    dropdown.label:SetText(labelText)
-
-    UIDropDownMenu_Initialize(dropdown, function(self, level)
-        local selectedValue = MinimizerCharDB and MinimizerCharDB[dbKey]
-        local info = UIDropDownMenu_CreateInfo()
-        info.text = "Automático"
-        info.value = nil
-        info.checked = selectedValue == nil
-        info.func = function()
-            if MinimizerCharDB then MinimizerCharDB[dbKey] = nil end
-            if Minimizer.Spells and Minimizer.Spells.InvalidateCache then Minimizer.Spells.InvalidateCache() end
-            RequestFullUpdate()
-            ApplyWheelConfig()
-            Menu.Refresh()
-        end
-        UIDropDownMenu_AddButton(info)
-
-        local classToken = GetClassToken()
-        local source = Minimizer.Data and Minimizer.Data[tableKey] and Minimizer.Data[tableKey][classToken]
-        if type(source) ~= "table" then return end
-        for _, entry in ipairs(source) do
-            local id
-            local text
-            if type(entry) == "number" then
-                id = entry
-                text = ResolveSpellName(id)
-            elseif type(entry) == "table" and type(entry.id) == "number" then
-                id = entry.id
-                text = entry.name or ResolveSpellName(id)
-            end
-            if id then
-                local option = UIDropDownMenu_CreateInfo()
-                option.text = text
-                option.value = id
-                option.checked = selectedValue == id
-                option.func = function()
-                    if MinimizerCharDB then MinimizerCharDB[dbKey] = id end
-                    if Minimizer.Spells and Minimizer.Spells.InvalidateCache then Minimizer.Spells.InvalidateCache() end
-                    RequestFullUpdate()
-                    ApplyWheelConfig()
-                    Menu.Refresh()
-                end
-                UIDropDownMenu_AddButton(option)
-            end
-        end
-    end)
-
-    dropdown.Refresh = function()
-        local selectedValue = MinimizerCharDB and MinimizerCharDB[dbKey]
-        if selectedValue == nil then
-            UIDropDownMenu_SetText(dropdown, "Automático")
-            return
-        end
-        local classToken = GetClassToken()
-        local source = Minimizer.Data and Minimizer.Data[tableKey] and Minimizer.Data[tableKey][classToken]
-        local foundName
-        if type(source) == "table" then
-            for _, entry in ipairs(source) do
-                local id = (type(entry) == "number") and entry or (type(entry) == "table" and entry.id)
-                if id == selectedValue then
-                    if type(entry) == "table" then foundName = entry.name end
-                    break
-                end
-            end
-        end
-        UIDropDownMenu_SetText(dropdown, foundName or ResolveSpellName(selectedValue))
-    end
-
-    dropdown.Refresh()
-    return dropdown
 end
 
 local function CreateCheckbox(parent, name, label, anchor, yOffset, checked, onClick)
@@ -296,55 +199,12 @@ local function BuildPlaterTab(parent)
     }
 end
 
-local function BuildWheelTab(parent)
-    local wheelToggle = CreateCheckbox(parent, "MinimizerMenuWheelToggle", "Enable Wheel", nil, 0,
-        MinimizerDB and MinimizerDB.wheelEnabled ~= false, function(self)
-            if MinimizerDB then MinimizerDB.wheelEnabled = self:GetChecked() end
-            ApplyWheelConfig()
-        end)
-
-    local sizeSlider = CreateSlider(parent, "MinimizerMenuWheelSize", "Wheel size", 120, 300, 5,
-        tonumber(MinimizerDB and MinimizerDB.wheelSize) or 180, wheelToggle, function(value)
-            if MinimizerDB then MinimizerDB.wheelSize = value end
-            ApplyWheelConfig()
-        end)
-
-    local radiusSlider = CreateSlider(parent, "MinimizerMenuWheelPipRadius", "Pip radius", 45, 105, 1,
-        tonumber(MinimizerDB and MinimizerDB.wheelPipRadius) or 75, sizeSlider, function(value)
-            if MinimizerDB then MinimizerDB.wheelPipRadius = value end
-            ApplyWheelConfig()
-        end)
-
-    local slots = (Minimizer.Pips and Minimizer.Pips.SLOTS) or {}
-    local dropdowns = {}
-    for index, slot in ipairs(slots) do
-        local slotId = slot.id or index
-        local drop = CreateDropdown(parent, "MinimizerMenuPip" .. slotId .. "Drop", slot.name or ("Pip " .. slotId), "PIPS_SPELLS", "pip" .. slotId)
-        if #dropdowns == 0 then
-            drop:SetPoint("TOPLEFT", radiusSlider, "BOTTOMLEFT", 0, -12)
-        else
-            drop:SetPoint("TOPLEFT", dropdowns[#dropdowns], "BOTTOMLEFT", 0, -18)
-        end
-        table.insert(dropdowns, drop)
-    end
-
-    parent.controls = {
-        wheelToggle = wheelToggle,
-        sizeSlider = sizeSlider,
-        radiusSlider = radiusSlider,
-        dropdowns = dropdowns,
-    }
-end
-
 local function SetTab(frame, tabName)
     frame.activeTab = tabName
     local plater = frame.tabs and frame.tabs.Plater
-    local wheel = frame.tabs and frame.tabs.Wheel
-    if not plater or not wheel then return end
+    if not plater then return end
     plater.panel:SetShown(tabName == "Plater")
-    wheel.panel:SetShown(tabName == "Wheel")
     plater.button:SetEnabled(tabName ~= "Plater")
-    wheel.button:SetEnabled(tabName ~= "Wheel")
 end
 
 local function BuildTab(frame, name, xOffset, builder)
@@ -396,11 +256,9 @@ local function EnsureFrame()
     closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
     frame.tabs = {}
-    frame.tabs.Plater = BuildTab(frame, "Plater", -70, BuildPlaterTab)
-    frame.tabs.Wheel = BuildTab(frame, "Wheel", 70, BuildWheelTab)
+    frame.tabs.Plater = BuildTab(frame, "Plater", 0, BuildPlaterTab)
     frame.MinimizerMenuControls = {
         plater = frame.tabs.Plater.panel.controls,
-        wheel = frame.tabs.Wheel.panel.controls,
     }
 
     Menu.frame = frame
@@ -417,13 +275,6 @@ function Menu.Refresh()
 
     controls.plater.simplifyToggle:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
     controls.plater.mouseHaloToggle:SetChecked(MinimizerDB and MinimizerDB.enableMouseHalo ~= false)
-
-    controls.wheel.wheelToggle:SetChecked(MinimizerDB and MinimizerDB.wheelEnabled ~= false)
-    controls.wheel.sizeSlider:Refresh(tonumber(MinimizerDB and MinimizerDB.wheelSize) or 180)
-    controls.wheel.radiusSlider:Refresh(tonumber(MinimizerDB and MinimizerDB.wheelPipRadius) or 75)
-    for _, dropdown in ipairs(controls.wheel.dropdowns or {}) do
-        if dropdown.Refresh then dropdown.Refresh() end
-    end
 end
 
 function Menu.Toggle()

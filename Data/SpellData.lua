@@ -120,19 +120,3 @@ Minimizer.Data.DEFENSIVE_CDS = {
     },
 }
 
-Minimizer.Data.PIPS_SPELLS = {
-    WARRIOR = { { id = 118000, name = "Dragon Roar" }, { id = 5246, name = "Intimidating Shout" } },
-    PALADIN = { { id = 115750, name = "Blinding Light" } },
-    HUNTER = { { id = 117405, name = "Binding Shot" }, { id = 213691, name = "Scatter Shot" } },
-    ROGUE = { { id = 2094, name = "Blind" } },
-    PRIEST = { { id = 8122, name = "Psychic Scream" } },
-    DEATHKNIGHT = { { id = 207167, name = "Blinding Sleet" }, { id = 108199, name = "Gorefiend's Grasp" } },
-    SHAMAN = { { id = 192058, name = "Capacitor Totem" } },
-    MAGE = { { id = 31661, name = "Dragon's Breath" }, { id = 113724, name = "Ring of Frost" } },
-    WARLOCK = { { id = 30283, name = "Shadowfury" }, { id = 5484, name = "Howl of Terror" } },
-    MONK = { { id = 119381, name = "Leg Sweep" } },
-    DRUID = { { id = 102793, name = "Ursol's Vortex" }, { id = 99, name = "Incap Roar" }, { id = 102359, name = "Mass Entanglement" } },
-    DEMONHUNTER = { { id = 179057, name = "Chaos Nova" }, { id = 207684, name = "Sigil of Misery" } },
-    EVOKER = { { id = 358385, name = "Landslide" }, { id = 357210, name = "Deep Breath" } },
-}
-

@@ -23,8 +23,6 @@ MinimizerDB = { version = 1, focusIndicator = "arrows" }
 MinimizerCharDB = { focusCC = 118000, targetDefensive = 871, targetOffensive = 107574 }
 addonTable.Config.Initialize()
 check(MinimizerDB.enableFocusFace == false and MinimizerDB.enableFocusArrows == true, "Config: migra focusIndicator=arrows")
-check(MinimizerCharDB.pip1 == 871 and MinimizerCharDB.targetDefensive == nil, "Config: targetDefensive migra a pip1")
-check(MinimizerCharDB.pip2 == 118000 and MinimizerCharDB.focusCC == nil, "Config: focusCC migra a pip2")
 check(MinimizerCharDB.targetOffensive == nil, "Config: elimina targetOffensive legacy")
 
 MinimizerDB = nil

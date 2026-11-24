@@ -18,11 +18,6 @@ bootstrapFrame:SetScript("OnEvent", function(_, event, name)
     if Minimizer.Config and Minimizer.Config.Initialize then
         Minimizer.Config.Initialize()
     end
-    -- Config.lua is loaded before Wheel/Wheel.lua, so Wheel configuration is
-    -- applied here, after the complete .toc has been loaded.
-    if Minimizer.Wheel and Minimizer.Wheel.ApplyConfig then
-        Minimizer.Wheel:ApplyConfig()
-    end
     if Minimizer.Mouse and Minimizer.Mouse.ApplyConfig then
         Minimizer.Mouse:ApplyConfig()
     end

@@ -142,46 +142,6 @@ function M.absorbScaling()
     return results
 end
 
-function M.haloAndWheel()
-    local results = {}
-    local host = _G.CreateFrame("Frame", nil, _G.UIParent)
-    results[#results + 1] = bench("halo.cold", "Halo.Create", function(batch)
-        for i = 1, batch do
-            local halo = A.Halo.Create(host, { size = 46 })
-            halo:ShowFor(107574); halo:Hide()
-        end
-    end, { subsystem = "Halo", path = "cold/create" }, { batch = H.batch("cold"), samples = H.getProfile().samples, cost = "cold", allocation = true })
-
-    local halo = A.Halo.Create(host, { size = 46 })
-    results[#results + 1] = bench("halo.hot", "ShowFor/Hide", function(batch)
-        for _ = 1, batch do halo:ShowFor(107574); halo:Hide() end
-    end, { subsystem = "Halo", path = "hot/reused" }, { cost = "normal" })
-
-    _G.MinimizerDB.wheelEnabled = false; A.Wheel:ApplyConfig()
-    results[#results + 1] = bench("wheel.disabled", "Wheel.Update", function(batch)
-        for _ = 1, batch do A.Wheel:Update() end
-    end, { subsystem = "Wheel", state = "disabled" }, { cost = "normal" })
-
-    _G.MinimizerDB.wheelEnabled = true; A.Wheel:ApplyConfig()
-    results[#results + 1] = bench("wheel.active", "Wheel.Update", function(batch)
-        for _ = 1, batch do A.Wheel:Update() end
-    end, { subsystem = "Wheel", state = "active" }, { cost = "normal" })
-    return results
-end
-
-function M.pips()
-    local results = {}
-    local host = _G.CreateFrame("Frame", nil, _G.UIParent)
-    local pips = A.Pips.CreatePips(host, "BenchmarkPip", 75)
-    results[#results + 1] = bench("pips.hot", "UpdatePips", function(batch)
-        for _ = 1, batch do A.Pips.UpdatePips(pips) end
-    end, { subsystem = "Pips", path = "hot/reused" }, { cost = "normal" })
-    results[#results + 1] = bench("pips.radius", "SetRadius", function(batch)
-        for i = 1, batch do A.Pips.SetRadius(pips, 60 + (i % 20)) end
-    end, { subsystem = "Pips", path = "layout/config" }, { cost = "normal" })
-    return results
-end
-
 function M.targetFocus()
     local results = {}
     H.resetState()
@@ -274,8 +234,7 @@ function M.all()
     local groups = {
         { "core", M.coreScaling }, { "decision", M.decisionClassification }, { "threat", M.threatScaling },
         { "events", M.dispatcherEvents }, { "cast", M.castScaling }, { "absorb", M.absorbScaling },
-        { "overlays", M.targetFocus }, { "halo_wheel", M.haloAndWheel }, { "pips", M.pips },
-        { "steady", M.steadyState }, { "recycling", M.recycling }, { "integrated", M.integratedWorkloads },
+        { "overlays", M.targetFocus }, { "steady", M.steadyState }, { "recycling", M.recycling }, { "integrated", M.integratedWorkloads },
     }
     local groupTimings = {}
     for _, group in ipairs(groups) do

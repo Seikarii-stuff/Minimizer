@@ -36,7 +36,7 @@ check(haloA.MinimizerHaloHost == hostB, "Halo: puede cambiar a otro consumidor/h
 
 local source = assert(io.open("Overlays/Halo.lua", "r")):read("*a")
 check(not source:match("SetFrameStrata"), "Halo: no contiene politica de FrameStrata")
-check(not source:match("if%s+target%s+then") and not source:match("if%s+wheel%s+then") and not source:match("if%s+mouse%s+then"), "Halo: no contiene logica especifica de consumidores")
+check(not source:match("if%s+target%s+then") and not source:match("if%s+mouse%s+then"), "Halo: no contiene logica especifica de consumidores")
 check(source:match("cooldownFrameLevelOffset"), "Halo: permite al consumidor controlar el nivel relativo del cooldown")
 
 local framesAfterCreate = #Mocks.frames

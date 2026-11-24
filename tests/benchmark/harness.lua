@@ -233,7 +233,6 @@ function Harness.resetState()
     if _G.MinimizerDB then
         _G.MinimizerDB.enableFocusFace = false
         _G.MinimizerDB.enableFocusArrows = false
-        _G.MinimizerDB.wheelEnabled = false
     end
 end
 

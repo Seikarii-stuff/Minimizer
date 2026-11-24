@@ -370,7 +370,6 @@ Plater/Core.lua            Minimizer.Core (registro/fan-out de módulos visuales
 Plater/Markers.lua         módulo registrado: flechas de target/focus
 Plater/HealthBarColor.lua  módulo registrado: color de healthbar nativa + overshield
 Plater/CastingBar.lua      módulo registrado: color de castbar nativa + borde "me apunta a mí"
-Overlays/Pips.lua          Minimizer.Pips (pips compartidos por Target y Focus)
 Overlays/Overlays.lua      Minimizer.Overlays (registro y enrutamiento: OnCooldownTick, OnUnitChanged)
 Overlays/Focus.lua         Minimizer.Focus (retrato de focus, CD de interrupt, pip)
 Overlays/Target.lua        Minimizer.Target (halo de CD ofensivo + pip sobre el target)
