@@ -21,7 +21,7 @@ local glow = glowFrame:CreateTexture(nil, "OVERLAY")
 glow:SetTexture("Interface\\Buttons\\WHITE8x8")
 glow:SetBlendMode("ADD")
 glow:SetAllPoints()
-glow:SetVertexColor(1.0, 0.78, 0.05, 1.0)
+glow:SetVertexColor(0.5, 0.78, 0.05, 1.0)
 
 local glowMask = glowFrame:CreateMaskTexture()
 glowMask:SetAllPoints(glow)
