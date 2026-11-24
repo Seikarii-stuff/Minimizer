@@ -24,4 +24,14 @@ Mocks.FireEvent("SPELLS_CHANGED")
 addonTable.Interrupt.InvalidateSpellIDCache()
 check(addonTable.Interrupt.GetSpellID() == 187707, "Interrupt: el cambio de disponibilidad del spell invalida el resolver y el consumidor")
 
+MinimizerDB.interruptMode = "special"
+MinimizerDB.interruptSpecialSpellID = 123456
+addonTable.Interrupt.InvalidateSpellIDCache()
+check(addonTable.Interrupt.GetSpellID() == 123456, "Interrupt: usa el ID especial configurado")
+
+MinimizerDB.interruptMode = "special"
+MinimizerDB.interruptSpecialSpellID = nil
+addonTable.Interrupt.InvalidateSpellIDCache()
+check(addonTable.Interrupt.GetSpellID() == nil, "Interrupt: sin ID especial no devuelve un interrupt")
+
 T.finish("INTERRUPT TESTS")

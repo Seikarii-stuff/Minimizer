@@ -12,6 +12,9 @@ check(frame.tabs and frame.tabs.Plater and frame.tabs.Wheel == nil, "Menu: solo 
 check(frame.activeTab == "Plater", "Menu: abre en Plater")
 check(frame.MinimizerMenuControls.plater.legend ~= nil, "Menu: conserva la leyenda")
 check(frame.MinimizerMenuControls.plater.mouseHaloToggle ~= nil, "Menu: conserva el toggle Mouse Halo")
+check(frame.MinimizerMenuControls.plater.standardInterruptToggle ~= nil, "Menu: muestra la opción Interrupt normal")
+check(frame.MinimizerMenuControls.plater.specialInterruptToggle ~= nil, "Menu: muestra la opción Interrupt especial")
+check(frame.MinimizerMenuControls.plater.specialInterruptEdit ~= nil, "Menu: muestra el campo de ID especial")
 
 local beforeRefresh = #Mocks.frames
 addonTable.Menu.Refresh()

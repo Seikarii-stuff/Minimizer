@@ -6,6 +6,12 @@ Minimizer.Config = Minimizer.Config or {}
 Minimizer.Config.DEFAULTS = {
     simplifyEnabled = true,
 
+    -- Interrupt spell used by cast bars and target/focus overlays.
+    -- "standard" uses the class/specialization interrupt; "special" uses
+    -- the explicit spell ID stored in interruptSpecialSpellID.
+    interruptMode = "standard",
+    interruptSpecialSpellID = nil,
+
     -- These indicators are always enabled and intentionally not persisted.
     -- Do not add them back to SavedVariables: they are hardcoded behavior.
 
@@ -70,6 +76,15 @@ function Minimizer.Config.Initialize()
     MinimizerCharDB.focusCC = nil
     MinimizerCharDB.focusPip1 = nil
     MinimizerCharDB.focusPip2 = nil
+
+    -- Validate stored interrupt mode and special ID.
+    if MinimizerDB.interruptMode ~= "standard" and MinimizerDB.interruptMode ~= "special" then
+        MinimizerDB.interruptMode = "standard"
+    end
+    local specialSpellID = tonumber(MinimizerDB.interruptSpecialSpellID)
+    MinimizerDB.interruptSpecialSpellID = (specialSpellID and specialSpellID > 0)
+        and math.floor(specialSpellID)
+        or nil
 
     return MinimizerDB, MinimizerCharDB
 end

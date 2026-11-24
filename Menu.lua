@@ -95,6 +95,29 @@ local function CreateSlider(parent, name, label, minValue, maxValue, step, value
     return slider
 end
 
+local function CreateEditBox(parent, name, label, anchor, yOffset, value, onChanged)
+    local title = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    title:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, yOffset or -8)
+    title:SetText(label)
+
+    local edit = CreateFrame("EditBox", name, parent, "InputBoxTemplate")
+    edit:SetSize(210, 24)
+    edit:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+    edit:SetAutoFocus(false)
+    if edit.SetNumeric then edit:SetNumeric(true) end
+    edit:SetText(value ~= nil and tostring(value) or "")
+    edit:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+    end)
+    edit:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+    end)
+    edit:SetScript("OnTextChanged", function(self)
+        onChanged(self:GetText())
+    end)
+    return edit, title
+end
+
 local LEGEND_SWATCH_SIZE = 14
 local LEGEND_ROW_SPACING = 8
 
@@ -190,10 +213,67 @@ local function BuildPlaterTab(parent)
             if Minimizer.Mouse then Minimizer.Mouse:SetEnabled(self:GetChecked()) end
         end)
 
+    local interruptMode = MinimizerDB and MinimizerDB.interruptMode == "special" and "special" or "standard"
+
+    local standardInterruptToggle = CreateCheckbox(left, "MinimizerMenuStandardInterruptToggle", "Interrupt: normal", mouseHaloToggle, -14,
+        interruptMode == "standard", function(self)
+            if not self:GetChecked() then
+                self:SetChecked(true)
+                return
+            end
+            if MinimizerDB then MinimizerDB.interruptMode = "standard" end
+            local controls = left:GetParent().controls
+            if controls then
+                controls.specialInterruptToggle:SetChecked(false)
+                controls.specialInterruptEdit:Disable()
+            end
+            if Minimizer.Interrupt then Minimizer.Interrupt.InvalidateSpellIDCache() end
+            RequestFullUpdate()
+        end)
+
+    local specialInterruptToggle = CreateCheckbox(left, "MinimizerMenuSpecialInterruptToggle", "Interrupt: especial", standardInterruptToggle, -10,
+        interruptMode == "special", function(self)
+            if not self:GetChecked() then
+                self:SetChecked(true)
+                return
+            end
+            if MinimizerDB then MinimizerDB.interruptMode = "special" end
+            local controls = left:GetParent().controls
+            if controls then
+                controls.standardInterruptToggle:SetChecked(false)
+                controls.specialInterruptEdit:Enable()
+                controls.specialInterruptEdit:SetFocus()
+            end
+            if Minimizer.Interrupt then Minimizer.Interrupt.InvalidateSpellIDCache() end
+            RequestFullUpdate()
+        end)
+
+    local specialInterruptEdit, specialInterruptTitle = CreateEditBox(left, "MinimizerMenuSpecialInterruptEdit", "ID de hechizo especial",
+        specialInterruptToggle, -12, MinimizerDB and MinimizerDB.interruptSpecialSpellID, function(text)
+            local spellID = tonumber(text)
+            if spellID and spellID > 0 then
+                if MinimizerDB then MinimizerDB.interruptSpecialSpellID = math.floor(spellID) end
+            else
+                if MinimizerDB then MinimizerDB.interruptSpecialSpellID = nil end
+            end
+            if Minimizer.Interrupt then Minimizer.Interrupt.InvalidateSpellIDCache() end
+            RequestFullUpdate()
+        end)
+
+    if interruptMode == "special" then
+        specialInterruptEdit:Enable()
+    else
+        specialInterruptEdit:Disable()
+    end
+
     BuildLegend(legend)
     parent.controls = {
         simplifyToggle = simplifyToggle,
         mouseHaloToggle = mouseHaloToggle,
+        standardInterruptToggle = standardInterruptToggle,
+        specialInterruptToggle = specialInterruptToggle,
+        specialInterruptEdit = specialInterruptEdit,
+        specialInterruptTitle = specialInterruptTitle,
         legend = legend,
         divider = divider,
     }
@@ -275,6 +355,18 @@ function Menu.Refresh()
 
     controls.plater.simplifyToggle:SetChecked(Minimizer.Config and Minimizer.Config.IsSimplifyEnabled and Minimizer.Config.IsSimplifyEnabled())
     controls.plater.mouseHaloToggle:SetChecked(MinimizerDB and MinimizerDB.enableMouseHalo ~= false)
+
+    local interruptMode = MinimizerDB and MinimizerDB.interruptMode == "special" and "special" or "standard"
+    controls.plater.standardInterruptToggle:SetChecked(interruptMode == "standard")
+    controls.plater.specialInterruptToggle:SetChecked(interruptMode == "special")
+    controls.plater.specialInterruptEdit:SetText(MinimizerDB and MinimizerDB.interruptSpecialSpellID
+        and tostring(MinimizerDB.interruptSpecialSpellID)
+        or "")
+    if interruptMode == "special" then
+        controls.plater.specialInterruptEdit:Enable()
+    else
+        controls.plater.specialInterruptEdit:Disable()
+    end
 end
 
 function Menu.Toggle()

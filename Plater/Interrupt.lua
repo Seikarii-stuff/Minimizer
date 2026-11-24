@@ -23,6 +23,14 @@ function Minimizer.Interrupt.GetSpellID()
     if cachedSpellIDResolved then
         return cachedSpellID
     end
+
+    if MinimizerDB and MinimizerDB.interruptMode == "special" then
+        local specialSpellID = tonumber(MinimizerDB.interruptSpecialSpellID)
+        cachedSpellID = (specialSpellID and specialSpellID > 0) and math.floor(specialSpellID) or nil
+        cachedSpellIDResolved = true
+        return cachedSpellID
+    end
+
     local _, classToken = UnitClass("player")
     cachedSpellID = Minimizer.Spells and Minimizer.Spells.Resolve and Minimizer.Spells.Resolve(INTERRUPT_SPELLS[classToken], 1)
         or nil
@@ -38,6 +46,10 @@ local cachedReady = true
 
 function Minimizer.Interrupt.RefreshReadyCache()
     local spellID = Minimizer.Interrupt.GetSpellID()
+    if not spellID then
+        cachedReady = true
+        return cachedReady
+    end
 
     -- Keep Interrupt on the direct cooldown API. Calling Spells.GetState here
     -- creates a fresh state table and performs unrelated action-bar/charge/
